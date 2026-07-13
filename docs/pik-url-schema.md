@@ -156,3 +156,25 @@ https://www.pik.ru/search/two-room/m-aeroport-vnukovo?priceFrom=10000000&priceTo
   закономерности single-путь/multi-query, но вживую не подтверждено. ❔
 - **Совместное использование** `finish` и `ready` в пути (делят один слот). ❔
 - **Два локационных сегмента** в пути одновременно (округ + метро). ❔
+
+---
+
+## Data API (Backend)
+
+Сайт использует backend-эндпоинт для получения списка квартир в формате JSON (SPA архитектура).
+Основной эндпоинт данных: `https://api.pik.ru/v2/flat` (или аналогичный, например `https://api.pik.ru/v1/filter/flat`).
+
+Все параметры (в том числе те, что во фронтенде выносятся в URL-путь) для Data API передаются строго через **query-параметры**:
+- `rooms` передаётся списками id (например, `rooms=-1,1,2`).
+- `finish=1` и `ready=1` передаются явно.
+- Локации (`districtCounties`, `metroStations`, `districtLocations`, `blocks`) передаются списками id/GUID.
+
+Пример ответа от API:
+```json
+{
+  "count": 42,
+  "items": [...]
+}
+```
+
+Валидатор (`app/pik/validator.py`) использует этот эндпоинт, чтобы определить реальное количество объектов под сформированный `Criteria`. При сетевых сбоях валидация завершается gracefully, возвращая `result_count = None` (best-effort).
