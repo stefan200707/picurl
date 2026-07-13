@@ -1,0 +1,355 @@
+[
+  {
+    "name": "2-й Иртышский",
+    "slug": "irtyshskiy",
+    "id": "1709"
+  },
+  {
+    "name": "Алтуфьевское 53",
+    "slug": "alt53",
+    "id": "1555"
+  },
+  {
+    "name": "Амурский парк",
+    "slug": "amur",
+    "id": "481"
+  },
+  {
+    "name": "Барклая 6",
+    "slug": "barclay6",
+    "id": "378"
+  },
+  {
+    "name": "Белая Дача парк",
+    "slug": "bd",
+    "id": "294"
+  },
+  {
+    "name": "Большая Академическая 85",
+    "slug": "ba85",
+    "id": "1372"
+  },
+  {
+    "name": "Борисенко 48",
+    "slug": "vladivostok/borisenko",
+    "id": "1726"
+  },
+  {
+    "name": "Босфорский парк",
+    "slug": "vladivostok/bosforskiypark",
+    "id": "1518"
+  },
+  {
+    "name": "Ботаническая 3",
+    "slug": "kazan/botanicheskaya",
+    "id": "2113"
+  },
+  {
+    "name": "Бунинская набережная",
+    "slug": "bnab",
+    "id": "2214"
+  },
+  {
+    "name": "Бусиновский парк",
+    "slug": "bpark",
+    "id": "1129"
+  },
+  {
+    "name": "Вангарден",
+    "slug": "vangarden",
+    "id": "1541"
+  },
+  {
+    "name": "Витебский парк",
+    "slug": "spb/vitpark",
+    "id": "2014"
+  },
+  {
+    "name": "Волга парк",
+    "slug": "yaroslavl/volgapark",
+    "id": "101"
+  },
+  {
+    "name": "Волжский парк",
+    "slug": "volp",
+    "id": "411"
+  },
+  {
+    "name": "Вольта",
+    "slug": "spb/volta",
+    "id": "1413"
+  },
+  {
+    "name": "Восточное Бутово",
+    "slug": "mkr-vostochnoe-butovo",
+    "id": "21"
+  },
+  {
+    "name": "Второй Нагатинский",
+    "slug": "2ngt",
+    "id": "1240"
+  },
+  {
+    "name": "Заречный парк",
+    "slug": "spb/zpark",
+    "id": "1445"
+  },
+  {
+    "name": "Зелёный парк",
+    "slug": "zelpark",
+    "id": "1519"
+  },
+  {
+    "name": "Зея парк",
+    "slug": "blagoveshchensk/zeyapark",
+    "id": "1888"
+  },
+  {
+    "name": "Ильинские луга",
+    "slug": "il-luga",
+    "id": "156"
+  },
+  {
+    "name": "Исеть парк",
+    "slug": "ekb/ip",
+    "id": "1265"
+  },
+  {
+    "name": "Кавказский бульвар 51",
+    "slug": "kvb51",
+    "id": "1421"
+  },
+  {
+    "name": "Кантемировская 11",
+    "slug": "spb/k11",
+    "id": "1131"
+  },
+  {
+    "name": "Квартал Мит",
+    "slug": "kvartalmit",
+    "id": "2319"
+  },
+  {
+    "name": "Кольская 8",
+    "slug": "kolskaya8",
+    "id": "530"
+  },
+  {
+    "name": "Кронштадтский 9",
+    "slug": "kron9",
+    "id": "518"
+  },
+  {
+    "name": "Кузьминский лес",
+    "slug": "kuzminskyles",
+    "id": "296"
+  },
+  {
+    "name": "Кутузовский квартал",
+    "slug": "kutuzovskiy",
+    "id": "1196"
+  },
+  {
+    "name": "Лермонтовский 54",
+    "slug": "spb/lermontovskiy",
+    "id": "1690"
+  },
+  {
+    "name": "Лосиноостровский парк",
+    "slug": "lospark",
+    "id": "1460"
+  },
+  {
+    "name": "Люблинский парк",
+    "slug": "lublinpark",
+    "id": "161"
+  },
+  {
+    "name": "Матвеевский парк",
+    "slug": "mtvpark",
+    "id": "1688"
+  },
+  {
+    "name": "Матюшино парк",
+    "slug": "kazan/matyushino",
+    "id": "2111"
+  },
+  {
+    "name": "Митинский лес",
+    "slug": "mles",
+    "id": "1411"
+  },
+  {
+    "name": "Мичуринский парк",
+    "slug": "mpark",
+    "id": "1108",
+    "aliases": [
+      "Мичуринский"
+    ]
+  },
+  {
+    "name": "Москворечье",
+    "slug": "moskvorechye",
+    "id": "1874"
+  },
+  {
+    "name": "Мякинино парк",
+    "slug": "myakinino",
+    "id": "219"
+  },
+  {
+    "name": "Нарвин",
+    "slug": "narvin",
+    "id": "1165"
+  },
+  {
+    "name": "Никольские луга",
+    "slug": "nluga",
+    "id": "1556"
+  },
+  {
+    "name": "Новое Очаково",
+    "slug": "ochakovo",
+    "id": "1692"
+  },
+  {
+    "name": "Новокуркино",
+    "slug": "raion-novokurkino",
+    "id": "7"
+  },
+  {
+    "name": "Нокса парк",
+    "slug": "kazan/noksapark",
+    "id": "1657"
+  },
+  {
+    "name": "Онежский вал",
+    "slug": "onezhskiy",
+    "id": "2106"
+  },
+  {
+    "name": "Первый Дубровский",
+    "slug": "1dubr",
+    "id": "1401"
+  },
+  {
+    "name": "Плеханова 11",
+    "slug": "plehanova11",
+    "id": "1580"
+  },
+  {
+    "name": "Полар",
+    "slug": "plr",
+    "id": "1124"
+  },
+  {
+    "name": "Руставели 14",
+    "slug": "rustaveli",
+    "id": "477"
+  },
+  {
+    "name": "Савин парк",
+    "slug": "nn/savinp",
+    "id": "1681"
+  },
+  {
+    "name": "Саларьево парк",
+    "slug": "sp",
+    "id": "118"
+  },
+  {
+    "name": "Северный парк",
+    "slug": "khabarovsk/sevpark",
+    "id": "2019"
+  },
+  {
+    "name": "Середневский лес",
+    "slug": "sles",
+    "id": "1200"
+  },
+  {
+    "name": "Сиберово",
+    "slug": "kazan/siberovo",
+    "id": "1647"
+  },
+  {
+    "name": "Сигнальный 16",
+    "slug": "s16",
+    "id": "464"
+  },
+  {
+    "name": "Снежный парк",
+    "slug": "vladivostok/snezhnyipark",
+    "id": "1693"
+  },
+  {
+    "name": "Строгино 360",
+    "slug": "strogino-360",
+    "id": "1876"
+  },
+  {
+    "name": "Таллинский парк",
+    "slug": "spb/tallinskiypark",
+    "id": "1549"
+  },
+  {
+    "name": "Таулар",
+    "slug": "kazan/taular",
+    "id": "2180"
+  },
+  {
+    "name": "Томилинский бульвар",
+    "slug": "tbulvar",
+    "id": "1167"
+  },
+  {
+    "name": "Улаан Хото",
+    "slug": "ulan-ude/ulaankhoto",
+    "id": "1947"
+  },
+  {
+    "name": "Утёс",
+    "slug": "ekb/utes",
+    "id": "1714"
+  },
+  {
+    "name": "Уюн парк",
+    "slug": "yuzhno-sakhalinsk/yunpark",
+    "id": "1546"
+  },
+  {
+    "name": "Шкиперский 19",
+    "slug": "spb/shkiperskiy",
+    "id": "1677"
+  },
+  {
+    "name": "Юнино",
+    "slug": "yunino",
+    "id": "1934"
+  },
+  {
+    "name": "Ютаново",
+    "slug": "ytnv",
+    "id": "1369"
+  },
+  {
+    "name": "Янинский лес",
+    "slug": "spb/yanles",
+    "id": "1547"
+  },
+  {
+    "name": "Ярославский",
+    "slug": "zhiloi-raion-yaroslavskii",
+    "id": "65"
+  },
+  {
+    "name": "Ярославский квартал",
+    "slug": "kvartal-yaroslavskii",
+    "id": "1272"
+  },
+  {
+    "name": "Яуза парк",
+    "slug": "yauza",
+    "id": "1220"
+  }
+]
