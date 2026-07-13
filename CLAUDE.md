@@ -154,6 +154,7 @@ regex скомпилированы один раз на уровне модул�
 (см. раздел выше).
 Выполнен промпт 05: матчинг сущностей (скользящее окно + rapidfuzz) в `app/parsing/entity_match.py`.
 Выполнен промпт 06: фасад парсера `parse(text)` в `app/parsing/parser.py`. Это единая точка входа парсинга, которая агрегирует структурные факты (правила) и сущности (rapidfuzz). Центральная фича: политика warnings — любые нераспознанные значимые фрагменты текста или неподдерживаемые фильтры (например, "вторичка") добавляются в список `warnings`, гарантируя, что ничего не отбрасывается молча.
+Выполнен промпт 07: URL-builder `build_url(criteria)` в `app/pik/url_builder.py`. Ядро сервиса: превращает Criteria в URL pik.ru/search. Реализует правило single-путь/multi-query с детерминированным порядком сегментов и параметров.
 
 ### Стек
 
@@ -180,7 +181,7 @@ app/
   main.py            # FastAPI-app, health, POST /build-url (501-заглушка) + модели API
   parsing/           # schema.py — Criteria; rules.py — regex-правила; parser.py — фасад парсера; entity_match.py — матчинг сущностей (готовы)
   reference/         # *.json — справочники; loader.py — загрузка/кэш; refresh.py — обновление (готовы)
-  pik/               # url_builder.py, validator.py — заглушки
+  pik/               # url_builder.py (готов), validator.py — заглушки
 tests/               # pytest; test_health.py — smoke; parsing/ — Criteria/API + rules; reference/ — loader+refresh
 docs/                # pik-url-schema.md — спецификация URL-схемы pik.ru (источник правды)
 prompts/             # декомпозиция задачи (см. ниже)
