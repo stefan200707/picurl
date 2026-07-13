@@ -65,12 +65,47 @@ API pik.ru; нераспознанное всегда уходит в `warnings`
 
 ---
 
+## Справочники (промпт 03 — выполнен)
+
+Локальный JSON-слой для матчинга сущностей (метро/округа/районы/ЖК/программы/
+опции). Лежат в `app/reference/*.json`: `metro.json`, `counties.json`,
+`districts.json`, `complexes.json`, `benefits.json`, `option_groups.json`,
+`options.json`.
+
+- **Формат записи** (единый для всех файлов): `{"name": "...", "slug": "...",
+  "id": "...", "aliases": [...]}` — pydantic-модель `RefEntry` в
+  `app/reference/loader.py`. Из-за правила single-путь/multi-query на сущность
+  нужны **обе URL-формы**: `slug` (одиночный выбор → путь) и `id`/GUID
+  (multi-выбор → query). `slug`/`id` опциональны — недостающую форму
+  `url_builder` обязан отправлять в `warnings`, а не отбрасывать молча.
+  `id` хранится строкой (единый формат для GUID метро и числовых id).
+- **Загрузка**: `app/reference/loader.py` — функции `load_metro()`,
+  `load_counties()`, …, агрегат `load_all() -> ReferenceData` (точка входа для
+  матчера, промпт 05). Кэш через `functools.cache`; сброс — `clear_cache()`.
+  Точный поиск по имени/алиасу — `find_by_name()` (нормализация: casefold,
+  ё→е, схлопывание пробелов — `normalize()`); fuzzy — задача промпта 05.
+  **Рантайм читает справочники только с диска, в сеть за ними не ходит.**
+- **Обновление**: `uv run python -m app.reference.refresh` — единственное
+  (кроме валидатора) место с сетевым доступом; тянет открытый backend
+  `api.pik.ru/v2/block` и перезаписывает `complexes/counties/metro/districts`.
+  Мёрж не затирает ручную докурацию (кураторские `slug`/`id`/`aliases`
+  сохраняются), сортировка стабильная — диффы читаемы.
+- **Ограничение**: GUID-ы станций (`metroStations`) и числовые id округов
+  (`districtCounties`) отдаёт только front-API `www.pik.ru` (закрыт бот-защитой
+  Qrator) — эти поля докуриваются **вручную**; `benefits/option_groups/options`
+  скрипт не трогает.
+- Тесты: `tests/reference/test_loader.py`, `tests/reference/test_refresh.py`
+  (сеть замокана через `httpx.MockTransport`).
+
+---
+
 ## Разработка
 
 Каркас проекта собран (промпт 00): FastAPI-app с health-роутом и заглушкой
 `POST /build-url` (возвращает 501 до реализации промптов 03–09).
 Выполнен промпт 01: спецификация URL-схемы зафиксирована в `docs/pik-url-schema.md`.
 Выполнен промпт 02: контракт `Criteria` и модели API (см. раздел выше).
+Выполнен промпт 03: справочники + loader + refresh-скрипт (см. раздел выше).
 
 ### Стек
 
@@ -96,9 +131,9 @@ Entrypoint FastAPI объявлен в `pyproject.toml` (`[tool.fastapi] entrypo
 app/
   main.py            # FastAPI-app, health, POST /build-url (501-заглушка) + модели API
   parsing/           # schema.py — Criteria (контракт, готов); rules.py, entity_match.py, parser.py — заглушки
-  reference/         # loader.py, refresh.py — заглушки; сюда лягут JSON-справочники
+  reference/         # *.json — справочники; loader.py — загрузка/кэш; refresh.py — обновление (готовы)
   pik/               # url_builder.py, validator.py — заглушки
-tests/               # pytest; test_health.py — smoke-тесты; parsing/test_schema.py — контракт Criteria/API
+tests/               # pytest; test_health.py — smoke; parsing/ — контракт Criteria/API; reference/ — loader+refresh
 docs/                # pik-url-schema.md — спецификация URL-схемы pik.ru (источник правды)
 prompts/             # декомпозиция задачи (см. ниже)
 ```
