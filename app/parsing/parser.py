@@ -95,7 +95,15 @@ def parse(text: str) -> ParseResult:
 
     # 3. Добавляем найденные сущности в Criteria
     seen_entity_ids = set()
+
+    def _is_overlap(s1: Span, s2: Span) -> bool:
+        return max(s1[0], s2[0]) < min(s1[1], s2[1])
+
     for match in matches:
+        # Проверяем, не перекрывается ли сущность с уже распознанными правилами
+        if any(_is_overlap(match.span, used) for used in rules_outcome.consumed):
+            continue
+
         consumed.append(match.span)
         # Дедупликация
         entity_key = (match.type, match.entity.name)
