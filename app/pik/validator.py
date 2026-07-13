@@ -8,11 +8,13 @@ from app.parsing.schema import Criteria, HousingType, Rooms
 
 DATA_API_URL = "https://api.pik.ru/v2/flat"
 
+
 @dataclass
 class ValidationResult:
     result_count: int | None
     ok: bool
     warning: str | None = None
+
 
 async def validate(criteria: Criteria, client: httpx.AsyncClient) -> ValidationResult:
     """
@@ -157,4 +159,3 @@ async def validate(criteria: Criteria, client: httpx.AsyncClient) -> ValidationR
             ok=True,
             warning="выдача не проверена (неожиданный ответ backend API)",
         )
-

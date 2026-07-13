@@ -8,6 +8,7 @@ from app.pik.validator import validate
 
 pytestmark = pytest.mark.asyncio
 
+
 def make_client(
     payload: dict | list | str, status_code: int = 200, exception: Exception | None = None
 ) -> httpx.AsyncClient:
@@ -19,6 +20,7 @@ def make_client(
 
     return httpx.AsyncClient(transport=httpx.MockTransport(handler))
 
+
 async def test_validate_success_count():
     criteria = Criteria(rooms=[Rooms.TWO])
     client = make_client({"count": 42})
@@ -26,6 +28,7 @@ async def test_validate_success_count():
 
     assert result.result_count == 42
     assert result.ok is True
+
 
 async def test_validate_success_items_list():
     criteria = Criteria()
@@ -35,6 +38,7 @@ async def test_validate_success_items_list():
     assert result.result_count == 3
     assert result.ok is True
 
+
 async def test_validate_empty_result():
     criteria = Criteria(price_max=10)
     client = make_client({"count": 0})
@@ -42,6 +46,7 @@ async def test_validate_empty_result():
 
     assert result.result_count == 0
     assert result.ok is False
+
 
 async def test_validate_network_error():
     criteria = Criteria()
@@ -51,6 +56,7 @@ async def test_validate_network_error():
     assert result.result_count is None
     assert result.ok is True  # graceful fallback
 
+
 async def test_validate_timeout():
     criteria = Criteria()
     client = make_client({}, exception=httpx.TimeoutException("Timeout"))
@@ -59,6 +65,7 @@ async def test_validate_timeout():
     assert result.result_count is None
     assert result.ok is True
 
+
 async def test_validate_unexpected_format():
     criteria = Criteria()
     client = make_client("Not a dict or list")
@@ -66,6 +73,7 @@ async def test_validate_unexpected_format():
 
     assert result.result_count == 0
     assert result.ok is False
+
 
 async def test_validate_http_error():
     criteria = Criteria()
