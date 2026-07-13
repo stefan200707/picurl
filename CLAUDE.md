@@ -181,7 +181,7 @@ app/
   main.py            # FastAPI-app, health, POST /build-url (501-заглушка) + модели API
   parsing/           # schema.py — Criteria; rules.py — regex-правила; parser.py — фасад парсера; entity_match.py — матчинг сущностей (готовы)
   reference/         # *.json — справочники; loader.py — загрузка/кэш; refresh.py — обновление (готовы)
-  pik/               # url_builder.py, validator.py — заглушки
+  pik/               # url_builder.py (готов), validator.py — заглушки
 tests/               # pytest; test_health.py — smoke; parsing/ — Criteria/API + rules; reference/ — loader+refresh
 docs/                # pik-url-schema.md — спецификация URL-схемы pik.ru (источник правды)
 prompts/             # декомпозиция задачи (см. ниже)

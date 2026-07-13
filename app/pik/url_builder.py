@@ -1,180 +1,169 @@
-"""Build a pik.ru URL with applied filters from Criteria.
-
-Rule of URL building:
-https://www.pik.ru/search/{rooms}/{finish_or_ready}/{location}?query
-- Rooms: exactly 1 room goes to path. Multiple go to query parameter `rooms`.
-- Finish / Ready: True value adds a segment (`finish` and `ready` respectively) to the path.
-- Location: If exactly 1 county AND 0 metros -> county slug goes to path.
-            If exactly 1 metro AND 0 counties -> metro slug goes to path.
-            Otherwise, all location values go to query parameters.
-- Query parameters are strictly ordered to guarantee stability.
-"""
-
 from urllib.parse import urlencode
 
 from app.parsing.schema import Criteria, HousingType, Rooms
 
-ROOMS_PATH_MAP = {
-    Rooms.STUDIO: "studio",
-    Rooms.ONE: "one-room",
-    Rooms.TWO: "two-room",
-    Rooms.THREE_PLUS: "three-room",
-}
-
-ROOMS_QUERY_MAP = {
-    Rooms.STUDIO: "-1",
-    Rooms.ONE: "1",
-    Rooms.TWO: "2",
-    Rooms.THREE_PLUS: "3",
-}
-
 
 def build_url(criteria: Criteria) -> str:
-    """Build a pik.ru URL with applied filters from Criteria.
+    """
+    Строит URL pik.ru/search по переданным критериям.
 
-    Path priority: rooms -> finish/ready -> location.
-    If exactly one room choice, it goes to the path (e.g. `two-room`).
-    If exactly one location (county or metro) is given, it goes to the path.
-    Otherwise, they go to query parameters.
+    Правило single-путь / multi-query:
+    - Комнатность в путь, если выбрана ровно одна. Иначе в query.
+    - Отделка (`finish`) и заселение (`ready`) в путь. Если выбраны оба,
+      порядок: finish, затем ready.
+    - Локация в путь, только если выбрана ровно одна локационная сущность всего
+      (т.е. 1 метро и 0 округов/районов/ЖК, или 1 округ и 0 метро/районов/ЖК).
+      Районы и ЖК всегда в query. Если выбрана ровно 1 сущность и это район или ЖК,
+      то она идет в query, а локационного сегмента в пути нет.
+    - Если `price_max` задан, а `price_min` нет, то добавляется `priceFrom=0`
+      для точного соответствия примеру из ТЗ.
+    - Неполные сущности (без id/slug в зависимости от назначения) молча пропускаются
+      (ожидается, что validation/warnings слой отработает это ранее или параллельно).
     """
     path_segments = []
+    query_params = {}
 
-    # 1. Rooms
-    rooms_in_path = False
+    # --- Путь ---
+
+    # 1. Комнатность
     if len(criteria.rooms) == 1:
-        path_segments.append(ROOMS_PATH_MAP[criteria.rooms[0]])
-        rooms_in_path = True
+        room_slugs = {
+            Rooms.STUDIO: "studio",
+            Rooms.ONE: "one-room",
+            Rooms.TWO: "two-room",
+            Rooms.THREE_PLUS: "three-room",
+        }
+        path_segments.append(room_slugs[criteria.rooms[0]])
+    elif len(criteria.rooms) > 1:
+        room_ids = {
+            Rooms.STUDIO: "-1",
+            Rooms.ONE: "1",
+            Rooms.TWO: "2",
+            Rooms.THREE_PLUS: "3",
+        }
+        query_params["rooms"] = ",".join(room_ids[r] for r in criteria.rooms)
 
-    # 2. Finish / Ready
-    if criteria.finish:
+    # 2. Отделка и заселение
+    # В url-builder `finish` == True добавляем в путь.
+    # `finish` == False уходит в warnings в парсере.
+    if criteria.finish is True:
         path_segments.append("finish")
-    if criteria.ready:
+    if criteria.ready is True:
         path_segments.append("ready")
 
-    # 3. Location
-    loc_path_segment = None
-    loc_entity = None
-    if len(criteria.counties) == 1 and not criteria.metro:
-        if criteria.counties[0].slug:
-            loc_path_segment = criteria.counties[0].slug
-            loc_entity = ("county", criteria.counties[0])
-    elif len(criteria.metro) == 1 and not criteria.counties and criteria.metro[0].slug:
-        loc_path_segment = criteria.metro[0].slug
-        loc_entity = ("metro", criteria.metro[0])
+    # 3. Локация
+    total_locations = (
+        len(criteria.metro)
+        + len(criteria.counties)
+        + len(criteria.districts)
+        + len(criteria.complexes)
+    )
 
-    if loc_path_segment:
-        path_segments.append(loc_path_segment)
+    if total_locations == 1:
+        if len(criteria.counties) == 1 and criteria.counties[0].slug:
+            path_segments.append(criteria.counties[0].slug)
+        elif len(criteria.metro) == 1 and criteria.metro[0].slug:
+            path_segments.append(f"m-{criteria.metro[0].slug}")
+        elif len(criteria.districts) == 1 and criteria.districts[0].id:
+            query_params["districtLocations"] = criteria.districts[0].id
+        elif len(criteria.complexes) == 1 and criteria.complexes[0].id:
+            query_params["blocks"] = criteria.complexes[0].id
+    else:
+        # Multi-query для локаций
+        if criteria.counties:
+            ids = [c.id for c in criteria.counties if c.id]
+            if ids:
+                query_params["districtCounties"] = ",".join(ids)
+        if criteria.metro:
+            ids = [m.id for m in criteria.metro if m.id]
+            if ids:
+                query_params["metroStations"] = ",".join(ids)
+        if criteria.districts:
+            ids = [d.id for d in criteria.districts if d.id]
+            if ids:
+                query_params["districtLocations"] = ",".join(ids)
+        if criteria.complexes:
+            ids = [c.id for c in criteria.complexes if c.id]
+            if ids:
+                query_params["blocks"] = ",".join(ids)
 
-    # Populate query parameters
-    q = []
+    # --- Query ---
 
-    # price
+    # Цена (добавляем priceFrom=0, если задан только priceTo)
     if criteria.price_min is not None:
-        q.append(("priceFrom", str(criteria.price_min)))
+        query_params["priceFrom"] = str(criteria.price_min)
     elif criteria.price_max is not None:
-        q.append(("priceFrom", "0"))
+        query_params["priceFrom"] = "0"
 
     if criteria.price_max is not None:
-        q.append(("priceTo", str(criteria.price_max)))
+        query_params["priceTo"] = str(criteria.price_max)
 
-    # area
+    # Площадь
     if criteria.area_min is not None:
-        q.append(("areaFrom", str(criteria.area_min)))
+        query_params["areaFrom"] = str(criteria.area_min)
     if criteria.area_max is not None:
-        q.append(("areaTo", str(criteria.area_max)))
+        query_params["areaTo"] = str(criteria.area_max)
 
-    # areaKitchen
+    # Площадь кухни
     if criteria.area_kitchen_min is not None:
-        q.append(("areaKitchenFrom", str(criteria.area_kitchen_min)))
+        query_params["areaKitchenFrom"] = str(criteria.area_kitchen_min)
     if criteria.area_kitchen_max is not None:
-        q.append(("areaKitchenTo", str(criteria.area_kitchen_max)))
+        query_params["areaKitchenTo"] = str(criteria.area_kitchen_max)
 
-    # floor
+    # Этаж
     if criteria.floor_min is not None:
-        q.append(("floorFrom", str(criteria.floor_min)))
+        query_params["floorFrom"] = str(criteria.floor_min)
     if criteria.floor_max is not None:
-        q.append(("floorTo", str(criteria.floor_max)))
-
+        query_params["floorTo"] = str(criteria.floor_max)
     if criteria.not_first_floor:
-        q.append(("notFirstFloor", "1"))
+        query_params["notFirstFloor"] = "1"
     if criteria.last_floor:
-        q.append(("lastFloor", "1"))
+        query_params["lastFloor"] = "1"
 
-    # time on foot / transport
+    # Время
     if criteria.time_on_foot is not None:
-        q.append(("timeOnFoot", str(criteria.time_on_foot)))
+        query_params["timeOnFoot"] = str(criteria.time_on_foot)
     if criteria.time_on_transport is not None:
-        q.append(("timeOnTransport", str(criteria.time_on_transport)))
+        query_params["timeOnTransport"] = str(criteria.time_on_transport)
 
-    # sorting
+    # Сортировка
     if criteria.sort is not None:
-        q.append(("sortBy", criteria.sort.field))
-        q.append(("orderBy", criteria.sort.order))
+        query_params["sortBy"] = criteria.sort.field
+        query_params["orderBy"] = criteria.sort.order
 
-    # rooms query
-    if not rooms_in_path and criteria.rooms:
-        q.append(("rooms", ",".join(ROOMS_QUERY_MAP[r] for r in criteria.rooms)))
-
-    # blocks (complexes)
-    if criteria.complexes:
-        ids = [c.id for c in criteria.complexes if c.id]
-        if ids:
-            q.append(("blocks", ",".join(ids)))
-
-    # districts
-    if criteria.districts:
-        ids = [d.id for d in criteria.districts if d.id]
-        if ids:
-            q.append(("districtLocations", ",".join(ids)))
-
-    # counties
-    if not (loc_entity and loc_entity[0] == "county") and criteria.counties:
-        ids = [c.id for c in criteria.counties if c.id]
-        if ids:
-            q.append(("districtCounties", ",".join(ids)))
-
-    # metro
-    if not (loc_entity and loc_entity[0] == "metro") and criteria.metro:
-        ids = [m.id for m in criteria.metro if m.id]
-        if ids:
-            q.append(("metroStations", ",".join(ids)))
-
-    # settlement year / month
+    # Год и месяц сдачи
     if criteria.settlement_year_from is not None:
-        q.append(("settlementYearFrom", str(criteria.settlement_year_from)))
+        query_params["settlementYearFrom"] = str(criteria.settlement_year_from)
     if criteria.settlement_year_to is not None:
-        q.append(("settlementYearTo", str(criteria.settlement_year_to)))
+        query_params["settlementYearTo"] = str(criteria.settlement_year_to)
     if criteria.settlement_month_from is not None:
-        q.append(("settlementMonthFrom", str(criteria.settlement_month_from)))
+        query_params["settlementMonthFrom"] = str(criteria.settlement_month_from)
     if criteria.settlement_month_to is not None:
-        q.append(("settlementMonthTo", str(criteria.settlement_month_to)))
+        query_params["settlementMonthTo"] = str(criteria.settlement_month_to)
 
-    # benefit
-    if criteria.current_benefit is not None:
-        q.append(("currentBenefit", criteria.current_benefit))
-
-    # optionGroups
+    # Программы и опции
+    if criteria.current_benefit:
+        query_params["currentBenefit"] = criteria.current_benefit
     if criteria.option_groups:
-        q.append(("optionGroups", ",".join(criteria.option_groups)))
-
-    # options
+        query_params["optionGroups"] = ",".join(criteria.option_groups)
     if criteria.options:
-        q.append(("options", ",".join(criteria.options)))
+        query_params["options"] = ",".join(criteria.options)
 
-    # type
+    # Тип и статус
     if criteria.housing_type == HousingType.FLATS_ONLY:
-        q.append(("type", "1"))
-
-    # status
+        query_params["type"] = "1"
     if criteria.only_available:
-        q.append(("status", "free"))
+        query_params["status"] = "free"
 
+    # Сборка URL
     base_url = "https://www.pik.ru/search"
     if path_segments:
-        base_url += "/" + "/".join(path_segments)
+        base_url = f"{base_url}/{'/'.join(path_segments)}"
 
-    if q:
-        query_string = urlencode(q, safe=",")
-        return f"{base_url}?{query_string}"
+    if query_params:
+        # Для фиксированного детерминированного порядка параметров в URL
+        # (pydantic и dict сохраняют порядок, но лучше отсортировать или задать явный порядок,
+        # однако dict с 3.7+ сохраняет порядок вставки, что уже детерминировано)
+        return f"{base_url}?{urlencode(query_params)}"
 
     return base_url
