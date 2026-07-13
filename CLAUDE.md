@@ -152,6 +152,7 @@ regex скомпилированы один раз на уровне модул�
 Выполнен промпт 03: справочники + loader + refresh-скрипт (см. раздел выше).
 Выполнен промпт 04: regex-правила структурных фактов в `app/parsing/rules.py`
 (см. раздел выше).
+Выполнен промпт 06: фасад парсера `parse(text)` в `app/parsing/parser.py`. Это единая точка входа парсинга, которая агрегирует структурные факты (правила) и сущности (rapidfuzz). Центральная фича: политика warnings — любые нераспознанные значимые фрагменты текста или неподдерживаемые фильтры (например, "вторичка") добавляются в список `warnings`, гарантируя, что ничего не отбрасывается молча.
 
 ### Стек
 
@@ -176,7 +177,7 @@ Entrypoint FastAPI объявлен в `pyproject.toml` (`[tool.fastapi] entrypo
 ```
 app/
   main.py            # FastAPI-app, health, POST /build-url (501-заглушка) + модели API
-  parsing/           # schema.py — Criteria; rules.py — regex-правила (готовы); entity_match.py, parser.py — заглушки
+  parsing/           # schema.py — Criteria; rules.py — regex-правила; parser.py — фасад парсера (готовы); entity_match.py — заглушка
   reference/         # *.json — справочники; loader.py — загрузка/кэш; refresh.py — обновление (готовы)
   pik/               # url_builder.py, validator.py — заглушки
 tests/               # pytest; test_health.py — smoke; parsing/ — Criteria/API + rules; reference/ — loader+refresh
