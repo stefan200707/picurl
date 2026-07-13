@@ -41,7 +41,11 @@
 
 ## Модели API
 
-- **BuildUrlRequest**: `{ text: str }`.
+- **BuildUrlRequest**: `{ text: str }`. Единственный интерфейс — Swagger-форма на
+  `/docs`, поэтому задай полю `text` пример (`examples`/`json_schema_extra` с
+  эталонной фразой из ТЗ, напр. `"хочу двушку у метро, до 15 млн, с отделкой"`) и
+  короткое `description` — тогда форма Swagger откроется с предзаполненным,
+  готовым к `Execute` примером.
 - **BuildUrlResponse**: `{ url: str, criteria: <публичное представление>,
   result_count: int | None, warnings: list[str] }` — как в примере ТЗ.
 - Публичное представление `criteria` в ответе должно быть человекочитаемым
