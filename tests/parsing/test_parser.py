@@ -13,7 +13,7 @@ def test_parse_reference_example():
     assert result.finish is True
     assert result.sort == Sort.PRICE_ASC
 
-    # Метро (заглушка из entity_match вернет Аэропорт Внуково)
+    # Метро
     assert len(result.metro) == 1
     assert result.metro[0].name == "Аэропорт Внуково"
 
