@@ -28,4 +28,42 @@ API pik.ru; нераспознанное всегда уходит в `warnings`
 
 ---
 
+## Разработка
+
+Каркас проекта собран (промпт 00): FastAPI-app с health-роутом и заглушкой
+`POST /build-url` (возвращает 501 до реализации промптов 02–09).
+
+### Стек
+
+Python 3.12 · FastAPI · pydantic v2 · httpx · rapidfuzz · pytest · uv · ruff.
+Entrypoint FastAPI объявлен в `pyproject.toml` (`[tool.fastapi] entrypoint = "app.main:app"`).
+
+### Команды
+
+- Установка: `uv sync`
+- Запуск dev-сервера: `uv run fastapi dev` (или `uv run uvicorn app.main:app --reload`)
+- Тесты: `uv run pytest`
+- Линт: `uv run ruff check`; формат: `uv run ruff format` (проверка: `--check`)
+
+Пользовательский интерфейс — Swagger-форма на `http://127.0.0.1:8000/docs`
+(своего фронтенда нет).
+
+В ruff отключены RUF001–RUF003 (ambiguous unicode): проект намеренно использует
+русский текст в строках, докстрингах и комментариях.
+
+### Карта директорий
+
+```
+app/
+  main.py            # FastAPI-app, health, POST /build-url (пока 501-заглушка)
+  parsing/           # rules.py, entity_match.py, schema.py (Criteria), parser.py — заглушки
+  reference/         # loader.py, refresh.py — заглушки; сюда лягут JSON-справочники
+  pik/               # url_builder.py, validator.py — заглушки
+tests/               # pytest; test_health.py — smoke-тесты каркаса
+docs/                # спецификации (URL-схема pik.ru — промпт 01)
+prompts/             # декомпозиция задачи (см. ниже)
+```
+
+---
+
 При каждом изменении проекта — изменять и дополнять CLAUDE.md.
