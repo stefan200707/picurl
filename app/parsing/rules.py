@@ -417,7 +417,46 @@ def extract_area(text: str) -> tuple[AreaFacts, list[Span]]:
 
 
 # ---------------------------------------------------------------------------
+# Время до метро
+# ---------------------------------------------------------------------------
+
+
+class TimeFacts(NamedTuple):
+    """Время до метро."""
+
+    time_on_foot: int | None = None
+    time_on_transport: int | None = None
+
+
+_TIME_ON_FOOT = re.compile(r"\b(?:до|не\s+более)\s+(\d+)\s*(?:мин\w*)?\s*до\s*метро\b")
+_TIME_ON_TRANSPORT = re.compile(
+    r"\b(?:до|не\s+более)\s+(\d+)\s*(?:мин\w*)?\s*(?:на\s+транспорте|транспортом)\b"
+)
+
+
+def extract_time_to_metro(text: str) -> tuple[TimeFacts, list[Span]]:
+    """Извлечь время до метро."""
+    norm = _normalize(text)
+    spans: list[Span] = []
+    time_on_foot: int | None = None
+    time_on_transport: int | None = None
+
+    for match in _iter_free(_TIME_ON_FOOT, norm, spans):
+        if time_on_foot is None:
+            time_on_foot = int(match.group(1))
+            spans.append(match.span())
+
+    for match in _iter_free(_TIME_ON_TRANSPORT, norm, spans):
+        if time_on_transport is None:
+            time_on_transport = int(match.group(1))
+            spans.append(match.span())
+
+    return TimeFacts(time_on_foot, time_on_transport), sorted(spans)
+
+
+# ---------------------------------------------------------------------------
 # Этаж
+
 # ---------------------------------------------------------------------------
 
 
@@ -642,6 +681,7 @@ def apply_rules(text: str) -> RulesOutcome:
     rooms, rooms_spans = extract_rooms(text)
     price, price_spans = extract_price(text)
     area, area_spans = extract_area(text)
+    time_metro, time_metro_spans = extract_time_to_metro(text)
     floor, floor_spans = extract_floor(text)
     finish, finish_spans = extract_finish(text)
     ready, ready_spans = extract_ready(text)
@@ -658,6 +698,8 @@ def apply_rules(text: str) -> RulesOutcome:
         area_max=area.area_max,
         area_kitchen_min=area.area_kitchen_min,
         area_kitchen_max=area.area_kitchen_max,
+        time_on_foot=time_metro.time_on_foot,
+        time_on_transport=time_metro.time_on_transport,
         floor_min=floor.floor_min,
         floor_max=floor.floor_max,
         not_first_floor=floor.not_first_floor,
@@ -673,6 +715,7 @@ def apply_rules(text: str) -> RulesOutcome:
             *rooms_spans,
             *price_spans,
             *area_spans,
+            *time_metro_spans,
             *floor_spans,
             *finish_spans,
             *ready_spans,
