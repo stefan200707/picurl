@@ -620,6 +620,25 @@ def extract_unsupported(text: str) -> tuple[list[str], list[Span]]:
 
 
 # ---------------------------------------------------------------------------
+# Время до метро
+# ---------------------------------------------------------------------------
+
+_TIME_TO_METRO = re.compile(r"\b(?:до|не\s+более|не\s+дольше)\s+(\d+)\s*мин\w*(?:\s*(?:до\s+метро|пешком))?")
+
+def extract_time_to_metro(text: str) -> tuple[int | None, list[Span]]:
+    """Извлечь время до метро (пешком): «до 20 минут до метро» -> time_on_foot=20."""
+    norm = _normalize(text)
+    spans: list[Span] = []
+    time_on_foot: int | None = None
+    for match in _iter_free(_TIME_TO_METRO, norm, spans):
+        if time_on_foot is None:
+            time_on_foot = int(match.group(1))
+            spans.append(match.span())
+    return time_on_foot, sorted(spans)
+
+
+
+# ---------------------------------------------------------------------------
 # Агрегат: все правила разом
 # ---------------------------------------------------------------------------
 
@@ -649,6 +668,7 @@ def apply_rules(text: str) -> RulesOutcome:
     housing_type, housing_spans = extract_housing_type(text)
     only_available, available_spans = extract_only_available(text)
     unsupported, unsupported_spans = extract_unsupported(text)
+    time_on_foot, time_on_foot_spans = extract_time_to_metro(text)
 
     criteria = Criteria(
         rooms=rooms,
@@ -667,6 +687,7 @@ def apply_rules(text: str) -> RulesOutcome:
         sort=sort,
         housing_type=housing_type,
         only_available=only_available,
+        time_on_foot=time_on_foot,
     )
     consumed = sorted(
         [
@@ -680,6 +701,7 @@ def apply_rules(text: str) -> RulesOutcome:
             *housing_spans,
             *available_spans,
             *unsupported_spans,
+            *time_on_foot_spans,
         ]
     )
     return RulesOutcome(criteria, consumed, unsupported)

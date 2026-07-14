@@ -146,5 +146,10 @@
   },
   {
     "name": "Щербинка"
+  },
+  {
+    "name": "Варшавская",
+    "slug": "m-varshavskaya",
+    "id": "guid-varshavskaya"
   }
 ]
