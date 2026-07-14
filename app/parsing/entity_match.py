@@ -207,22 +207,21 @@ def match_entities(text: str) -> tuple[list[EntityMatch], list[str]]:
 
             start_idx = window_tokens[0][1]
             end_idx = window_tokens[-1][2]
-            
+
             # Формируем текст окна из очищенных токенов, чтобы знаки препинания не прилипали
             window_text = " ".join(window_strings)
             text_before = text[:start_idx]
 
             trigger_type, trigger_start = get_trigger_type(text_before)
             has_capital = any(w[0].isupper() for w in window_strings)
-            
+
             kw_exact = {"округ", "жк", "район", "метро", "м"}
             kw_partial = ["вид", "сануз", "пол", "балкон", "лоджи"]
             window_lower = window_text.lower()
             window_words_lower = [w.lower() for w in window_strings]
-            
-            has_keyword = (
-                any(kw in window_words_lower for kw in kw_exact) or
-                any(kw in window_lower for kw in kw_partial)
+
+            has_keyword = any(kw in window_words_lower for kw in kw_exact) or any(
+                kw in window_lower for kw in kw_partial
             )
 
             if has_capital or trigger_type or has_keyword:

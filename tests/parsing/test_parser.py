@@ -51,14 +51,16 @@ def test_parse_stop_words_ignored():
     assert result.rooms == [Rooms.STUDIO, Rooms.ONE]
     assert warnings == []
 
+
 def test_parse_garbage_cleanup():
     """Тест на то, что ошметки вроде 'с' и ',' не ломают матчинг и не попадают в warning."""
     # "с отделкой" вырезается. Остается "с тёплым полом, ".
     # Если мы не чистим мусор, "с" и "," мешают скользящему окну.
     text = "с тёплым полом, с отделкой"
     result, warnings = parse(text)
-    
+
     assert result.finish is True
     assert len(result.option_groups) == 1
-    assert result.option_groups[0] == "teplyPol" # Проверим, что тёплый пол сматчился
-    assert "«с»" not in " ".join(warnings) # Одиночные предлоги не должны генерить варнинги (если не считаются значимыми)
+    assert result.option_groups[0] == "teplyPol"  # Проверим, что тёплый пол сматчился
+    # Одиночные предлоги не должны генерить варнинги (если не считаются значимыми)
+    assert "«с»" not in " ".join(warnings)
