@@ -403,15 +403,15 @@ def test_extract_only_available(text: str, expected: bool) -> None:
 @pytest.mark.parametrize(
     ("text", "fragments"),
     [
-        ("вторичка", ["вторичка"]),
-        ("вторичный рынок", ["вторичный рынок"]),
-        ("на вторичном рынке", ["вторичном рынке"]),
-        ("вторичное жильё", ["вторичное жильё"]),
+        ("вторичка", [("вторичка", "фильтр не поддерживается сайтом ПИК")]),
+        ("вторичный рынок", [("вторичный рынок", "фильтр не поддерживается сайтом ПИК")]),
+        ("на вторичном рынке", [("вторичном рынке", "фильтр не поддерживается сайтом ПИК")]),
+        ("вторичное жильё", [("вторичное жильё", "фильтр не поддерживается сайтом ПИК")]),
         ("новостройка", []),
         ("", []),
     ],
 )
-def test_extract_unsupported(text: str, fragments: list[str]) -> None:
+def test_extract_unsupported(text: str, fragments: list[tuple[str, str]]) -> None:
     found, spans = extract_unsupported(text)
     assert found == fragments
     assert len(spans) == len(fragments)
@@ -420,7 +420,7 @@ def test_extract_unsupported(text: str, fragments: list[str]) -> None:
 def test_extract_unsupported_returns_original_case() -> None:
     """Фрагмент для warning берётся из исходного текста (с регистром)."""
     found, _ = extract_unsupported("рассмотрю Вторичку")
-    assert found == ["Вторичку"]
+    assert found == [("Вторичку", "фильтр не поддерживается сайтом ПИК")]
 
 
 # ---------------------------------------------------------------------------
@@ -469,7 +469,7 @@ def test_apply_rules_unsupported_secondary_market() -> None:
     outcome = apply_rules("двушка на вторичном рынке до 10 млн")
     assert outcome.criteria.rooms == [Rooms.TWO]
     assert outcome.criteria.price_max == 10_000_000
-    assert outcome.unsupported == ["вторичном рынке"]
+    assert outcome.unsupported == [("вторичном рынке", "фильтр не поддерживается сайтом ПИК")]
 
 
 def test_apply_rules_empty_and_unrecognized_text() -> None:

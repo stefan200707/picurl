@@ -106,7 +106,9 @@ def _dedupe(entries: Any) -> list[RefEntry]:
     return result
 
 
-def merge_entries(existing: list[RefEntry], fetched: list[RefEntry]) -> list[RefEntry]:
+def merge_entries(
+    existing: list[RefEntry], fetched: list[RefEntry], kind: str = ""
+) -> list[RefEntry]:
     """Смёржить свежие данные с кураторскими, ничего не теряя.
 
     Записи сопоставляются по слагу, затем по нормализованному имени/алиасу.
@@ -126,6 +128,9 @@ def merge_entries(existing: list[RefEntry], fetched: list[RefEntry]) -> list[Ref
         slug_index = by_slug.get(entry.slug) if entry.slug else None
         index = slug_index if slug_index is not None else by_name.get(normalize(entry.name))
         if index is None:
+            # Для метро используем полный статический справочник, не собираем с нуля из API
+            if kind == "metro":
+                continue
             merged.append(entry)
             continue
         current = merged[index]
@@ -170,7 +175,7 @@ def refresh(client: httpx.Client, data_dir: Path = DATA_DIR) -> dict[str, int]:
     counts: dict[str, int] = {}
     for kind in REFRESHABLE:
         path = data_dir / REFERENCE_FILES[kind]
-        merged = merge_entries(load_existing(path), fetched_by_kind[kind])
+        merged = merge_entries(load_existing(path), fetched_by_kind[kind], kind)
         write_entries(path, merged)
         counts[kind] = len(merged)
     return counts

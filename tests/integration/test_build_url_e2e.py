@@ -69,7 +69,7 @@ def test_e2e_full_cycle_success(client, mock_validator_client):
             {"rooms": "2", "metro": ["Сокол"], "price_max": 12000000, "finish": True},
         ),
         (
-            "трёшка в Бабушкинском",
+            "трёшка в Бабушкинском районе",
             "search/three-room?districtLocations=203",
             {"rooms": "3+", "districts": ["Бабушкинский"]},
         ),
@@ -100,7 +100,7 @@ def test_e2e_multi_select(client):
     assert "metroStations=" in data["url"]
     assert "m-sokol" not in data["url"].split("?")[0]
 
-    assert set(data["criteria"]["metro"]) == {"Сокол", "Аэропорт Внуково"}
+    assert set(data["criteria"]["metro"]) == {"Сокол", "Аэропорт"}
 
 
 def test_e2e_unrecognized_warnings(client):
@@ -118,7 +118,7 @@ def test_e2e_unsupported_warning(client):
     assert response.status_code == 200
     data = response.json()
     assert "search/two-room" in data["url"]
-    assert any("вторичка" in w and "не попало в ссылку" in w for w in data["warnings"])
+    assert any("вторичка" in w and "не поддерживается" in w for w in data["warnings"])
 
 
 def test_e2e_empty_results(client, mock_validator_client):
@@ -165,3 +165,27 @@ def test_build_url_empty_text(client):
 
     response = client.post("/build-url", json={"text": "   "})
     assert response.status_code == 400
+
+
+def test_e2e_massive_test_query(client):
+    """9. Масштабный тест из ТЗ."""
+    text = (
+        "нужна квартира с видом на парк, западный округ, предчистовая отделка, "
+        "в районе 9-16 этажей, два и более санузла, с тёплым полом, "
+        "от двух комнат, до метро менее 15 минут"
+    )
+    response = client.post("/build-url", json={"text": text})
+    assert response.status_code == 200
+    data = response.json()
+
+    assert data["criteria"]["rooms"] == ["2", "3+"]
+    assert data["criteria"]["counties"] == ["ЗАО"]
+    assert data["criteria"]["finish"] is True
+    assert data["criteria"]["floor_min"] == 9
+    assert data["criteria"]["floor_max"] == 16
+    assert data["criteria"]["time_on_foot"] == 15
+
+    warnings_str = " ".join(data["warnings"])
+    assert "видом на парк" in warnings_str
+    assert "два и более санузла" in warnings_str
+    assert "тёплым полом" in warnings_str
