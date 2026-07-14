@@ -125,6 +125,7 @@ class Criteria(BaseModel):
     floor_max: int | None = Field(default=None, ge=1)
     not_first_floor: bool = False
     last_floor: bool = False
+    not_last_floor: bool = False
 
     # --- Отделка и заселение -------------------------------------------------
     finish: bool | None = None
@@ -203,7 +204,7 @@ class Criteria(BaseModel):
             if value is not None:
                 public[field_name] = value
 
-        for flag_name in ("not_first_floor", "last_floor", "only_available"):
+        for flag_name in ("not_first_floor", "last_floor", "not_last_floor", "only_available"):
             if getattr(self, flag_name):
                 public[flag_name] = True
 
