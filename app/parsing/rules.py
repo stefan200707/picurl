@@ -109,7 +109,9 @@ _ROOMS_WORD_PATTERNS: list[tuple[re.Pattern[str], Rooms]] = [
     (re.compile(r"(?:\bдаже\s+)?\b(?:однушк\w*|однокомнатн\w*)"), Rooms.ONE),
     (re.compile(r"(?:\bдаже\s+)?\b(?:двушк\w*|двухкомнатн\w*)"), Rooms.TWO),
     (
-        re.compile(r"(?:\bдаже\s+)?\b(?:трешк\w*|трехкомнатн\w*|четырехкомнатн\w*|многокомнатн\w*)"),
+        re.compile(
+            r"(?:\bдаже\s+)?\b(?:трешк\w*|трехкомнатн\w*|четырехкомнатн\w*|многокомнатн\w*)"
+        ),
         Rooms.THREE_PLUS,
     ),
 ]
