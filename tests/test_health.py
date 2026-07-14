@@ -14,10 +14,7 @@ def test_health_returns_ok() -> None:
     assert response.json() == {"status": "ok"}
 
 
-def test_build_url_stub_returns_501() -> None:
-    """Заглушка POST /build-url зарегистрирована и отвечает 501."""
-    response = client.post("/build-url", json={"text": "двушка у метро до 15 млн"})
-    assert response.status_code == 501
+
 
 
 def test_build_url_validates_body() -> None:

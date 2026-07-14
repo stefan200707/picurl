@@ -12,7 +12,7 @@ def test_build_url_tz_example():
     criteria = Criteria(
         rooms=[Rooms.TWO],
         price_max=15000000,
-        metro=[MatchedEntity(name="Аэропорт Внуково", slug="aeroport-vnukovo", id="guid-123")],
+        metro=[MatchedEntity(name="Аэропорт Внуково", slug="m-aeroport-vnukovo", id="guid-123")],
         finish=True,
         sort=Sort.PRICE_ASC,
     )
@@ -30,7 +30,7 @@ def test_build_url_live_example():
         rooms=[Rooms.TWO],
         price_min=10000000,
         price_max=15000000,
-        metro=[MatchedEntity(name="Аэропорт Внуково", slug="aeroport-vnukovo", id="guid-123")],
+        metro=[MatchedEntity(name="Аэропорт Внуково", slug="m-aeroport-vnukovo", id="guid-123")],
         sort=Sort.AREA_DESC,
     )
     url = build_url(criteria)
@@ -67,15 +67,15 @@ def test_build_url_single_vs_multi_location():
     assert url == "https://www.pik.ru/search?districtCounties=9%2C6"
 
     # Single metro
-    url = build_url(Criteria(metro=[MatchedEntity(name="Внуково", slug="vnukovo", id="m-1")]))
+    url = build_url(Criteria(metro=[MatchedEntity(name="Внуково", slug="m-vnukovo", id="m-1")]))
     assert url == "https://www.pik.ru/search/m-vnukovo"
 
     # Multi metro
     url = build_url(
         Criteria(
             metro=[
-                MatchedEntity(name="Внуково", slug="vnukovo", id="m-1"),
-                MatchedEntity(name="Динамо", slug="dinamo", id="m-2"),
+                MatchedEntity(name="Внуково", slug="m-vnukovo", id="m-1"),
+                MatchedEntity(name="Динамо", slug="m-dinamo", id="m-2"),
             ]
         )
     )
@@ -85,7 +85,7 @@ def test_build_url_single_vs_multi_location():
     url = build_url(
         Criteria(
             counties=[MatchedEntity(name="ЗАО", slug="zao", id="9")],
-            metro=[MatchedEntity(name="Внуково", slug="vnukovo", id="m-1")],
+            metro=[MatchedEntity(name="Внуково", slug="m-vnukovo", id="m-1")],
         )
     )
     assert url == "https://www.pik.ru/search?districtCounties=9&metroStations=m-1"
