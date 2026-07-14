@@ -84,6 +84,8 @@ async def validate(criteria: Criteria, client: httpx.AsyncClient) -> ValidationR
         params["notFirstFloor"] = "1"
     if criteria.last_floor:
         params["lastFloor"] = "1"
+    if criteria.not_last_floor:
+        params["notLastFloor"] = "1"
 
     # 7. Время
     if criteria.time_on_foot is not None:

@@ -119,6 +119,8 @@ def build_url(criteria: Criteria) -> str:
         query_params["notFirstFloor"] = "1"
     if criteria.last_floor:
         query_params["lastFloor"] = "1"
+    if criteria.not_last_floor:
+        query_params["notLastFloor"] = "1"
 
     # Время
     if criteria.time_on_foot is not None:
