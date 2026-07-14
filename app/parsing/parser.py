@@ -111,6 +111,12 @@ def parse(text: str) -> ParseResult:
             continue
         seen_entity_ids.add(entity_key)
 
+        if not match.entity.slug and not match.entity.id:
+            if match.type == "metro":
+                warnings.append(f"Станция метро '{match.entity.name}' не найдена в базе ПИК")
+            else:
+                warnings.append(f"«{match.entity.name}»: не найдена в базе ПИК")
+
         if match.type == "metro":
             criteria.metro.append(match.entity)
         elif match.type == "county":
