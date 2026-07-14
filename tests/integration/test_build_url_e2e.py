@@ -185,7 +185,11 @@ def test_e2e_massive_test_query(client):
     assert data["criteria"]["floor_max"] == 16
     assert data["criteria"]["time_on_foot"] == 15
 
+    assert "vidNaPark" in data["criteria"]["options"]
+    assert "manybathrooms" in data["criteria"]["option_groups"]
+    assert "teplyPol" in data["criteria"]["option_groups"]
+
     warnings_str = " ".join(data["warnings"])
-    assert "видом на парк" in warnings_str
-    assert "два и более санузла" in warnings_str
-    assert "тёплым полом" in warnings_str
+    assert "видом на парк" not in warnings_str
+    assert "два и более санузла" not in warnings_str
+    assert "тёплым полом" not in warnings_str
