@@ -135,9 +135,13 @@ def parse(text: str) -> ParseResult:
 
     for start, end in unconsumed_spans:
         chunk = text[start:end]
-        if _is_significant(chunk):
-            cleaned_chunk = chunk.strip(" ,.-:;!?")
-            if cleaned_chunk:
-                warnings.append(f"«{cleaned_chunk}»: не удалось распознать, не попало в ссылку")
+        # Разбиваем нераспознанный текст по знакам препинания и союзам,
+        # чтобы давать более точные предупреждения
+        subchunks = re.split(r"[,;.]|\s+и\s+|\s+а\s+|\s+но\s+", chunk)
+        for subchunk in subchunks:
+            if _is_significant(subchunk):
+                cleaned_chunk = subchunk.strip(" ,.-:;!?")
+                if cleaned_chunk:
+                    warnings.append(f"«{cleaned_chunk}»: не удалось распознать, не попало в ссылку")
 
     return ParseResult(criteria=criteria, warnings=warnings)
