@@ -85,6 +85,21 @@ def test_extract_rooms(text: str, expected: list[Rooms]) -> None:
     assert bool(spans) == bool(expected)
 
 
+@pytest.mark.parametrize(
+    ("text", "expected_spans_len"),
+    [
+        ("но точно не студию", 1),
+        ("точно не двушку", 1),
+        ("кроме однушки", 1),
+        ("без студий", 1),
+    ],
+)
+def test_extract_rooms_negation(text: str, expected_spans_len: int) -> None:
+    rooms, spans = extract_rooms(text)
+    assert rooms == []
+    assert len(spans) == expected_spans_len
+
+
 def test_extract_rooms_spans_point_to_source() -> None:
     text = "хочу двушку у метро"
     rooms, spans = extract_rooms(text)
