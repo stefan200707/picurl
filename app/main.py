@@ -109,7 +109,9 @@ router = APIRouter(tags=["build-url"])
 @router.post(
     "/build-url",
     summary="Сгенерировать ссылку на pik.ru",
-    description="Принимает текст на естественном языке, распознаёт параметры и формирует ссылку на pik.ru.",
+    description=(
+        "Принимает текст на естественном языке, распознаёт параметры и формирует ссылку на pik.ru."
+    ),
 )
 async def build_url(
     request: BuildUrlRequest,
@@ -137,7 +139,7 @@ async def build_url(
     # Обработка пустой выдачи
     if validation.result_count == 0:
         warnings.append("под критерии ничего не найдено")
-    
+
     if validation.warning:
         warnings.append(validation.warning)
 

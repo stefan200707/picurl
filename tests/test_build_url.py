@@ -15,7 +15,7 @@ def mock_validator_client():
         return httpx.Response(200, json={"count": state["count"]})
 
     client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
-    
+
     # Allow tests to change the mocked count by modifying state
     client.mock_state = state
     return client
@@ -32,7 +32,7 @@ def client(mock_validator_client):
 def test_build_url_empty_text(client):
     response = client.post("/build-url", json={"text": ""})
     assert response.status_code == 422  # validation error for min_length
-    
+
     response = client.post("/build-url", json={"text": "   "})
     assert response.status_code == 400
     assert response.json() == {"detail": "Текст запроса не может быть пустым."}
@@ -48,10 +48,13 @@ def test_build_url_success(client, mock_validator_client):
     assert response.status_code == 200
     data = response.json()
 
-    assert data["url"] == "https://www.pik.ru/search/two-room/finish/m-aeroport-vnukovo?priceFrom=0&priceTo=15000000"
+    assert (
+        data["url"]
+        == "https://www.pik.ru/search/two-room/finish/m-aeroport-vnukovo?priceFrom=0&priceTo=15000000"
+    )
     assert data["result_count"] == 47
     assert data["warnings"] == []
-    
+
     criteria = data["criteria"]
     assert criteria["rooms"] == "2"
     assert criteria["price_max"] == 15000000
@@ -83,6 +86,5 @@ def test_build_url_unsupported_warning(client, mock_validator_client):
     assert response.status_code == 200
     data = response.json()
     assert data["result_count"] == 10
-    
-    assert any("вторичка" in w and "не попало в ссылку" in w for w in data["warnings"])
 
+    assert any("вторичка" in w and "не попало в ссылку" in w for w in data["warnings"])

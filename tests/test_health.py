@@ -14,9 +14,6 @@ def test_health_returns_ok() -> None:
     assert response.json() == {"status": "ok"}
 
 
-
-
-
 def test_build_url_validates_body() -> None:
     """Тело без обязательного поля text отклоняется валидацией."""
     response = client.post("/build-url", json={})
