@@ -154,6 +154,27 @@ def parse(text: str) -> ParseResult:
             warnings.append(f'Станция метро "{fm_name}" не найдена в базе, пропущена')
             consumed.append(fm_span)
 
+    # Проверка на наличие id для мульти-выбора локаций
+    total_locations = (
+        len(criteria.metro)
+        + len(criteria.counties)
+        + len(criteria.districts)
+        + len(criteria.complexes)
+    )
+    if total_locations > 1:
+        for m in criteria.metro:
+            if not m.id:
+                warnings.append(f'Метро "{m.name}" не имеет id, в ссылку не попадет')
+        for c in criteria.counties:
+            if not c.id:
+                warnings.append(f'Округ "{c.name}" не имеет id, в ссылку не попадет')
+        for d in criteria.districts:
+            if not d.id:
+                warnings.append(f'Район "{d.name}" не имеет id, в ссылку не попадет')
+        for cx in criteria.complexes:
+            if not cx.id:
+                warnings.append(f'ЖК "{cx.name}" не имеет id, в ссылку не попадет')
+
     # 4. Вычисляем нераспознанные куски текста
     merged_consumed = _merge_spans(consumed)
 
