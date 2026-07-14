@@ -135,8 +135,9 @@ def parse(text: str) -> ParseResult:
 
     for start, end in unconsumed_spans:
         chunk = text[start:end]
-        # Разбиваем нераспознанный текст по знакам препинания и союзам, чтобы давать более точные предупреждения
-        subchunks = re.split(r'[,;.]|\s+и\s+|\s+а\s+|\s+но\s+', chunk)
+        # Разбиваем нераспознанный текст по знакам препинания и союзам,
+        # чтобы давать более точные предупреждения
+        subchunks = re.split(r"[,;.]|\s+и\s+|\s+а\s+|\s+но\s+", chunk)
         for subchunk in subchunks:
             if _is_significant(subchunk):
                 cleaned_chunk = subchunk.strip(" ,.-:;!?")

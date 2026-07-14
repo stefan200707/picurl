@@ -416,10 +416,10 @@ def extract_area(text: str) -> tuple[AreaFacts, list[Span]]:
     return AreaFacts(area_min, area_max, kitchen_min, kitchen_max), sorted(spans)
 
 
-
 # ---------------------------------------------------------------------------
 # Время до метро
 # ---------------------------------------------------------------------------
+
 
 class TimeFacts(NamedTuple):
     """Время до метро."""
@@ -427,8 +427,12 @@ class TimeFacts(NamedTuple):
     time_on_foot: int | None = None
     time_on_transport: int | None = None
 
+
 _TIME_ON_FOOT = re.compile(r"\b(?:до|не\s+более)\s+(\d+)\s*(?:мин\w*)?\s*до\s*метро\b")
-_TIME_ON_TRANSPORT = re.compile(r"\b(?:до|не\s+более)\s+(\d+)\s*(?:мин\w*)?\s*(?:на\s+транспорте|транспортом)\b")
+_TIME_ON_TRANSPORT = re.compile(
+    r"\b(?:до|не\s+более)\s+(\d+)\s*(?:мин\w*)?\s*(?:на\s+транспорте|транспортом)\b"
+)
+
 
 def extract_time_to_metro(text: str) -> tuple[TimeFacts, list[Span]]:
     """Извлечь время до метро."""
@@ -448,6 +452,7 @@ def extract_time_to_metro(text: str) -> tuple[TimeFacts, list[Span]]:
             spans.append(match.span())
 
     return TimeFacts(time_on_foot, time_on_transport), sorted(spans)
+
 
 # ---------------------------------------------------------------------------
 # Этаж
