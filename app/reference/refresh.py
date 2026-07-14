@@ -106,7 +106,9 @@ def _dedupe(entries: Any) -> list[RefEntry]:
     return result
 
 
-def merge_entries(existing: list[RefEntry], fetched: list[RefEntry], kind: str = "") -> list[RefEntry]:
+def merge_entries(
+    existing: list[RefEntry], fetched: list[RefEntry], kind: str = ""
+) -> list[RefEntry]:
     """Смёржить свежие данные с кураторскими, ничего не теряя.
 
     Записи сопоставляются по слагу, затем по нормализованному имени/алиасу.

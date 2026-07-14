@@ -165,3 +165,27 @@ def test_build_url_empty_text(client):
 
     response = client.post("/build-url", json={"text": "   "})
     assert response.status_code == 400
+
+
+def test_e2e_massive_test_query(client):
+    """9. Масштабный тест из ТЗ."""
+    text = (
+        "нужна квартира с видом на парк, западный округ, предчистовая отделка, "
+        "в районе 9-16 этажей, два и более санузла, с тёплым полом, "
+        "от двух комнат, до метро менее 15 минут"
+    )
+    response = client.post("/build-url", json={"text": text})
+    assert response.status_code == 200
+    data = response.json()
+
+    assert data["criteria"]["rooms"] == ["2", "3+"]
+    assert data["criteria"]["counties"] == ["ЗАО"]
+    assert data["criteria"]["finish"] is True
+    assert data["criteria"]["floor_min"] == 9
+    assert data["criteria"]["floor_max"] == 16
+    assert data["criteria"]["time_on_foot"] == 15
+
+    warnings_str = " ".join(data["warnings"])
+    assert "видом на парк" in warnings_str
+    assert "два и более санузла" in warnings_str
+    assert "тёплым полом" in warnings_str
