@@ -12,7 +12,7 @@ from app.parsing.rules import Span
 from app.parsing.schema import MatchedEntity
 from app.reference.loader import RefEntry, load_all, normalize
 
-SCORE_THRESHOLD = 85.0
+SCORE_THRESHOLD = 80.0
 TRIGGERED_SCORE_THRESHOLD = 75.0
 
 
