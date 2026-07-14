@@ -229,28 +229,31 @@ class PriceFacts(NamedTuple):
 
 
 _PRICE_UNIT = r"млн\.?|миллион\w*|тыс\w*|руб\w*|р\.|₽"
+_OPT_RUB = r"(?:\s+(?:рублей|руб\w*|р\.|₽))?"
 
 #: «10-15 млн», «от 10 до 15 млн»; без единицы — только большие числа (рубли).
 _PRICE_RANGE = re.compile(
-    rf"\b(?:от\s+)?({_NUM})\s*(?:[-–—]|до)\s*({_NUM})\s*({_PRICE_UNIT})?(?![\w²])"
+    rf"\b(?:от\s+)?({_NUM})\s*(?:[-–—]|до)\s*({_NUM})\s*({_PRICE_UNIT})?{_OPT_RUB}(?![\w²])"
 )
 #: «бюджет 15м», «цена до 15 млн», «бюджет 15» (число <1000 → миллионы).
 _PRICE_BUDGET = re.compile(
     rf"\b(?:бюджет\w*|цена|стоимость\w*)\s*[—:\-]?\s*(до|от)?\s*({_NUM})\s*"
-    rf"({_PRICE_UNIT}|м|m|к|k)?(?![\w²])"
+    rf"({_PRICE_UNIT}|м|m|к|k)?{_OPT_RUB}(?![\w²])"
 )
-_PRICE_MIN = re.compile(rf"\b(?:от|не\s+дешевле|минимум)\s+({_NUM})\s*({_PRICE_UNIT})(?![\w²])")
+_PRICE_MIN = re.compile(
+    rf"\b(?:от|не\s+дешевле|минимум)\s+({_NUM})\s*({_PRICE_UNIT}){_OPT_RUB}(?![\w²])"
+)
 _PRICE_MAX = re.compile(
     rf"\b(?:до|не\s+дороже|не\s+больше|максимум|в\s+пределах)\s+({_NUM})\s*"
-    rf"({_PRICE_UNIT})(?![\w²])"
+    rf"({_PRICE_UNIT}){_OPT_RUB}(?![\w²])"
 )
 #: «за 15 миллионов», «за 15 млн» — трактуем как верхнюю границу.
-_PRICE_ZA = re.compile(rf"\bза\s+({_NUM})\s*(млн\.?|миллион\w*|тыс\w*)(?![\w²])")
+_PRICE_ZA = re.compile(rf"\bза\s+({_NUM})\s*({_PRICE_UNIT}){_OPT_RUB}(?![\w²])")
 #: Слитный суффикс: «до 15м», «за 800к» (м/m → млн, к/k → тыс, только слитно).
-_PRICE_SUFFIX = re.compile(rf"\b(до|от|за)\s+({_NUM})([мmкk])\b")
+_PRICE_SUFFIX = re.compile(rf"\b(до|от|за)\s+({_NUM})([мmкk]){_OPT_RUB}\b")
 #: Голое большое число: «до 15000000» (≥ 100 000 → рубли).
-_PRICE_PLAIN_MAX = re.compile(rf"\b(?:до|не\s+дороже)\s+({_NUM})\b")
-_PRICE_PLAIN_MIN = re.compile(rf"\b(?:от|не\s+дешевле)\s+({_NUM})\b")
+_PRICE_PLAIN_MAX = re.compile(rf"\b(?:до|не\s+дороже)\s+({_NUM}){_OPT_RUB}\b")
+_PRICE_PLAIN_MIN = re.compile(rf"\b(?:от|не\s+дешевле)\s+({_NUM}){_OPT_RUB}\b")
 
 #: Порог «голое число — это рубли» (иначе слишком похоже на этаж/площадь).
 _RUBLE_THRESHOLD = 100_000
