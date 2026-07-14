@@ -141,10 +141,14 @@ def _plus_rooms(digit: int) -> list[Rooms]:
 _ROOMS_WORD_RANGES = re.compile(r"\bот\s+(одн\w+|двух|трех|четырех|пяти)\s+комнат\w*")
 
 def _word_to_digit(word: str) -> int:
-    if word.startswith("одн"): return 1
-    if word == "двух": return 2
-    if word == "трех": return 3
-    if word in ("четырех", "пяти"): return 4
+    if word.startswith("одн"):
+        return 1
+    if word == "двух":
+        return 2
+    if word == "трех":
+        return 3
+    if word in ("четырех", "пяти"):
+        return 4
     return 1
 
 def extract_rooms(text: str) -> tuple[list[Rooms], list[Span]]:
@@ -729,7 +733,7 @@ def apply_rules(text: str) -> RulesOutcome:
     only_available, available_spans = extract_only_available(text)
     unsupported, unsupported_spans = extract_unsupported(text)
     fallback_names, fallback_spans = extract_fallback_metro(text)
-    fallback_metro = list(zip(fallback_names, fallback_spans))
+    fallback_metro = list(zip(fallback_names, fallback_spans, strict=False))
 
     criteria = Criteria(
         rooms=rooms,
