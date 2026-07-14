@@ -187,7 +187,7 @@ def match_entities(text: str) -> tuple[list[EntityMatch], list[str]]:
     candidates = []
 
     window_specs = []
-    
+
     for n in range(1, 4):
         for i in range(len(tokens_info) - n + 1):
             window_tokens = tokens_info[i : i + n]
@@ -197,18 +197,17 @@ def match_entities(text: str) -> tuple[list[EntityMatch], list[str]]:
             window_specs.append((window_tokens, text_before, start_idx, end_idx))
 
     # Heuristic for conjunctions
-    for i, (tok_str, start, end) in enumerate(tokens_info):
-        if tok_str.lower() in {"и", "или"}:
-            if i >= 2 and i + 1 < len(tokens_info):
-                w2 = tokens_info[i+1]
-                for n_mod in (1, 2):
-                    if i - 1 - n_mod >= 0:
-                        mod_tokens = tokens_info[i - 1 - n_mod : i - 1]
-                        synthetic_tokens = mod_tokens + [w2]
-                        s_start = w2[1]
-                        s_end = w2[2]
-                        t_before = text[: mod_tokens[0][1]]
-                        window_specs.append((synthetic_tokens, t_before, s_start, s_end))
+    for i, (tok_str, _start, _end) in enumerate(tokens_info):
+        if tok_str.lower() in {"и", "или"} and i >= 2 and i + 1 < len(tokens_info):
+            w2 = tokens_info[i + 1]
+            for n_mod in (1, 2):
+                if i - 1 - n_mod >= 0:
+                    mod_tokens = tokens_info[i - 1 - n_mod : i - 1]
+                    synthetic_tokens = [*mod_tokens, w2]
+                    s_start = w2[1]
+                    s_end = w2[2]
+                    t_before = text[: mod_tokens[0][1]]
+                    window_specs.append((synthetic_tokens, t_before, s_start, s_end))
 
     for window_tokens, text_before, start_idx, end_idx in window_specs:
         window_strings = [t[0] for t in window_tokens]
@@ -216,9 +215,7 @@ def match_entities(text: str) -> tuple[list[EntityMatch], list[str]]:
         if _is_stop_word_window(window_strings):
             continue
 
-        clean_window = " ".join(
-            w for w in window_strings if w.lower() not in STOP_WORDS
-        ).lower()
+        clean_window = " ".join(w for w in window_strings if w.lower() not in STOP_WORDS).lower()
         if clean_window in ["округ", "жк", "район", "районе", "метро", "м"]:
             continue
 
@@ -296,11 +293,11 @@ def match_entities(text: str) -> tuple[list[EntityMatch], list[str]]:
                     {
                         "span": (actual_start_idx, end_idx),
                         "text": window_text,
-                            "matches": final_unique,
-                            "best_score": best_adj_score,
-                            "window_size": len(window_tokens),
-                        }
-                    )
+                        "matches": final_unique,
+                        "best_score": best_adj_score,
+                        "window_size": len(window_tokens),
+                    }
+                )
 
     def _is_overlap(span1: Span, span2: Span) -> bool:
         return max(span1[0], span2[0]) < min(span1[1], span2[1])
