@@ -120,7 +120,7 @@ def build_url(criteria: Criteria) -> str:
     if criteria.last_floor:
         query_params["lastFloor"] = "1"
 
-    # Время
+    # --- Время до метро ---
     if criteria.time_on_foot is not None:
         query_params["timeOnFoot"] = str(criteria.time_on_foot)
     if criteria.time_on_transport is not None:

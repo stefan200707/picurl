@@ -137,8 +137,8 @@ class Criteria(BaseModel):
     complexes: list[MatchedEntity] = Field(default_factory=list)
 
     # --- Время до метро, минуты ---------------------------------------------
-    time_on_foot: int | None = Field(default=None, ge=1)
-    time_on_transport: int | None = Field(default=None, ge=1)
+    time_on_foot: int | None = Field(default=None, ge=1, description="Время пешком до метро (timeOnFoot)")
+    time_on_transport: int | None = Field(default=None, ge=1, description="Время на транспорте (timeOnTransport)")
 
     # --- Срок заселения -------------------------------------------------------
     settlement_year_from: int | None = Field(default=None, ge=2000)
