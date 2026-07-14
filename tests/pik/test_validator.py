@@ -53,6 +53,7 @@ async def test_validate_network_error():
 
     assert result.result_count is None
     assert result.ok is True  # graceful: если проверить не удалось, считаем что ок
+    assert result.warning == "выдача не проверена"
 
 
 @pytest.mark.asyncio
@@ -67,6 +68,7 @@ async def test_validate_timeout():
 
     assert result.result_count is None
     assert result.ok is True
+    assert result.warning == "выдача не проверена"
 
 
 @pytest.mark.asyncio
@@ -81,6 +83,7 @@ async def test_validate_http_error():
 
     assert result.result_count is None
     assert result.ok is True
+    assert result.warning == "выдача не проверена"
 
 
 @pytest.mark.asyncio
@@ -95,3 +98,4 @@ async def test_validate_invalid_json():
 
     assert result.result_count is None
     assert result.ok is True
+    assert result.warning == "выдача не проверена"

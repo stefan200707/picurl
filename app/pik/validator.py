@@ -11,6 +11,7 @@ class ValidationResult(BaseModel):
 
     result_count: int | None
     ok: bool
+    warning: str | None = None
 
 
 async def validate(criteria: Criteria, client: httpx.AsyncClient) -> ValidationResult:
@@ -130,8 +131,8 @@ async def validate(criteria: Criteria, client: httpx.AsyncClient) -> ValidationR
         count = data.get("count", 0)
         return ValidationResult(result_count=count, ok=count > 0)
     except httpx.RequestError:
-        return ValidationResult(result_count=None, ok=True)
+        return ValidationResult(result_count=None, ok=True, warning="выдача не проверена")
     except httpx.HTTPStatusError:
-        return ValidationResult(result_count=None, ok=True)
+        return ValidationResult(result_count=None, ok=True, warning="выдача не проверена")
     except (ValueError, TypeError, KeyError):
-        return ValidationResult(result_count=None, ok=True)
+        return ValidationResult(result_count=None, ok=True, warning="выдача не проверена")
