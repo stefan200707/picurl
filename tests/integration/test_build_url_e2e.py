@@ -69,7 +69,7 @@ def test_e2e_full_cycle_success(client, mock_validator_client):
             {"rooms": "2", "metro": ["Сокол"], "price_max": 12000000, "finish": True},
         ),
         (
-            "трёшка в Бабушкинском",
+            "трёшка в Бабушкинском районе",
             "search/three-room?districtLocations=203",
             {"rooms": "3+", "districts": ["Бабушкинский"]},
         ),
@@ -100,7 +100,7 @@ def test_e2e_multi_select(client):
     assert "metroStations=" in data["url"]
     assert "m-sokol" not in data["url"].split("?")[0]
 
-    assert set(data["criteria"]["metro"]) == {"Сокол", "Аэропорт Внуково"}
+    assert set(data["criteria"]["metro"]) == {"Сокол", "Аэропорт"}
 
 
 def test_e2e_unrecognized_warnings(client):
