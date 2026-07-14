@@ -34,15 +34,12 @@ def test_parse_unrecognized_chunk():
     assert "не удалось распознать" in warnings[0]
 
 
-def test_parse_unsupported_secondary():
-    """Тест на то, что неподдерживаемые термины (вторичка) попадают в warnings."""
-    text = "куплю вторичку до 10 млн"
-    result, warnings = parse(text)
-
-    assert result.price_max == 10000000
-    assert len(warnings) == 1
-    assert "вторичк" in warnings[0].lower()
-    assert "не удалось распознать" in warnings[0]
+def test_parse_unsupported_secondary() -> None:
+    text = "ищу вторичку в ЗАО"
+    result = parse(text)
+    assert result.criteria.counties[0].slug == "zao"
+    assert len(result.warnings) == 1
+    assert "фильтр не поддерживается сайтом ПИК" in result.warnings[0]
 
 
 def test_parse_stop_words_ignored():

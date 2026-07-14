@@ -221,5 +221,5 @@ class TestRefresh:
         with make_client(BLOCKS_PAYLOAD) as client:
             refresh(client, data_dir=tmp_path)
 
-        entries = json.loads((tmp_path / REFERENCE_FILES["metro"]).read_text(encoding="utf-8"))
+        entries = json.loads((tmp_path / REFERENCE_FILES["districts"]).read_text(encoding="utf-8"))
         assert entries and all(set(e) == {"name"} for e in entries)

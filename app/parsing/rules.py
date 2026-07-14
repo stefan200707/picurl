@@ -138,6 +138,21 @@ def _plus_rooms(digit: int) -> list[Rooms]:
     return list(dict.fromkeys(room for room in rooms if room is not None))
 
 
+_ROOMS_WORD_RANGES = re.compile(r"\bот\s+(одн\w+|двух|трех|четырех|пяти)\s+комнат\w*")
+
+
+def _word_to_digit(word: str) -> int:
+    if word.startswith("одн"):
+        return 1
+    if word == "двух":
+        return 2
+    if word == "трех":
+        return 3
+    if word in ("четырех", "пяти"):
+        return 4
+    return 1
+
+
 def extract_rooms(text: str) -> tuple[list[Rooms], list[Span]]:
     """Извлечь комнатность: список чипов (без дубликатов, в порядке упоминания)."""
     norm = _normalize(text)
@@ -150,6 +165,14 @@ def extract_rooms(text: str) -> tuple[list[Rooms], list[Span]]:
             found.append((match.start(), order, room))
             spans.append(match.span())
             order += 1
+
+    for match in _iter_free(_ROOMS_WORD_RANGES, norm, spans):
+        digit = _word_to_digit(match.group(1))
+        rooms = _plus_rooms(digit)
+        for room in rooms:
+            found.append((match.start(), order, room))
+            order += 1
+        spans.append(match.span())
 
     for match in _iter_free(_ROOMS_NUM, norm, spans):
         digits = [int(d) for d in re.findall(r"\d", match.group(1))]
@@ -428,9 +451,13 @@ class TimeFacts(NamedTuple):
     time_on_transport: int | None = None
 
 
-_TIME_ON_FOOT = re.compile(r"\b(?:до|не\s+более)\s+(\d+)\s*(?:мин\w*)?\s*до\s*метро\b")
+_TIME_ON_FOOT = re.compile(
+    r"\b(?:до|не\s+более|менее)\s+(\d+)\s*(?:мин\w*)?\s*до\s*метро\b|"
+    r"\bдо\s+метро\s+(?:до|не\s+более|менее)\s+(\d+)\s*(?:мин\w*)?\b"
+)
 _TIME_ON_TRANSPORT = re.compile(
-    r"\b(?:до|не\s+более)\s+(\d+)\s*(?:мин\w*)?\s*(?:на\s+транспорте|транспортом)\b"
+    r"\b(?:до|не\s+более|менее)\s+(\d+)\s*(?:мин\w*)?\s*(?:на\s+транспорте|транспортом)\b|"
+    r"\bдо\s+метро\s+(?:до|не\s+более|менее)\s+(\d+)\s*(?:мин\w*)?\s*(?:на\s+транспорте|транспортом)\b"
 )
 
 
@@ -443,12 +470,12 @@ def extract_time_to_metro(text: str) -> tuple[TimeFacts, list[Span]]:
 
     for match in _iter_free(_TIME_ON_FOOT, norm, spans):
         if time_on_foot is None:
-            time_on_foot = int(match.group(1))
+            time_on_foot = int(match.group(1) or match.group(2))
             spans.append(match.span())
 
     for match in _iter_free(_TIME_ON_TRANSPORT, norm, spans):
         if time_on_transport is None:
-            time_on_transport = int(match.group(1))
+            time_on_transport = int(match.group(1) or match.group(2))
             spans.append(match.span())
 
     return TimeFacts(time_on_foot, time_on_transport), sorted(spans)
@@ -531,7 +558,7 @@ def extract_floor(text: str) -> tuple[FloorFacts, list[Span]]:
 
 _FINISH_FALSE = re.compile(r"\bбез\s+(?:отделки|ремонта)\b|\bчернов\w+(?:\s+отделк\w+)?")
 _FINISH_TRUE = re.compile(
-    r"\bс\s+(?:отделкой|ремонтом)\b|\bчистов\w+(?:\s+отделк\w+)?"
+    r"\bс\s+(?:отделкой|ремонтом)\b|\b(?:пред)?чистов\w+(?:\s+отделк\w+)?"
     r"|\bготов\w+\s+отделк\w+|\bпод\s+ключ\b"
 )
 
@@ -644,16 +671,36 @@ def extract_only_available(text: str) -> tuple[bool, list[Span]]:
 
 #: «Вторичка» — pik.ru продаёт только новостройки (открытый вопрос №3):
 #: критерии не трогаем, фрагмент уходит маркером для warning.
-_UNSUPPORTED = re.compile(r"\bвторичк\w*|\bвторичн\w+(?:\s+(?:рынок|рынке|рынка|жиль\w*|фонд\w*))?")
+_UNSUPPORTED = re.compile(
+    r"\bвторичк\w*|\bвторичн\w+(?:\s+(?:рынок|рынке|рынка|жиль\w*|фонд\w*))?"
+    r"|\bсолнечн\w+\s+сторон\w*|\bраздельн\w+\s+сануз\w*"
+    r"|\bбалкон\w*|\bлоджи\w*|\bпанорамн\w+\s+окн\w*"
+    r"|\bокн\w+\s+во\s+двор\b|\bкирпичн\w+\s+дом\w*"
+    r"|\bвид\w*\s+на\s+парк\b|\bс\s+тепл\w+\s+пол\w*\b"
+    r"|\bтепл\w+\s+пол\w*|\b(?:два|несколько)\s+(?:и\s+более\s+)?санузл\w*"
+)
 
 
-def extract_unsupported(text: str) -> tuple[list[str], list[Span]]:
+def extract_unsupported(text: str) -> tuple[list[tuple[str, str]], list[Span]]:
     """Найти неподдерживаемые пожелания («вторичка»): фрагменты для warnings."""
     norm = _normalize(text)
-    fragments: list[str] = []
+    fragments: list[tuple[str, str]] = []
     spans: list[Span] = []
     for match in _UNSUPPORTED.finditer(norm):
-        fragments.append(text[match.start() : match.end()])
+        fragments.append((text[match.start() : match.end()], "фильтр не поддерживается сайтом ПИК"))
+        spans.append(match.span())
+    return fragments, spans
+
+
+_FALLBACK_METRO = re.compile(r"(?i)\bу\s+метро\s+([а-яА-ЯёЁ-]+)")
+
+
+def extract_fallback_metro(text: str) -> tuple[list[str], list[Span]]:
+    """Извлечь гео-маркеры, которые могли не попасть в словарь."""
+    fragments: list[str] = []
+    spans: list[Span] = []
+    for match in _FALLBACK_METRO.finditer(text):
+        fragments.append(match.group(1))
         spans.append(match.span())
     return fragments, spans
 
@@ -668,7 +715,8 @@ class RulesOutcome(NamedTuple):
 
     criteria: Criteria
     consumed: list[Span]
-    unsupported: list[str]
+    unsupported: list[tuple[str, str]]
+    fallback_metro: list[tuple[str, Span]]
 
 
 def apply_rules(text: str) -> RulesOutcome:
@@ -689,6 +737,8 @@ def apply_rules(text: str) -> RulesOutcome:
     housing_type, housing_spans = extract_housing_type(text)
     only_available, available_spans = extract_only_available(text)
     unsupported, unsupported_spans = extract_unsupported(text)
+    fallback_names, fallback_spans = extract_fallback_metro(text)
+    fallback_metro = list(zip(fallback_names, fallback_spans, strict=False))
 
     criteria = Criteria(
         rooms=rooms,
@@ -725,4 +775,4 @@ def apply_rules(text: str) -> RulesOutcome:
             *unsupported_spans,
         ]
     )
-    return RulesOutcome(criteria, consumed, unsupported)
+    return RulesOutcome(criteria, consumed, unsupported, fallback_metro)
