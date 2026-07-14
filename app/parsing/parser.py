@@ -92,8 +92,15 @@ def parse(text: str) -> ParseResult:
     for unsupp_text, reason in rules_outcome.unsupported:
         warnings.append(f"«{unsupp_text}»: {reason}")
 
-    # 2. Прогоняем матчинг сущностей
-    matches, entity_warnings = match_entities(text)
+    # Очистка текста от структурных правил (заменяем пробелами, чтобы сохранить индексы)
+    # Это предотвращает попадание кусков правил в скользящее окно матчера
+    text_list = list(text)
+    for start, end in rules_outcome.consumed:
+        text_list[start:end] = [" "] * (end - start)
+    clean_text = "".join(text_list)
+
+    # 2. Прогоняем матчинг сущностей по очищенному тексту
+    matches, entity_warnings = match_entities(clean_text)
     warnings.extend(entity_warnings)
 
     # 3. Добавляем найденные сущности в Criteria
