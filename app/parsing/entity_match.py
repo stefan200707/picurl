@@ -58,6 +58,7 @@ STOP_WORDS = {
     "ищу",
     "квартиру",
     "квартиры",
+    "квартира",
     "куплю",
     "мне",
     "нужна",
@@ -67,6 +68,8 @@ STOP_WORDS = {
     "но",
     "же",
     "только",
+    "районе",
+    "округе",
 }
 
 
@@ -114,6 +117,10 @@ def match_entities(text: str) -> tuple[list[EntityMatch], list[str]]:
 
             if _is_stop_word_window(window_strings):
                 continue
+                
+            clean_window = " ".join(w for w in window_strings if w.lower() not in STOP_WORDS).lower()
+            if clean_window in ["округ", "жк", "район", "районе", "метро", "м"]:
+                continue
 
             start_idx = window_tokens[0][1]
             end_idx = window_tokens[-1][2]
@@ -122,10 +129,11 @@ def match_entities(text: str) -> tuple[list[EntityMatch], list[str]]:
 
             trigger_type, trigger_start = get_trigger_type(text_before)
             has_capital = any(w[0].isupper() for w in window_strings)
+            has_keyword = any(kw in window_text.lower() for kw in ["округ", "жк", "район", "метро", "м."])
 
-            if has_capital or trigger_type:
+            if has_capital or trigger_type or has_keyword:
                 query_norm = normalize(window_text)
-                threshold = TRIGGERED_SCORE_THRESHOLD if trigger_type else SCORE_THRESHOLD
+                threshold = TRIGGERED_SCORE_THRESHOLD if trigger_type or has_keyword else SCORE_THRESHOLD
 
                 valid_choices = choices
                 if trigger_type:

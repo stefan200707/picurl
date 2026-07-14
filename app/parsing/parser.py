@@ -34,6 +34,7 @@ STOP_WORDS = {
     "ищу",
     "квартиру",
     "квартиры",
+    "квартира",
     "куплю",
     "мне",
     "нужна",
@@ -43,6 +44,8 @@ STOP_WORDS = {
     "но",
     "же",
     "только",
+    "районе",
+    "округе",
 }
 
 
@@ -86,8 +89,8 @@ def parse(text: str) -> ParseResult:
     warnings = []
 
     # Неподдерживаемые фичи ("вторичка") -> warnings
-    for unsupp in rules_outcome.unsupported:
-        warnings.append(f"«{unsupp}»: не удалось распознать, не попало в ссылку")
+    for unsupp_text, reason in rules_outcome.unsupported:
+        warnings.append(f"«{unsupp_text}»: {reason}")
 
     # 2. Прогоняем матчинг сущностей
     matches, entity_warnings = match_entities(text)
@@ -119,6 +122,12 @@ def parse(text: str) -> ParseResult:
             criteria.districts.append(match.entity)
         elif match.type == "complex":
             criteria.complexes.append(match.entity)
+
+    # Fallback-шаблон для нераспознанных гео-маркеров (метро)
+    for fm_name, fm_span in rules_outcome.fallback_metro:
+        if not any(_is_overlap(fm_span, used) for used in consumed):
+            warnings.append(f"Станция метро \"{fm_name}\" не найдена в базе, пропущена")
+            consumed.append(fm_span)
 
     # 4. Вычисляем нераспознанные куски текста
     merged_consumed = _merge_spans(consumed)

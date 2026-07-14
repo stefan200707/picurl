@@ -118,7 +118,7 @@ def test_e2e_unsupported_warning(client):
     assert response.status_code == 200
     data = response.json()
     assert "search/two-room" in data["url"]
-    assert any("вторичка" in w and "не попало в ссылку" in w for w in data["warnings"])
+    assert any("вторичка" in w and "не поддерживается" in w for w in data["warnings"])
 
 
 def test_e2e_empty_results(client, mock_validator_client):
