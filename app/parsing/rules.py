@@ -253,8 +253,8 @@ _PRICE_ZA = re.compile(rf"\bза\s+({_NUM})\s*({_PRICE_UNIT}){_OPT_RUB}(?![\w²]
 #: Слитный суффикс: «до 15м», «за 800к» (м/m → млн, к/k → тыс, только слитно).
 _PRICE_SUFFIX = re.compile(rf"\b(до|от|за)\s+({_NUM})([мmкk]){_OPT_RUB}\b")
 #: Голое большое число: «до 15000000» (≥ 100 000 → рубли).
-_PRICE_PLAIN_MAX = re.compile(rf"\b(?:до|не\s+дороже)\s+({_NUM}){_OPT_RUB}\b")
-_PRICE_PLAIN_MIN = re.compile(rf"\b(?:от|не\s+дешевле)\s+({_NUM}){_OPT_RUB}\b")
+_PRICE_PLAIN_MAX = re.compile(rf"\b(?:до|не\s+дороже|не\s+больше|не\s+более|максимум)\s+({_NUM}){_OPT_RUB}\b")
+_PRICE_PLAIN_MIN = re.compile(rf"\b(?:от|не\s+дешевле|не\s+менее|минимум)\s+({_NUM}){_OPT_RUB}\b")
 
 #: Порог «голое число — это рубли» (иначе слишком похоже на этаж/площадь).
 _RUBLE_THRESHOLD = 100_000
