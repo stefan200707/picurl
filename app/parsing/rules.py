@@ -105,11 +105,11 @@ def _to_number(raw: str) -> float:
 # ---------------------------------------------------------------------------
 
 _ROOMS_WORD_PATTERNS: list[tuple[re.Pattern[str], Rooms]] = [
-    (re.compile(r"\bстуди\w*"), Rooms.STUDIO),
-    (re.compile(r"\bоднушк\w*|\bоднокомнатн\w*"), Rooms.ONE),
-    (re.compile(r"\bдвушк\w*|\bдвухкомнатн\w*"), Rooms.TWO),
+    (re.compile(r"(?:\bдаже\s+)?\bстуди\w*"), Rooms.STUDIO),
+    (re.compile(r"(?:\bдаже\s+)?\b(?:однушк\w*|однокомнатн\w*)"), Rooms.ONE),
+    (re.compile(r"(?:\bдаже\s+)?\b(?:двушк\w*|двухкомнатн\w*)"), Rooms.TWO),
     (
-        re.compile(r"\bтрешк\w*|\bтрехкомнатн\w*|\bчетырехкомнатн\w*|\bмногокомнатн\w*"),
+        re.compile(r"(?:\bдаже\s+)?\b(?:трешк\w*|трехкомнатн\w*|четырехкомнатн\w*|многокомнатн\w*)"),
         Rooms.THREE_PLUS,
     ),
 ]
@@ -131,7 +131,7 @@ _ROOMS_NUM = re.compile(
 )
 
 #: Голый чип «3+» (без слова «комнат»).
-_ROOMS_PLUS = re.compile(r"\b(\d)\s*\+(?!\s*\d)")
+_ROOMS_PLUS = re.compile(r"(?:\bдаже\s+)?\b(\d)\s*\+(?!\s*\d)")
 
 
 def _digit_rooms(digit: int) -> Rooms | None:
