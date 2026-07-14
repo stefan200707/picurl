@@ -33,6 +33,11 @@
     "name": "Бутырская"
   },
   {
+    "name": "Варшавская",
+    "slug": "m-varshavskaya",
+    "id": "guid-varshavskaya"
+  },
+  {
     "name": "Владыкино"
   },
   {
@@ -40,6 +45,11 @@
   },
   {
     "name": "Волгоградский проспект"
+  },
+  {
+    "name": "Генерала Тюленева",
+    "slug": "m-generala-tyuleneva",
+    "id": "guid-generala-tyuleneva"
   },
   {
     "name": "Грачёвская"
@@ -80,6 +90,11 @@
   },
   {
     "name": "Нагатинская"
+  },
+  {
+    "name": "Новаторская",
+    "slug": "m-novatorskaya",
+    "id": "guid-novatorskaya"
   },
   {
     "name": "Обводный канал"
@@ -137,6 +152,16 @@
   },
   {
     "name": "Текстильщики"
+  },
+  {
+    "name": "Тютчевская",
+    "slug": "m-tyutchevskaya",
+    "id": "guid-tyutchevskaya"
+  },
+  {
+    "name": "Университет Дружбы Народов",
+    "slug": "m-udn",
+    "id": "guid-udn"
   },
   {
     "name": "Черкизовская"
