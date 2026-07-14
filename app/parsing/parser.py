@@ -126,7 +126,7 @@ def parse(text: str) -> ParseResult:
     # Fallback-шаблон для нераспознанных гео-маркеров (метро)
     for fm_name, fm_span in rules_outcome.fallback_metro:
         if not any(_is_overlap(fm_span, used) for used in consumed):
-            warnings.append(f"Станция метро \"{fm_name}\" не найдена в базе, пропущена")
+            warnings.append(f'Станция метро "{fm_name}" не найдена в базе, пропущена')
             consumed.append(fm_span)
 
     # 4. Вычисляем нераспознанные куски текста

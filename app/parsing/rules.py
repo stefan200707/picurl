@@ -140,6 +140,7 @@ def _plus_rooms(digit: int) -> list[Rooms]:
 
 _ROOMS_WORD_RANGES = re.compile(r"\bот\s+(одн\w+|двух|трех|четырех|пяти)\s+комнат\w*")
 
+
 def _word_to_digit(word: str) -> int:
     if word.startswith("одн"):
         return 1
@@ -150,6 +151,7 @@ def _word_to_digit(word: str) -> int:
     if word in ("четырех", "пяти"):
         return 4
     return 1
+
 
 def extract_rooms(text: str) -> tuple[list[Rooms], list[Span]]:
     """Извлечь комнатность: список чипов (без дубликатов, в порядке упоминания)."""
@@ -678,6 +680,7 @@ _UNSUPPORTED = re.compile(
     r"|\bтепл\w+\s+пол\w*|\b(?:два|несколько)\s+(?:и\s+более\s+)?санузл\w*"
 )
 
+
 def extract_unsupported(text: str) -> tuple[list[tuple[str, str]], list[Span]]:
     """Найти неподдерживаемые пожелания («вторичка»): фрагменты для warnings."""
     norm = _normalize(text)
@@ -688,7 +691,9 @@ def extract_unsupported(text: str) -> tuple[list[tuple[str, str]], list[Span]]:
         spans.append(match.span())
     return fragments, spans
 
+
 _FALLBACK_METRO = re.compile(r"(?i)\bу\s+метро\s+([а-яА-ЯёЁ-]+)")
+
 
 def extract_fallback_metro(text: str) -> tuple[list[str], list[Span]]:
     """Извлечь гео-маркеры, которые могли не попасть в словарь."""
