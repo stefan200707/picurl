@@ -103,6 +103,80 @@ def _is_stop_word_window(tokens: list[str]) -> bool:
     return all(t.lower() in STOP_WORDS for t in tokens)
 
 
+def _adjust_score(
+    score: float, etype: str, window_text: str, text_before: str, entry: RefEntry
+) -> float:
+    before_tokens = re.findall(r"[A-Za-zА-Яа-яЁё0-9]+(?:-[A-Za-zА-Яа-яЁё0-9]+)*", text_before)
+    before_tokens = [t.lower() for t in before_tokens]
+    window_tokens = re.findall(r"[A-Za-zА-Яа-яЁё0-9]+(?:-[A-Za-zА-Яа-яЁё0-9]+)*", window_text)
+    window_tokens = [t.lower() for t in window_tokens]
+
+    last_3_before = before_tokens[-3:] if before_tokens else []
+    entry_names = [entry.name.lower()] + [a.lower() for a in entry.aliases]
+
+    def _is_marker_context(markers: list[str]) -> bool:
+        for m in markers:
+            if m in last_3_before:
+                return True
+            if m in window_tokens:
+                m_in_name = any(re.search(rf"\b{re.escape(m)}\b", name) for name in entry_names)
+                if not m_in_name:
+                    return True
+        return False
+
+    has_jk = _is_marker_context(["жк", "жилой комплекс"])
+    has_district = _is_marker_context(["район", "районе"])
+    has_county = _is_marker_context(["округ", "округе"])
+    has_metro = _is_marker_context(["м", "метро"]) or "м." in last_3_before
+
+    new_score = score
+    if has_jk and etype == "complex":
+        new_score += 10.0
+    if has_district and etype == "district":
+        new_score += 10.0
+    if has_county and etype == "county":
+        new_score += 10.0
+    if has_metro and etype == "metro":
+        new_score += 10.0
+
+    last_word_before = before_tokens[-1] if before_tokens else ""
+    first_word_window = window_tokens[0] if window_tokens else ""
+
+    prep_na = (last_word_before == "на") or (first_word_window == "на")
+    prep_v = (last_word_before == "в") or (first_word_window == "в")
+
+    if prep_na:
+        # Only apply preposition bonus if the first word of the window is part of the entity name
+        # (or if the window starts with the preposition itself)
+        first_in_name = first_word_window == "на" or any(
+            first_word_window in name for name in entry_names
+        )
+        if first_in_name:
+            if etype in ("county", "district"):
+                new_score += 5.0
+            elif etype == "complex":
+                new_score -= 5.0
+
+    if prep_v:
+        first_in_name = first_word_window == "в" or any(
+            first_word_window in name for name in entry_names
+        )
+        if first_in_name and etype == "complex":
+            new_score += 5.0
+
+    hierarchy = {
+        "county": 0.5,
+        "district": 0.4,
+        "metro": 0.3,
+        "complex": 0.2,
+        "options": 0.1,
+        "option_groups": 0.0,
+    }
+    new_score += hierarchy.get(etype, 0.0)
+
+    return new_score
+
+
 def match_entities(text: str) -> tuple[list[EntityMatch], list[str]]:
     choices = build_choices()
 
@@ -179,7 +253,19 @@ def match_entities(text: str) -> tuple[list[EntityMatch], list[str]]:
                     for score, etype, entry in matched_entities_info:
                         if (etype, entry.name) not in seen:
                             seen.add((etype, entry.name))
-                            unique_entities.append((score, etype, entry))
+                            adj_score = _adjust_score(score, etype, window_text, text_before, entry)
+                            unique_entities.append((adj_score, score, etype, entry))
+
+                    if not unique_entities:
+                        continue
+
+                    unique_entities.sort(key=lambda x: x[0], reverse=True)
+                    best_adj_score = unique_entities[0][0]
+
+                    # Map back to original structure for candidates
+                    final_unique = [
+                        (orig_score, etyp, ent) for adj, orig_score, etyp, ent in unique_entities
+                    ]
 
                     actual_start_idx = start_idx
                     if trigger_type and trigger_start is not None:
@@ -189,8 +275,8 @@ def match_entities(text: str) -> tuple[list[EntityMatch], list[str]]:
                         {
                             "span": (actual_start_idx, end_idx),
                             "text": window_text,
-                            "matches": unique_entities,
-                            "best_score": best_score,
+                            "matches": final_unique,
+                            "best_score": best_adj_score,
                             "window_size": n,
                         }
                     )
