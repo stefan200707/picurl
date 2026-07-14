@@ -6,10 +6,25 @@
 ответа даёт ``Criteria.to_public_dict()``).
 """
 
-from typing import Any
+from contextlib import asynccontextmanager
+from typing import Annotated, Any
 
-from fastapi import APIRouter, FastAPI, HTTPException, status
+import httpx
+from fastapi import APIRouter, Depends, FastAPI, HTTPException, Request, status
 from pydantic import BaseModel, Field
+
+from app.parsing.parser import parse
+from app.pik.url_builder import build_url as pik_build_url
+from app.pik.validator import validate
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Жизненный цикл приложения: инициализация и закрытие httpx-клиента."""
+    app.state.http_client = httpx.AsyncClient()
+    yield
+    await app.state.http_client.aclose()
+
 
 app = FastAPI(
     title="picurl — pik.ru URL builder",
@@ -22,7 +37,13 @@ app = FastAPI(
         "`text` и нажмите **Execute** — в ответе придёт JSON со ссылкой."
     ),
     version="0.1.0",
+    lifespan=lifespan,
 )
+
+
+def get_http_client(request: Request) -> httpx.AsyncClient:
+    """Dependency для получения http-клиента из state."""
+    return request.app.state.http_client
 
 
 class BuildUrlRequest(BaseModel):
@@ -85,12 +106,48 @@ def health() -> HealthResponse:
 router = APIRouter(tags=["build-url"])
 
 
-@router.post("/build-url")
-def build_url(request: BuildUrlRequest) -> BuildUrlResponse:
-    """Построить ссылку на pik.ru по свободному тексту (пока заглушка)."""
-    raise HTTPException(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        detail="Парсинг и построение URL ещё не реализованы (см. prompts/06–09).",
+@router.post(
+    "/build-url",
+    summary="Сгенерировать ссылку на pik.ru",
+    description=(
+        "Принимает текст на естественном языке, распознаёт параметры и формирует ссылку на pik.ru."
+    ),
+)
+async def build_url(
+    request: BuildUrlRequest,
+    client: Annotated[httpx.AsyncClient, Depends(get_http_client)],
+) -> BuildUrlResponse:
+    """Построить ссылку на pik.ru по свободному тексту."""
+    text = request.text.strip()
+    if not text:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Текст запроса не может быть пустым.",
+        )
+
+    # 1. Парсинг
+    parse_result = parse(text)
+    criteria = parse_result.criteria
+    warnings = parse_result.warnings.copy()
+
+    # 2. Построение URL
+    url = pik_build_url(criteria)
+
+    # 3. Валидация выдачи
+    validation = await validate(criteria, client)
+
+    # Обработка пустой выдачи
+    if validation.result_count == 0:
+        warnings.append("под критерии ничего не найдено")
+
+    if validation.warning:
+        warnings.append(validation.warning)
+
+    return BuildUrlResponse(
+        url=url,
+        criteria=criteria.to_public_dict(),
+        result_count=validation.result_count,
+        warnings=warnings,
     )
 
 

@@ -63,7 +63,7 @@ def build_url(criteria: Criteria) -> str:
         if len(criteria.counties) == 1 and criteria.counties[0].slug:
             path_segments.append(criteria.counties[0].slug)
         elif len(criteria.metro) == 1 and criteria.metro[0].slug:
-            path_segments.append(f"m-{criteria.metro[0].slug}")
+            path_segments.append(criteria.metro[0].slug)
         elif len(criteria.districts) == 1 and criteria.districts[0].id:
             query_params["districtLocations"] = criteria.districts[0].id
         elif len(criteria.complexes) == 1 and criteria.complexes[0].id:
