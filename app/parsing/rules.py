@@ -569,6 +569,7 @@ class FloorFacts(NamedTuple):
 _FLOOR_RANGE_A = re.compile(r"\bс\s+(\d+)\s+(?:по|до)\s+(\d+)\s*(?:-?го)?\s*этаж\w*")
 _FLOOR_RANGE_B = re.compile(r"\bэтаж\w*\s*[—:\-]?\s*с\s+(\d+)\s+(?:по|до)\s+(\d+)")
 _FLOOR_RANGE_C = re.compile(r"\b(\d+)\s*[-–—]\s*(\d+)\s+этаж\w*")
+_FLOOR_RANGE_D = re.compile(r"\bэтаж\w*\s*[—:\-]?\s*(\d+)\s*[-–—]\s*(\d+)")
 _FLOOR_MIN = re.compile(r"\b(?:не\s+ниже|от|начиная\s+с|с)\s+(\d+)(?:-?го)?\s+этаж\w*")
 _FLOOR_MAX = re.compile(r"\b(?:не\s+выше|до)\s+(\d+)(?:-?го)?\s+этаж\w*")
 _FLOOR_NOT_FIRST = re.compile(r"\b(?:не\s+(?:на\s+)?|кроме\s+|выше\s+)перв\w+(?:\s+этаж\w*)?")
@@ -590,7 +591,7 @@ def extract_floor(text: str) -> tuple[FloorFacts, list[Span]]:
 
     not_last = False
 
-    for pattern in (_FLOOR_RANGE_A, _FLOOR_RANGE_B, _FLOOR_RANGE_C):
+    for pattern in (_FLOOR_RANGE_A, _FLOOR_RANGE_B, _FLOOR_RANGE_C, _FLOOR_RANGE_D):
         for match in _iter_free(pattern, norm, spans):
             if floor_min is None:
                 floor_min = int(match.group(1))
@@ -643,7 +644,7 @@ _FINISH_TRUE = re.compile(
 def extract_finish(text: str) -> tuple[bool | None, list[Span]]:
     """Извлечь отделку: «с отделкой» → True, «без отделки»/«черновая» → False.
 
-    При противоречивых упоминаниях побеждает первое по тексту; все найденные
+    При противоречивых упоминаниях побеждает последнее по тексту; все найденные
     диапазоны при этом считаются «съеденными».
     """
     norm = _normalize(text)
@@ -655,7 +656,7 @@ def extract_finish(text: str) -> tuple[bool | None, list[Span]]:
     if not candidates:
         return None, []
     candidates.sort(key=lambda item: item[0])
-    return candidates[0][1], sorted(span for _, _, span in candidates)
+    return candidates[-1][1], sorted(span for _, _, span in candidates)
 
 
 _READY = re.compile(
@@ -669,6 +670,24 @@ def extract_ready(text: str) -> tuple[bool | None, list[Span]]:
     norm = _normalize(text)
     spans = [match.span() for match in _READY.finditer(norm)]
     return (True, spans) if spans else (None, [])
+
+
+# ---------------------------------------------------------------------------
+# Год заселения
+# ---------------------------------------------------------------------------
+
+from datetime import datetime
+
+_SETTLEMENT_THIS_YEAR = re.compile(r"\b(?:заселение|сдача|въезд)\s+в\s+этом\s+году\b")
+
+def extract_settlement_year(text: str) -> tuple[int | None, int | None, list[Span]]:
+    """Извлечь сроки заселения (например 'в этом году')."""
+    norm = _normalize(text)
+    spans = [match.span() for match in _SETTLEMENT_THIS_YEAR.finditer(norm)]
+    if spans:
+        current_year = datetime.now().year
+        return current_year, current_year, spans
+    return None, None, []
 
 
 # ---------------------------------------------------------------------------
@@ -808,6 +827,7 @@ def apply_rules(text: str) -> RulesOutcome:
     floor, floor_spans = extract_floor(text)
     finish, finish_spans = extract_finish(text)
     ready, ready_spans = extract_ready(text)
+    settle_year_from, settle_year_to, settle_spans = extract_settlement_year(text)
     sort, sort_spans = extract_sort(text)
     housing_type, housing_spans = extract_housing_type(text)
     only_available, available_spans = extract_only_available(text)
@@ -832,6 +852,8 @@ def apply_rules(text: str) -> RulesOutcome:
         not_last_floor=floor.not_last_floor,
         finish=finish,
         ready=ready,
+        settlement_year_from=settle_year_from,
+        settlement_year_to=settle_year_to,
         sort=sort,
         housing_type=housing_type,
         only_available=only_available,
@@ -845,6 +867,7 @@ def apply_rules(text: str) -> RulesOutcome:
             *floor_spans,
             *finish_spans,
             *ready_spans,
+            *settle_spans,
             *sort_spans,
             *housing_spans,
             *available_spans,

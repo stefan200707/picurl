@@ -340,9 +340,9 @@ def test_extract_finish(text: str, expected: bool | None) -> None:
     assert bool(spans) == (expected is not None)
 
 
-def test_extract_finish_conflict_first_mention_wins() -> None:
+def test_extract_finish_conflict_last_mention_wins() -> None:
     finish, spans = extract_finish("без отделки, ну или с отделкой")
-    assert finish is False
+    assert finish is True
     assert len(spans) == 2  # оба упоминания «съедены»
 
 
