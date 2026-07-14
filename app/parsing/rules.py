@@ -43,6 +43,12 @@ import re
 from collections.abc import Iterable, Iterator
 from typing import NamedTuple
 
+from yargy import Parser, or_, rule
+from yargy.interpretation import fact
+from yargy.pipelines import morph_pipeline
+from yargy.predicates import dictionary
+from yargy.predicates import type as yargy_type
+
 from app.parsing.schema import Criteria, HousingType, Rooms, Sort
 
 #: Полуинтервал [start, end) индексов исходного текста, «съеденный» правилом.
@@ -451,14 +457,56 @@ class TimeFacts(NamedTuple):
     time_on_transport: int | None = None
 
 
-_TIME_ON_FOOT = re.compile(
-    r"\b(?:до|не\s+более|менее)\s+(\d+)\s*(?:мин\w*)?\s*до\s*метро\b|"
-    r"\bдо\s+метро\s+(?:до|не\s+более|менее)\s+(\d+)\s*(?:мин\w*)?\b"
-)
-_TIME_ON_TRANSPORT = re.compile(
-    r"\b(?:до|не\s+более|менее)\s+(\d+)\s*(?:мин\w*)?\s*(?:на\s+транспорте|транспортом)\b|"
-    r"\bдо\s+метро\s+(?:до|не\s+более|менее)\s+(\d+)\s*(?:мин\w*)?\s*(?:на\s+транспорте|транспортом)\b"
-)
+_TimeFact = fact("TimeFact", ["time"])
+
+_PREP = dictionary({"в", "до", "от", "за", "не более", "менее", "на"})
+_NUMBER_TOKEN = yargy_type("INT").interpretation(_TimeFact.time.custom(int))
+_MINUTES = morph_pipeline(["минута", "мин", "минут"])
+_METRO = morph_pipeline(["метро", "станция"])
+_TRANSPORT = morph_pipeline(["транспорт", "машина", "авто", "автомобиль", "транспортом"])
+_FOOT = morph_pipeline(["пешком", "шаг"])
+
+_TIME_ON_TRANSPORT_RULE = rule(
+    or_(
+        rule(
+            _PREP.optional(),
+            _NUMBER_TOKEN,
+            _MINUTES.optional(),
+            _PREP.optional(),
+            _METRO.optional(),
+            _PREP.optional(),
+            _TRANSPORT,
+        ),
+        rule(
+            _PREP.optional(),
+            _METRO,
+            _PREP.optional(),
+            _NUMBER_TOKEN,
+            _MINUTES.optional(),
+            _PREP.optional(),
+            _TRANSPORT,
+        ),
+    )
+).interpretation(_TimeFact)
+
+_TIME_ON_FOOT_RULE = rule(
+    or_(
+        rule(_PREP.optional(), _NUMBER_TOKEN, _MINUTES.optional(), _PREP.optional(), _METRO),
+        rule(
+            _PREP.optional(),
+            _METRO,
+            _PREP.optional(),
+            _NUMBER_TOKEN,
+            _MINUTES.optional(),
+            _FOOT.optional(),
+        ),
+        rule(_PREP.optional(), _NUMBER_TOKEN, _MINUTES, _FOOT),
+        rule(_PREP.optional(), _NUMBER_TOKEN, _MINUTES.optional(), _FOOT),
+    )
+).interpretation(_TimeFact)
+
+_parser_time_foot = Parser(_TIME_ON_FOOT_RULE)
+_parser_time_transport = Parser(_TIME_ON_TRANSPORT_RULE)
 
 
 def extract_time_to_metro(text: str) -> tuple[TimeFacts, list[Span]]:
@@ -468,15 +516,21 @@ def extract_time_to_metro(text: str) -> tuple[TimeFacts, list[Span]]:
     time_on_foot: int | None = None
     time_on_transport: int | None = None
 
-    for match in _iter_free(_TIME_ON_FOOT, norm, spans):
-        if time_on_foot is None:
-            time_on_foot = int(match.group(1) or match.group(2))
-            spans.append(match.span())
+    # Транспорт
+    for match in _parser_time_transport.findall(norm):
+        match_span = (match.span.start, match.span.stop)
+        if not _overlaps(match_span, spans):
+            if time_on_transport is None:
+                time_on_transport = match.fact.time
+            spans.append(match_span)
 
-    for match in _iter_free(_TIME_ON_TRANSPORT, norm, spans):
-        if time_on_transport is None:
-            time_on_transport = int(match.group(1) or match.group(2))
-            spans.append(match.span())
+    # Пешком
+    for match in _parser_time_foot.findall(norm):
+        match_span = (match.span.start, match.span.stop)
+        if not _overlaps(match_span, spans):
+            if time_on_foot is None:
+                time_on_foot = match.fact.time
+            spans.append(match_span)
 
     return TimeFacts(time_on_foot, time_on_transport), sorted(spans)
 
