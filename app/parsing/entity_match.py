@@ -200,26 +200,30 @@ def match_entities(text: str) -> tuple[list[EntityMatch], list[str]]:
             if clean_window in ["округ", "жк", "район", "районе", "метро", "м"]:
                 continue
 
+            # Отсекаем окна, которые начинаются или заканчиваются на висячий союз/предлог
+            # (если они часть устойчивого названия, они останутся внутри окна)
+            if window_strings[0].lower() in STOP_WORDS or window_strings[-1].lower() in STOP_WORDS:
+                continue
+
             start_idx = window_tokens[0][1]
             end_idx = window_tokens[-1][2]
-            window_text = text[start_idx:end_idx]
+            
+            # Формируем текст окна из очищенных токенов, чтобы знаки препинания не прилипали
+            window_text = " ".join(window_strings)
             text_before = text[:start_idx]
 
             trigger_type, trigger_start = get_trigger_type(text_before)
             has_capital = any(w[0].isupper() for w in window_strings)
-            kw_list = [
-                "округ",
-                "жк",
-                "район",
-                "метро",
-                "м.",
-                "вид",
-                "сануз",
-                "пол",
-                "балкон",
-                "лоджи",
-            ]
-            has_keyword = any(kw in window_text.lower() for kw in kw_list)
+            
+            kw_exact = {"округ", "жк", "район", "метро", "м"}
+            kw_partial = ["вид", "сануз", "пол", "балкон", "лоджи"]
+            window_lower = window_text.lower()
+            window_words_lower = [w.lower() for w in window_strings]
+            
+            has_keyword = (
+                any(kw in window_words_lower for kw in kw_exact) or
+                any(kw in window_lower for kw in kw_partial)
+            )
 
             if has_capital or trigger_type or has_keyword:
                 query_norm = normalize(window_text)
