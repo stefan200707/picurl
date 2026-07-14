@@ -11,6 +11,7 @@ from app.parsing.rules import (
     AreaFacts,
     FloorFacts,
     PriceFacts,
+    TimeFacts,
     apply_rules,
     extract_area,
     extract_finish,
@@ -21,6 +22,7 @@ from app.parsing.rules import (
     extract_ready,
     extract_rooms,
     extract_sort,
+    extract_time_to_metro,
     extract_unsupported,
 )
 from app.parsing.schema import HousingType, Rooms, Sort
@@ -217,6 +219,33 @@ def test_extract_area_kitchen_not_confused_with_total() -> None:
     """«кухня от 8» не должна стать общей площадью, и наоборот."""
     area, _ = extract_area("площадь от 40, кухня от 8")
     assert area == AreaFacts(area_min=40, area_kitchen_min=8)
+
+
+# ---------------------------------------------------------------------------
+# Время до метро
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("до 15 мин до метро", TimeFacts(time_on_foot=15)),
+        ("до метро 10 минут", TimeFacts(time_on_foot=10)),
+        ("в 15 минутах от метро", TimeFacts(time_on_foot=15)),
+        ("в 5 мин от метро", TimeFacts(time_on_foot=5)),
+        ("менее 20 минут пешком от метро", TimeFacts(time_on_foot=20)),
+        ("до 15 мин на транспорте", TimeFacts(time_on_transport=15)),
+        ("до метро до 15 мин на транспорте", TimeFacts(time_on_transport=15)),
+        ("за 10 минут транспортом до метро", TimeFacts(time_on_transport=10)),
+        ("у метро", TimeFacts()),
+        ("", TimeFacts()),
+    ],
+)
+def test_extract_time_to_metro(text: str, expected: TimeFacts) -> None:
+    time, spans = extract_time_to_metro(text)
+    assert time == expected
+    has_value = any(value is not None for value in expected)
+    assert bool(spans) == has_value
 
 
 # ---------------------------------------------------------------------------
