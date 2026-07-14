@@ -229,7 +229,7 @@ class PriceFacts(NamedTuple):
 
 
 _PRICE_UNIT = r"млн\.?|миллион\w*|тыс\w*|руб\w*|р\.|₽"
-_OPT_RUB = r"(?:\s+(?:рублей|руб\w*|р\.|₽))?"
+_OPT_RUB = r"(?:\s+(?:рублей|руб\w*|р\.|₽))?"  # опциональный суффикс рублей
 
 #: «10-15 млн», «от 10 до 15 млн»; без единицы — только большие числа (рубли).
 _PRICE_RANGE = re.compile(
@@ -278,11 +278,11 @@ def extract_price(text: str) -> tuple[PriceFacts, list[Span]]:
 
     def _update_min(value: int) -> None:
         nonlocal price_min
-        price_min = value if price_min is None else min(price_min, value)
+        price_min = min(price_min, value) if price_min is not None else value
 
     def _update_max(value: int) -> None:
         nonlocal price_max
-        price_max = value if price_max is None else max(price_max, value)
+        price_max = max(price_max, value) if price_max is not None else value
 
     for match in _iter_free(_PRICE_RANGE, norm, spans):
         low, high = _to_number(match.group(1)), _to_number(match.group(2))
