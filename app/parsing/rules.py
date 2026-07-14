@@ -114,11 +114,19 @@ _ROOMS_WORD_PATTERNS: list[tuple[re.Pattern[str], Rooms]] = [
     ),
 ]
 
-#: «2к», «1-комнатную», «2-х комнатная», «1-2 комнатные», «1, 2 и 3 комнатные».
+#: Отрицания комнатности, например "кроме студии" или "точно не двушку"
+_ROOMS_NEGATION = re.compile(
+    r"\b(?:не|кроме|без|точно\s+не)\s+"
+    r"(?:студи\w*|однушк\w*|однокомнатн\w*|двушк\w*|двухкомнатн\w*|трешк\w*|трехкомнатн\w*|четырехкомнатн\w*|многокомнатн\w*"
+    r"|\d\s*[-–—]?\s*(?:комнат\w*|комн\.|к\b))"
+)
+
+#: «2к», «1-комнатную», «2-х комнатная», «1-2 комнатные», «1, 2 и 3 комнатные», «даже 4-комнатную».
 _ROOMS_NUM = re.compile(
-    r"\b(\d(?:\s*[-–—,/]\s*\d|\s+и(?:ли)?\s+\d)*)"  # 1: цифра или перечисление цифр
-    r"(?:\s*\+)?"  # хвостовой «+» («3+ комнаты»)
-    r"(?:\s*[-–—]?\s*х)?"  # «2-х», «3х»
+    r"(?:\bдаже\s+)?"  # учитываем слово «даже» (из задания 2)
+    r"\b(\d(?:\s*[-–—,/]\s*\d|\s+и(?:ли)?\s+\d)*)"
+    r"(?:\s*\+)?"
+    r"(?:\s*[-–—]?\s*х)?"
     r"\s*[-–—]?\s*"
     r"(?:комнат\w*|комн\.|к\b)"
 )
@@ -166,8 +174,11 @@ def extract_rooms(text: str) -> tuple[list[Rooms], list[Span]]:
     spans: list[Span] = []
     order = 0
 
+    for match in _ROOMS_NEGATION.finditer(norm):
+        spans.append(match.span())
+
     for pattern, room in _ROOMS_WORD_PATTERNS:
-        for match in pattern.finditer(norm):
+        for match in _iter_free(pattern, norm, spans):
             found.append((match.start(), order, room))
             spans.append(match.span())
             order += 1
@@ -219,28 +230,31 @@ class PriceFacts(NamedTuple):
 
 
 _PRICE_UNIT = r"млн\.?|миллион\w*|тыс\w*|руб\w*|р\.|₽"
+_OPT_RUB = r"(?:\s+(?:рублей|руб\w*|р\.|₽))?"  # опциональный суффикс рублей
 
 #: «10-15 млн», «от 10 до 15 млн»; без единицы — только большие числа (рубли).
 _PRICE_RANGE = re.compile(
-    rf"\b(?:от\s+)?({_NUM})\s*(?:[-–—]|до)\s*({_NUM})\s*({_PRICE_UNIT})?(?![\w²])"
+    rf"\b(?:от\s+)?({_NUM})\s*(?:[-–—]|до)\s*({_NUM})\s*({_PRICE_UNIT})?{_OPT_RUB}(?![\w²])"
 )
 #: «бюджет 15м», «цена до 15 млн», «бюджет 15» (число <1000 → миллионы).
 _PRICE_BUDGET = re.compile(
     rf"\b(?:бюджет\w*|цена|стоимость\w*)\s*[—:\-]?\s*(до|от)?\s*({_NUM})\s*"
-    rf"({_PRICE_UNIT}|м|m|к|k)?(?![\w²])"
+    rf"({_PRICE_UNIT}|м|m|к|k)?{_OPT_RUB}(?![\w²])"
 )
-_PRICE_MIN = re.compile(rf"\b(?:от|не\s+дешевле|минимум)\s+({_NUM})\s*({_PRICE_UNIT})(?![\w²])")
+_PRICE_MIN = re.compile(
+    rf"\b(?:от|не\s+дешевле|минимум)\s+({_NUM})\s*({_PRICE_UNIT}){_OPT_RUB}(?![\w²])"
+)
 _PRICE_MAX = re.compile(
     rf"\b(?:до|не\s+дороже|не\s+больше|максимум|в\s+пределах)\s+({_NUM})\s*"
-    rf"({_PRICE_UNIT})(?![\w²])"
+    rf"({_PRICE_UNIT}){_OPT_RUB}(?![\w²])"
 )
 #: «за 15 миллионов», «за 15 млн» — трактуем как верхнюю границу.
-_PRICE_ZA = re.compile(rf"\bза\s+({_NUM})\s*(млн\.?|миллион\w*|тыс\w*)(?![\w²])")
+_PRICE_ZA = re.compile(rf"\bза\s+({_NUM})\s*({_PRICE_UNIT}){_OPT_RUB}(?![\w²])")
 #: Слитный суффикс: «до 15м», «за 800к» (м/m → млн, к/k → тыс, только слитно).
-_PRICE_SUFFIX = re.compile(rf"\b(до|от|за)\s+({_NUM})([мmкk])\b")
+_PRICE_SUFFIX = re.compile(rf"\b(до|от|за)\s+({_NUM})([мmкk]){_OPT_RUB}\b")
 #: Голое большое число: «до 15000000» (≥ 100 000 → рубли).
-_PRICE_PLAIN_MAX = re.compile(rf"\b(?:до|не\s+дороже)\s+({_NUM})\b")
-_PRICE_PLAIN_MIN = re.compile(rf"\b(?:от|не\s+дешевле)\s+({_NUM})\b")
+_PRICE_PLAIN_MAX = re.compile(rf"\b(?:до|не\s+дороже)\s+({_NUM}){_OPT_RUB}\b")
+_PRICE_PLAIN_MIN = re.compile(rf"\b(?:от|не\s+дешевле)\s+({_NUM}){_OPT_RUB}\b")
 
 #: Порог «голое число — это рубли» (иначе слишком похоже на этаж/площадь).
 _RUBLE_THRESHOLD = 100_000
@@ -263,6 +277,14 @@ def extract_price(text: str) -> tuple[PriceFacts, list[Span]]:
     price_min: int | None = None
     price_max: int | None = None
 
+    def _update_min(value: int) -> None:
+        nonlocal price_min
+        price_min = min(price_min, value) if price_min is not None else value
+
+    def _update_max(value: int) -> None:
+        nonlocal price_max
+        price_max = max(price_max, value) if price_max is not None else value
+
     for match in _iter_free(_PRICE_RANGE, norm, spans):
         low, high = _to_number(match.group(1)), _to_number(match.group(2))
         unit = match.group(3)
@@ -272,10 +294,8 @@ def extract_price(text: str) -> tuple[PriceFacts, list[Span]]:
             mult = 1
         else:
             mult = _price_multiplier(unit)
-        if price_min is None:
-            price_min = round(low * mult)
-        if price_max is None:
-            price_max = round(high * mult)
+        _update_min(round(low * mult))
+        _update_max(round(high * mult))
         spans.append(match.span())
 
     for match in _iter_free(_PRICE_BUDGET, norm, spans):
@@ -295,27 +315,23 @@ def extract_price(text: str) -> tuple[PriceFacts, list[Span]]:
             mult = _price_multiplier(unit)
         rubles = round(value * mult)
         if match.group(1) == "от":
-            if price_min is None:
-                price_min = rubles
-                spans.append(match.span())
-        elif price_max is None:
-            price_max = rubles
+            _update_min(rubles)
+            spans.append(match.span())
+        else:
+            _update_max(rubles)
             spans.append(match.span())
 
     for match in _iter_free(_PRICE_MIN, norm, spans):
-        if price_min is None:
-            price_min = round(_to_number(match.group(1)) * _price_multiplier(match.group(2)))
-            spans.append(match.span())
+        _update_min(round(_to_number(match.group(1)) * _price_multiplier(match.group(2))))
+        spans.append(match.span())
 
     for match in _iter_free(_PRICE_MAX, norm, spans):
-        if price_max is None:
-            price_max = round(_to_number(match.group(1)) * _price_multiplier(match.group(2)))
-            spans.append(match.span())
+        _update_max(round(_to_number(match.group(1)) * _price_multiplier(match.group(2))))
+        spans.append(match.span())
 
     for match in _iter_free(_PRICE_ZA, norm, spans):
-        if price_max is None:
-            price_max = round(_to_number(match.group(1)) * _price_multiplier(match.group(2)))
-            spans.append(match.span())
+        _update_max(round(_to_number(match.group(1)) * _price_multiplier(match.group(2))))
+        spans.append(match.span())
 
     for match in _iter_free(_PRICE_SUFFIX, norm, spans):
         value = _to_number(match.group(2))
@@ -324,11 +340,10 @@ def extract_price(text: str) -> tuple[PriceFacts, list[Span]]:
             continue
         rubles = round(value * _price_multiplier(unit))
         if match.group(1) == "от":
-            if price_min is None:
-                price_min = rubles
-                spans.append(match.span())
-        elif price_max is None:
-            price_max = rubles
+            _update_min(rubles)
+            spans.append(match.span())
+        else:
+            _update_max(rubles)
             spans.append(match.span())
 
     for pattern, is_min in ((_PRICE_PLAIN_MIN, True), (_PRICE_PLAIN_MAX, False)):
@@ -336,11 +351,11 @@ def extract_price(text: str) -> tuple[PriceFacts, list[Span]]:
             value = _to_number(match.group(1))
             if value < _RUBLE_THRESHOLD:
                 continue
-            if is_min and price_min is None:
-                price_min = round(value)
+            if is_min:
+                _update_min(round(value))
                 spans.append(match.span())
-            elif not is_min and price_max is None:
-                price_max = round(value)
+            else:
+                _update_max(round(value))
                 spans.append(match.span())
 
     return PriceFacts(price_min, price_max), sorted(spans)
@@ -548,6 +563,7 @@ class FloorFacts(NamedTuple):
     floor_max: int | None = None
     not_first_floor: bool = False
     last_floor: bool = False
+    not_last_floor: bool = False
 
 
 _FLOOR_RANGE_A = re.compile(r"\bс\s+(\d+)\s+(?:по|до)\s+(\d+)\s*(?:-?го)?\s*этаж\w*")
@@ -557,6 +573,7 @@ _FLOOR_MIN = re.compile(r"\b(?:не\s+ниже|от|начиная\s+с|с)\s+(\
 _FLOOR_MAX = re.compile(r"\b(?:не\s+выше|до)\s+(\d+)(?:-?го)?\s+этаж\w*")
 _FLOOR_NOT_FIRST = re.compile(r"\b(?:не\s+(?:на\s+)?|кроме\s+|выше\s+)перв\w+(?:\s+этаж\w*)?")
 _FLOOR_HIGH = re.compile(r"\bвысок\w+\s+этаж\w*|\bэтаж\w*\s+повыше|\bповыше\s+этаж\w*")
+_FLOOR_NOT_LAST = re.compile(r"\b(?:не\s+|кроме\s+)(?:на\s+)?последн\w+(?:\s+этаж\w*)?")
 _FLOOR_LAST = re.compile(r"\b(?:на\s+)?последн\w+(?:\s+этаж\w*)?")
 #: Отрицание перед «последний …» — «не последний этаж» не должен дать last_floor.
 _NEGATION_BEFORE = re.compile(r"(?:\bне|\bбез|\bтолько\s+не)\s+$")
@@ -570,6 +587,8 @@ def extract_floor(text: str) -> tuple[FloorFacts, list[Span]]:
     floor_max: int | None = None
     not_first = False
     last = False
+
+    not_last = False
 
     for pattern in (_FLOOR_RANGE_A, _FLOOR_RANGE_B, _FLOOR_RANGE_C):
         for match in _iter_free(pattern, norm, spans):
@@ -597,13 +616,17 @@ def extract_floor(text: str) -> tuple[FloorFacts, list[Span]]:
         not_first = True
         spans.append(match.span())
 
+    for match in _iter_free(_FLOOR_NOT_LAST, norm, spans):
+        not_last = True
+        spans.append(match.span())
+
     for match in _iter_free(_FLOOR_LAST, norm, spans):
         if _NEGATION_BEFORE.search(norm[: match.start()]):
             continue  # «не последний этаж» — в URL не выражается, уйдёт в warnings
         last = True
         spans.append(match.span())
 
-    return FloorFacts(floor_min, floor_max, not_first, last), sorted(spans)
+    return FloorFacts(floor_min, floor_max, not_first, last, not_last), sorted(spans)
 
 
 # ---------------------------------------------------------------------------
@@ -806,6 +829,7 @@ def apply_rules(text: str) -> RulesOutcome:
         floor_max=floor.floor_max,
         not_first_floor=floor.not_first_floor,
         last_floor=floor.last_floor,
+        not_last_floor=floor.not_last_floor,
         finish=finish,
         ready=ready,
         sort=sort,

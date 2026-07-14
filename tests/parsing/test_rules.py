@@ -85,6 +85,21 @@ def test_extract_rooms(text: str, expected: list[Rooms]) -> None:
     assert bool(spans) == bool(expected)
 
 
+@pytest.mark.parametrize(
+    ("text", "expected_spans_len"),
+    [
+        ("но точно не студию", 1),
+        ("точно не двушку", 1),
+        ("кроме однушки", 1),
+        ("без студий", 1),
+    ],
+)
+def test_extract_rooms_negation(text: str, expected_spans_len: int) -> None:
+    rooms, spans = extract_rooms(text)
+    assert rooms == []
+    assert len(spans) == expected_spans_len
+
+
 def test_extract_rooms_spans_point_to_source() -> None:
     text = "хочу двушку у метро"
     rooms, spans = extract_rooms(text)
@@ -129,6 +144,8 @@ def test_extract_rooms_does_not_eat_price_suffix() -> None:
         # «за X»
         ("за 15 миллионов", PriceFacts(price_max=15_000_000)),
         ("за 15 млн", PriceFacts(price_max=15_000_000)),
+        ("за 15 млн рублей", PriceFacts(price_max=15_000_000)),
+        ("за 15 млн руб.", PriceFacts(price_max=15_000_000)),
         # Бюджет
         ("бюджет 15 млн", PriceFacts(price_max=15_000_000)),
         ("бюджет 15м", PriceFacts(price_max=15_000_000)),
@@ -139,6 +156,11 @@ def test_extract_rooms_does_not_eat_price_suffix() -> None:
         # Слитные суффиксы м/к
         ("до 15м", PriceFacts(price_max=15_000_000)),
         ("за 800к", PriceFacts(price_max=800_000)),
+        (
+            "до 12 млн хотя если будет с отделкой под ключ, "
+            "то готов рассмотреть и за 15 млн рублей",
+            PriceFacts(price_max=15_000_000),
+        ),
         # Дробные
         ("до 9,5 млн", PriceFacts(price_max=9_500_000)),
         ("до 9.5 млн", PriceFacts(price_max=9_500_000)),
@@ -272,9 +294,10 @@ def test_extract_time_to_metro(text: str, expected: TimeFacts) -> None:
         ("высокий этаж", FloorFacts(not_first_floor=True)),
         ("последний этаж", FloorFacts(last_floor=True)),
         ("на последнем этаже", FloorFacts(last_floor=True)),
-        # Отрицание «последнего» — не выражается, не должно дать last_floor
-        ("не последний этаж", FloorFacts()),
-        ("не на последнем этаже", FloorFacts()),
+        # Отрицание «последнего» — теперь дает not_last_floor
+        ("не последний этаж", FloorFacts(not_last_floor=True)),
+        ("не на последнем этаже", FloorFacts(not_last_floor=True)),
+        ("этаж не первый и не последний", FloorFacts(not_first_floor=True, not_last_floor=True)),
         # Комбинация
         (
             "не первый и не выше 12 этажа",
