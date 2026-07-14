@@ -41,6 +41,7 @@
 
 import re
 from collections.abc import Iterable, Iterator
+from datetime import datetime
 from typing import NamedTuple
 
 from yargy import Parser, or_, rule
@@ -676,9 +677,8 @@ def extract_ready(text: str) -> tuple[bool | None, list[Span]]:
 # Год заселения
 # ---------------------------------------------------------------------------
 
-from datetime import datetime
-
 _SETTLEMENT_THIS_YEAR = re.compile(r"\b(?:заселение|сдача|въезд)\s+в\s+этом\s+году\b")
+
 
 def extract_settlement_year(text: str) -> tuple[int | None, int | None, list[Span]]:
     """Извлечь сроки заселения (например 'в этом году')."""
