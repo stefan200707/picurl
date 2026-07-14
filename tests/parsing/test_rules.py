@@ -129,6 +129,8 @@ def test_extract_rooms_does_not_eat_price_suffix() -> None:
         # «за X»
         ("за 15 миллионов", PriceFacts(price_max=15_000_000)),
         ("за 15 млн", PriceFacts(price_max=15_000_000)),
+        ("за 15 млн рублей", PriceFacts(price_max=15_000_000)),
+        ("за 15 млн руб.", PriceFacts(price_max=15_000_000)),
         # Бюджет
         ("бюджет 15 млн", PriceFacts(price_max=15_000_000)),
         ("бюджет 15м", PriceFacts(price_max=15_000_000)),
@@ -139,6 +141,7 @@ def test_extract_rooms_does_not_eat_price_suffix() -> None:
         # Слитные суффиксы м/к
         ("до 15м", PriceFacts(price_max=15_000_000)),
         ("за 800к", PriceFacts(price_max=800_000)),
+        ("до 12 млн хотя если будет с отделкой под ключ, то готов рассмотреть и за 15 млн рублей", PriceFacts(price_max=15_000_000)),
         # Дробные
         ("до 9,5 млн", PriceFacts(price_max=9_500_000)),
         ("до 9.5 млн", PriceFacts(price_max=9_500_000)),
