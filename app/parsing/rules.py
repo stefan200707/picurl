@@ -275,13 +275,11 @@ def extract_price(text: str) -> tuple[PriceFacts, list[Span]]:
 
     def _update_min(value: int) -> None:
         nonlocal price_min
-        if price_min is None: price_min = value
-        else: price_min = min(price_min, value)
+        price_min = value if price_min is None else min(price_min, value)
 
     def _update_max(value: int) -> None:
         nonlocal price_max
-        if price_max is None: price_max = value
-        else: price_max = max(price_max, value)
+        price_max = value if price_max is None else max(price_max, value)
 
     for match in _iter_free(_PRICE_RANGE, norm, spans):
         low, high = _to_number(match.group(1)), _to_number(match.group(2))
