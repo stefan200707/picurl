@@ -623,7 +623,9 @@ def extract_unsupported(text: str) -> tuple[list[str], list[Span]]:
 # Время до метро
 # ---------------------------------------------------------------------------
 
-_TIME_TO_METRO = re.compile(r"\b(?:до|не\s+более|не\s+дольше)\s+(\d+)\s*мин\w*(?:\s*(?:до\s+метро|пешком))?")
+_TIME_TO_METRO = re.compile(
+    r"\b(?:до|не\s+более|не\s+дольше)\s+(\d+)\s*мин\w*(?:\s*(?:до\s+метро|пешком))?"
+)
 
 def extract_time_to_metro(text: str) -> tuple[int | None, list[Span]]:
     """Извлечь время до метро (пешком): «до 20 минут до метро» -> time_on_foot=20."""
