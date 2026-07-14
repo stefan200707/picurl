@@ -5,6 +5,7 @@
   {
     "name": "Аэропорт Внуково",
     "slug": "m-aeroport-vnukovo",
+    "id": "guid-aeroport",
     "aliases": [
       "Внуково",
       "Аэропорт"
@@ -50,7 +51,9 @@
     "name": "Зеленоград-Крюково"
   },
   {
-    "name": "Кантемировская"
+    "name": "Кантемировская",
+    "slug": "m-kantemirovskaya",
+    "id": "guid-kantemirovskaya"
   },
   {
     "name": "Каширская"
@@ -123,7 +126,8 @@
   },
   {
     "name": "Сокол",
-    "slug": "m-sokol"
+    "slug": "m-sokol",
+    "id": "guid-sokol"
   },
   {
     "name": "Строгино"

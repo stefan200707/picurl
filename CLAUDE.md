@@ -185,6 +185,7 @@ regex скомпилированы один раз на уровне модул�
 Выполнен промпт 07: URL-builder `build_url(criteria)` в `app/pik/url_builder.py`. Ядро сервиса: превращает Criteria в URL pik.ru/search. Реализует правило single-путь/multi-query с детерминированным порядком сегментов и параметров.
 Выполнен промпт 08: валидатор выдачи `validate(criteria, client)` в `app/pik/validator.py`. Это единственный сетевой вызов рантайма (запрос к backend-API `api.pik.ru/v2/filter`), best-effort (не роняет сервис при ошибке сети), мокируется в тестах.
 Выполнен промпт 09: Эндпоинт `POST /build-url` в `app/main.py`. Связывает парсер, билдер и валидатор в единый пайплайн, возвращает готовый URL и warnings.
+Выполнен промпт 10: Интеграционные тесты end-to-end с замоканным API pik.ru. Лежат в `tests/integration/test_build_url_e2e.py`. Проект полностью собран, Milestone 5 достигнут.
 
 ### Стек
 
@@ -212,7 +213,7 @@ app/
   parsing/           # schema.py — Criteria; rules.py — regex-правила; parser.py — фасад парсера; entity_match.py — матчинг сущностей (готовы)
   reference/         # *.json — справочники; loader.py — загрузка/кэш; refresh.py — обновление (готовы)
   pik/               # url_builder.py (готов), validator.py — заглушки
-tests/               # pytest; test_health.py — smoke; parsing/ — Criteria/API + rules; reference/ — loader+refresh
+tests/               # pytest; integration/ — E2E тесты; test_health.py — smoke; parsing/ — Criteria/API + rules; reference/ — loader+refresh
 docs/                # pik-url-schema.md — спецификация URL-схемы pik.ru (источник правды)
 prompts/             # декомпозиция задачи (см. ниже)
 ```
