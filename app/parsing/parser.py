@@ -122,6 +122,10 @@ def parse(text: str) -> ParseResult:
             criteria.districts.append(match.entity)
         elif match.type == "complex":
             criteria.complexes.append(match.entity)
+        elif match.type == "option_groups" and match.entity.slug:
+            criteria.option_groups.append(match.entity.slug)
+        elif match.type == "options" and match.entity.slug:
+            criteria.options.append(match.entity.slug)
 
     # Fallback-шаблон для нераспознанных гео-маркеров (метро)
     for fm_name, fm_span in rules_outcome.fallback_metro:

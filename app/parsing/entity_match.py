@@ -81,6 +81,8 @@ def build_choices() -> list[tuple[str, str, RefEntry]]:
         ("county", data.counties),
         ("district", data.districts),
         ("complex", data.complexes),
+        ("options", data.options),
+        ("option_groups", data.option_groups),
     ]:
         for entry in entries:
             choices.append((normalize(entry.name), etype, entry))
@@ -131,7 +133,18 @@ def match_entities(text: str) -> tuple[list[EntityMatch], list[str]]:
 
             trigger_type, trigger_start = get_trigger_type(text_before)
             has_capital = any(w[0].isupper() for w in window_strings)
-            kw_list = ["округ", "жк", "район", "метро", "м."]
+            kw_list = [
+                "округ",
+                "жк",
+                "район",
+                "метро",
+                "м.",
+                "вид",
+                "сануз",
+                "пол",
+                "балкон",
+                "лоджи",
+            ]
             has_keyword = any(kw in window_text.lower() for kw in kw_list)
 
             if has_capital or trigger_type or has_keyword:
