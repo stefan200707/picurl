@@ -308,6 +308,9 @@ def match_entities(text: str) -> tuple[list[EntityMatch], list[str]]:
             unique_entities.sort(key=lambda x: x[0], reverse=True)
             best_adj_score = unique_entities[0][0]
 
+            # Filter out entries whose adjusted score is much lower than the best one
+            unique_entities = [x for x in unique_entities if best_adj_score - x[0] < 5.0]
+
             # Map back to original structure for candidates
             final_unique = [
                 (orig_score, etyp, ent) for adj, orig_score, etyp, ent in unique_entities
@@ -356,9 +359,18 @@ def match_entities(text: str) -> tuple[list[EntityMatch], list[str]]:
         )
 
         if len(best_matches) > 1:
-            alt_names = [m[2].name for m in best_matches[1:]]
+            type_names = {
+                "metro": "метро",
+                "county": "округ",
+                "district": "район",
+                "complex": "ЖК",
+                "options": "опция",
+                "option_groups": "группа опций",
+            }
+            chosen_type = type_names.get(etype, etype)
+            alt_names = [f"{m[2].name} ({type_names.get(m[1], m[1])})" for m in best_matches[1:]]
             warnings.append(
-                f"Неоднозначность для «{c['text']}»: выбрано {entry.name}, "
+                f"Неоднозначность для «{c['text']}»: выбрано {entry.name} ({chosen_type}), "
                 f"возможные варианты: {', '.join(alt_names)}"
             )
 
