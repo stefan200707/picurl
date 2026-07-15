@@ -16,7 +16,7 @@ class TestCriteriaConstruction:
         assert criteria.price_min is None
         assert criteria.price_max is None
         assert criteria.area_min is None
-        assert criteria.finish is None
+        assert criteria.finish == []
         assert criteria.ready is None
         assert criteria.metro == []
         assert criteria.counties == []
@@ -38,7 +38,7 @@ class TestCriteriaConstruction:
             area_min=50.5,
             floor_min=5,
             not_first_floor=True,
-            finish=True,
+            finish=[1],
             metro=[
                 MatchedEntity(
                     name="Аэропорт Внуково",
@@ -104,7 +104,7 @@ class TestSerialization:
         assert restored == original
 
     def test_json_roundtrip(self) -> None:
-        original = Criteria(rooms=[Rooms.ONE, Rooms.TWO], finish=False, ready=True)
+        original = Criteria(rooms=[Rooms.ONE, Rooms.TWO], finish=[0], ready=True)
         restored = Criteria.model_validate_json(original.model_dump_json())
         assert restored == original
 
@@ -125,7 +125,7 @@ class TestPublicDict:
                     id="7cd0e0e3-5be1-4a56-8b9c-000000000000",
                 )
             ],
-            finish=True,
+            finish=[1],
             sort=Sort.PRICE_ASC,
         )
 
@@ -133,7 +133,7 @@ class TestPublicDict:
             "rooms": "2",
             "price_max": 15000000,
             "metro": ["Аэропорт Внуково"],
-            "finish": True,
+            "finish": "готовая",
             "sort": "price_asc",
         }
 
@@ -145,8 +145,8 @@ class TestPublicDict:
         ]
 
     def test_false_finish_is_kept(self) -> None:
-        """«Без отделки» (finish=False) — значимое значение, не теряется."""
-        assert Criteria(finish=False).to_public_dict() == {"finish": False}
+        """«Без отделки» (finish=[0]) — значимое значение, не теряется."""
+        assert Criteria(finish=[0]).to_public_dict() == {"finish": "без отделки"}
 
     def test_flags_only_when_true(self) -> None:
         public = Criteria(not_first_floor=True).to_public_dict()

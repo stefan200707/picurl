@@ -50,7 +50,7 @@ from yargy.pipelines import morph_pipeline
 from yargy.predicates import dictionary
 from yargy.predicates import type as yargy_type
 
-from app.parsing.schema import Criteria, HousingType, Rooms, Sort
+from app.parsing.schema import Criteria, Finish, HousingType, Rooms, Sort
 
 #: Полуинтервал [start, end) индексов исходного текста, «съеденный» правилом.
 Span = tuple[int, int]
@@ -666,34 +666,42 @@ _FINISH_TRUE = re.compile(
 )
 
 
-def extract_finish(text: str) -> tuple[bool | str | None, list[Span]]:
-    """Извлечь отделку: «с отделкой» → True, «без отделки»/«черновая» → False.
+_FINISH_FURNISHED = re.compile(r"\b(?:готов\w+\s+)?отделк\w+\s+с\s+мебелью\b|\bс\s+мебель\w+")
 
-    При противоречивых упоминаниях побеждает последнее по тексту; все найденные
-    диапазоны при этом считаются «съеденными».
+
+def extract_finish(text: str) -> tuple[list[Finish], list[Span]]:
+    """Извлечь отделку (список значений Finish).
+
+    При противоречивых упоминаниях сохраняются все уникальные запрошенные варианты.
     """
     norm = _normalize(text)
-    candidates: list[tuple[int, bool | str, Span]] = []
-    for match in _FINISH_FALSE.finditer(norm):
-        candidates.append((match.start(), False, match.span()))
-    for match in _FINISH_PRED.finditer(norm):
-        candidates.append((match.start(), "predchistovaya", match.span()))
-    for match in _FINISH_TRUE.finditer(norm):
-        is_inside_false = False
-        for c in candidates:
-            if c[1] is False and c[2][0] <= match.start() and c[2][1] >= match.end():
-                is_inside_false = True
-                break
-        if not is_inside_false:
-            candidates.append((match.start(), True, match.span()))
-    if not candidates:
-        return None, []
+    candidates: list[tuple[int, Finish, Span]] = []
 
-    # Сначала сортируем по старту, при равном старте предпочтение более длинному матчу
+    for match in _FINISH_FALSE.finditer(norm):
+        candidates.append((match.start(), Finish.NONE, match.span()))
+    for match in _FINISH_PRED.finditer(norm):
+        candidates.append((match.start(), Finish.WHITE_BOX, match.span()))
+    for match in _FINISH_FURNISHED.finditer(norm):
+        candidates.append((match.start(), Finish.FURNISHED, match.span()))
+    for match in _FINISH_TRUE.finditer(norm):
+        is_inside_false_or_furnished = False
+        for c in candidates:
+            if (
+                c[1] in (Finish.NONE, Finish.FURNISHED)
+                and c[2][0] <= match.start()
+                and c[2][1] >= match.end()
+            ):
+                is_inside_false_or_furnished = True
+                break
+        if not is_inside_false_or_furnished:
+            candidates.append((match.start(), Finish.READY, match.span()))
+
+    if not candidates:
+        return [], []
+
+    # Сортируем по старту, при равном старте предпочтение более длинному матчу
     candidates.sort(key=lambda item: (item[0], item[2][1] - item[2][0]))
 
-    # При противоречии побеждает последнее упоминание,
-    # но только если они не перекрываются (иначе более длинный побеждает)
     # Удаляем полностью поглощенные
     filtered = []
     for c in candidates:
@@ -708,7 +716,14 @@ def extract_finish(text: str) -> tuple[bool | str | None, list[Span]]:
             else:
                 filtered.append(c)
 
-    return filtered[-1][1], sorted(span for _, _, span in filtered)
+    unique_finishes = []
+    seen = set()
+    for _, finish, _ in filtered:
+        if finish not in seen:
+            unique_finishes.append(finish)
+            seen.add(finish)
+
+    return unique_finishes, sorted(span for _, _, span in filtered)
 
 
 _READY = re.compile(

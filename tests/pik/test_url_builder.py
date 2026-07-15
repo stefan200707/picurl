@@ -13,7 +13,7 @@ def test_build_url_tz_example():
         rooms=[Rooms.TWO],
         price_max=15000000,
         metro=[MatchedEntity(name="Аэропорт Внуково", slug="m-aeroport-vnukovo", id="guid-123")],
-        finish=True,
+        finish=[1],
         sort=Sort.PRICE_ASC,
     )
     url = build_url(criteria)

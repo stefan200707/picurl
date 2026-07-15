@@ -56,7 +56,7 @@ def test_e2e_full_cycle_success(client, mock_validator_client):
     assert criteria["rooms"] == "2"
     assert criteria["price_max"] == 15000000
     assert criteria["metro"] == ["Аэропорт Внуково"]
-    assert criteria["finish"] is True
+    assert criteria["finish"] == "готовая"
     assert criteria["sort"] == "price_asc"
 
 
@@ -66,7 +66,7 @@ def test_e2e_full_cycle_success(client, mock_validator_client):
         (
             "хочу двушку у Сокола до 12м с отделкой",
             "search/two-room/finish/m-sokol?priceFrom=0&priceTo=12000000",
-            {"rooms": "2", "metro": ["Сокол"], "price_max": 12000000, "finish": True},
+            {"rooms": "2", "metro": ["Сокол"], "price_max": 12000000, "finish": "готовая"},
         ),
         (
             "трёшка в Бабушкинском районе",
@@ -180,7 +180,7 @@ def test_e2e_massive_test_query(client):
 
     assert data["criteria"]["rooms"] == ["2", "3+"]
     assert data["criteria"]["counties"] == ["ЗАО"]
-    assert data["criteria"]["finish"] == "predchistovaya"
+    assert data["criteria"]["finish"] == "предчистовая"
     assert data["criteria"]["floor_min"] == 9
     assert data["criteria"]["floor_max"] == 16
     assert data["criteria"]["time_on_foot"] == 15

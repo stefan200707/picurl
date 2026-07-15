@@ -10,7 +10,7 @@ def test_parse_reference_example():
     # Проверяем заполненные критерии
     assert result.rooms == [Rooms.TWO]
     assert result.price_max == 15000000
-    assert result.finish is True
+    assert result.finish == [1]
     assert result.sort == Sort.PRICE_ASC
 
     # Метро
@@ -59,7 +59,7 @@ def test_parse_garbage_cleanup():
     text = "с тёплым полом, с отделкой"
     result, warnings = parse(text)
 
-    assert result.finish is True
+    assert result.finish == [1]
     assert len(result.option_groups) == 1
     assert result.option_groups[0] == "teplyPol"  # Проверим, что тёплый пол сматчился
     # Одиночные предлоги не должны генерить варнинги (если не считаются значимыми)
