@@ -308,8 +308,13 @@ def match_entities(text: str) -> tuple[list[EntityMatch], list[str]]:
             unique_entities.sort(key=lambda x: x[0], reverse=True)
             best_adj_score = unique_entities[0][0]
 
-            # Filter out entries whose adjusted score is much lower than the best one
-            unique_entities = [x for x in unique_entities if best_adj_score - x[0] < 5.0]
+            best_entry_name = unique_entities[0][3].name
+            # Filter out entries whose adjusted score is much lower than the best one,
+            # unless they have the exact same name as the best entry.
+            unique_entities = [
+                x for x in unique_entities
+                if best_adj_score - x[0] < 5.0 or x[3].name == best_entry_name
+            ]
 
             # Map back to original structure for candidates
             final_unique = [
@@ -338,40 +343,49 @@ def match_entities(text: str) -> tuple[list[EntityMatch], list[str]]:
     final_matches: list[EntityMatch] = []
     warnings: list[str] = []
 
-    used_spans = []
+    used_spans_with_type = []
     for c in candidates:
-        if any(_is_overlap(c["span"], used) for used in used_spans):
-            continue
-
-        used_spans.append(c["span"])
-
         best_matches = c["matches"]
         top_match = best_matches[0]
-        score, etype, entry = top_match
+        top_name = top_match[2].name
 
-        final_matches.append(
-            EntityMatch(
-                type=etype,
-                entity=MatchedEntity(name=entry.name, slug=entry.slug, id=entry.id),
-                score=score,
-                span=c["span"],
-            )
-        )
+        added_any = False
+        for score, etype, entry in best_matches:
+            if entry.name != top_name:
+                continue
 
-        if len(best_matches) > 1:
-            type_names = {
-                "metro": "метро",
-                "county": "округ",
-                "district": "район",
-                "complex": "ЖК",
-                "options": "опция",
-                "option_groups": "группа опций",
-            }
-            chosen_type = type_names.get(etype, etype)
-            alt_names = [f"{m[2].name} ({type_names.get(m[1], m[1])})" for m in best_matches[1:]]
-            warnings.append(
-                f"Неоднозначность для «{c['text']}»: выбрано {entry.name} ({chosen_type}), "
-                f"возможные варианты: {', '.join(alt_names)}"
+            if any(_is_overlap(c["span"], used_span) and used_type == etype for used_span, used_type in used_spans_with_type):
+                continue
+
+            used_spans_with_type.append((c["span"], etype))
+
+            final_matches.append(
+                EntityMatch(
+                    type=etype,
+                    entity=MatchedEntity(name=entry.name, slug=entry.slug, id=entry.id),
+                    score=score,
+                    span=c["span"],
+                )
             )
+            added_any = True
+
+        if added_any:
+            other_matches = [m for m in best_matches if m[2].name != top_name]
+            if other_matches:
+                type_names = {
+                    "metro": "метро",
+                    "county": "округ",
+                    "district": "район",
+                    "complex": "ЖК",
+                    "options": "опция",
+                    "option_groups": "группа опций",
+                }
+                chosen_types = [type_names.get(m[1], m[1]) for m in best_matches if m[2].name == top_name]
+                chosen_types_str = " и ".join(chosen_types)
+                alt_names = [f"{m[2].name} ({type_names.get(m[1], m[1])})" for m in other_matches]
+                warnings.append(
+                    f"Неоднозначность для «{c['text']}»: выбрано {top_name} ({chosen_types_str}), "
+                    f"возможные варианты: {', '.join(alt_names)}"
+                )
 
     return final_matches, warnings
