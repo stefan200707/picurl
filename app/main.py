@@ -62,15 +62,7 @@ class BuildUrlRequest(BaseModel):
 class BuildUrlResponse(BaseModel):
     """Ответ: готовая ссылка на pik.ru и предупреждения о нераспознанном."""
 
-    url: str = Field(
-        description="Готовая ссылка на pik.ru с применёнными фильтрами "
-        "(основная или первая из раздельных)."
-    )
-    urls: list[str] = Field(
-        default_factory=list,
-        description="Раздельные ссылки, если в запросе были противоречащие "
-        "локации (метро + ЖК и т.д.).",
-    )
+    url: str = Field(description="Готовая ссылка на pik.ru с применёнными фильтрами.")
     criteria: dict[str, Any] = Field(
         default_factory=dict,
         description=(
@@ -118,22 +110,7 @@ router = APIRouter(tags=["build-url"])
     "/build-url",
     summary="Сгенерировать ссылку на pik.ru",
     description=(
-        "Принимает текст на естественном языке, распознаёт параметры "
-        "и формирует ссылку на pik.ru.\n\n"
-        "**Свод правил и рекомендаций для лучшего результата:**\n"
-        "1. **Избегайте противоречий в локациях:** Не смешивайте разные типы локаций (например, "
-        "метро и ЖК, или район и округ) в одном запросе, так как на сайте ПИК они работают как "
-        "строгое пересечение (И) и выдадут 0 результатов. Если вы укажете их вместе, "
-        "сервис построит несколько раздельных ссылок (в поле `urls`), чтобы избежать "
-        "пустой выдачи.\n"
-        "2. **Описывайте параметры явно:** Используйте ключевые слова (например, "
-        "«бюджет до 15 млн», «кухня от 10 метров», «без отделки»).\n"
-        "3. **Новостройки:** Сервис работает только с новостройками от ПИК. Упоминание "
-        "«вторички» будет проигнорировано.\n"
-        "4. **Сортировка:** Можно указывать желаемую сортировку, например, «подешевле» или "
-        "«площадь побольше».\n"
-        "5. **Будьте проще:** Сложные условные конструкции («если 3 комнаты, то 15 млн, иначе 10») "
-        "не поддерживаются, пишите однозначные пожелания."
+        "Принимает текст на естественном языке, распознаёт параметры и формирует ссылку на pik.ru."
     ),
 )
 async def build_url(
@@ -141,41 +118,6 @@ async def build_url(
     client: Annotated[httpx.AsyncClient, Depends(get_http_client)],
 ) -> BuildUrlResponse:
     """Построить ссылку на pik.ru по свободному тексту."""
-
-    def split_criteria(crit: Any) -> list[Any]:
-        import copy
-
-        loc_types = []
-        if crit.metro:
-            loc_types.append("metro")
-        if crit.counties:
-            loc_types.append("counties")
-        if crit.districts:
-            loc_types.append("districts")
-        if crit.complexes:
-            loc_types.append("complexes")
-
-        if len(loc_types) <= 1:
-            return [crit]
-
-        c_list = []
-        for l_type in loc_types:
-            c_new = copy.deepcopy(crit)
-            c_new.metro = []
-            c_new.counties = []
-            c_new.districts = []
-            c_new.complexes = []
-
-            if l_type == "metro":
-                c_new.metro = crit.metro
-            elif l_type == "counties":
-                c_new.counties = crit.counties
-            elif l_type == "districts":
-                c_new.districts = crit.districts
-            elif l_type == "complexes":
-                c_new.complexes = crit.complexes
-            c_list.append(c_new)
-        return c_list
 
     text = request.text.strip()
     if not text:
@@ -190,12 +132,10 @@ async def build_url(
     warnings = parse_result.warnings.copy()
 
     # 2. Построение URL
-    split_criterias = split_criteria(criteria)
-    urls = [pik_build_url(c) for c in split_criterias]
-    url = urls[0] if urls else pik_build_url(criteria)
+    url = pik_build_url(criteria)
 
-    # 3. Валидация выдачи (по основной ссылке/критерию)
-    validation = await validate(split_criterias[0] if split_criterias else criteria, client)
+    # 3. Валидация выдачи
+    validation = await validate(criteria, client)
 
     # Обработка пустой выдачи
     if validation.result_count == 0:
@@ -204,14 +144,8 @@ async def build_url(
     if validation.warning:
         warnings.append(validation.warning)
 
-    if len(urls) > 1:
-        warnings.append(
-            "В запросе найдены конфликтующие локации. Построено несколько раздельных ссылок."
-        )
-
     return BuildUrlResponse(
         url=url,
-        urls=urls,
         criteria=criteria.to_public_dict(),
         result_count=validation.result_count,
         warnings=warnings,
