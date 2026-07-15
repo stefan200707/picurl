@@ -668,14 +668,15 @@ _FINISH_TRUE = re.compile(
 
 _FINISH_FURNISHED = re.compile(r"\b(?:готов\w+\s+)?отделк\w+\s+с\s+мебелью\b|\bс\s+мебель\w+")
 
+
 def extract_finish(text: str) -> tuple[list[Finish], list[Span]]:
     """Извлечь отделку (список значений Finish).
-    
+
     При противоречивых упоминаниях сохраняются все уникальные запрошенные варианты.
     """
     norm = _normalize(text)
     candidates: list[tuple[int, Finish, Span]] = []
-    
+
     for match in _FINISH_FALSE.finditer(norm):
         candidates.append((match.start(), Finish.NONE, match.span()))
     for match in _FINISH_PRED.finditer(norm):
@@ -685,12 +686,16 @@ def extract_finish(text: str) -> tuple[list[Finish], list[Span]]:
     for match in _FINISH_TRUE.finditer(norm):
         is_inside_false_or_furnished = False
         for c in candidates:
-            if c[1] in (Finish.NONE, Finish.FURNISHED) and c[2][0] <= match.start() and c[2][1] >= match.end():
+            if (
+                c[1] in (Finish.NONE, Finish.FURNISHED)
+                and c[2][0] <= match.start()
+                and c[2][1] >= match.end()
+            ):
                 is_inside_false_or_furnished = True
                 break
         if not is_inside_false_or_furnished:
             candidates.append((match.start(), Finish.READY, match.span()))
-            
+
     if not candidates:
         return [], []
 
