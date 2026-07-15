@@ -129,6 +129,7 @@ def _adjust_score(
     has_district = _is_marker_context(["район", "районе"])
     has_county = _is_marker_context(["округ", "округе"])
     has_metro = _is_marker_context(["м", "метро"]) or "м." in last_5_before
+    has_option = _is_marker_context(["вид", "видом"])
 
     new_score = score
     if has_jk and etype == "complex":
@@ -138,6 +139,8 @@ def _adjust_score(
     if has_county and etype == "county":
         new_score += 10.0
     if has_metro and etype == "metro":
+        new_score += 10.0
+    if has_option and etype in ("options", "option_groups"):
         new_score += 10.0
 
     last_word_before = before_tokens[-1] if before_tokens else ""
@@ -216,15 +219,16 @@ def match_entities(text: str) -> tuple[list[EntityMatch], list[str]]:
         window_text = " ".join(window_strings)
 
         trigger_type, trigger_start = get_trigger_type(text_before)
-        has_capital = any(w[0].isupper() for w in window_strings)
 
         kw_exact = {"округ", "жк", "район", "метро", "м"}
         kw_partial = ["вид", "сануз", "пол", "балкон", "лоджи"]
         window_lower = window_text.lower()
         window_words_lower = [w.lower() for w in window_strings]
 
-        has_keyword = any(kw in window_words_lower for kw in kw_exact) or any(
-            kw in window_lower for kw in kw_partial
+        has_keyword = (
+            any(kw in window_words_lower for kw in kw_exact)
+            or any(kw in window_lower for kw in kw_partial)
+            or any(kw in text_before[-30:].lower() for kw in kw_partial)
         )
 
         query_norm = normalize(window_text)
@@ -236,7 +240,7 @@ def match_entities(text: str) -> tuple[list[EntityMatch], list[str]]:
         if not choice_strings:
             continue
 
-        res = process.extract(query_norm, choice_strings, scorer=fuzz.WRatio, limit=3)
+        res = process.extract(query_norm, choice_strings, scorer=fuzz.WRatio, limit=10)
 
         good_res = [r for r in res if r[1] >= threshold]
         if good_res and not (trigger_type or has_keyword):
@@ -245,7 +249,7 @@ def match_entities(text: str) -> tuple[list[EntityMatch], list[str]]:
             filtered_res = []
             for r in good_res:
                 matched_str = choice_strings[r[2]]
-                if fuzz.QRatio(query_norm, matched_str) >= 85.0:
+                if fuzz.QRatio(query_norm, matched_str) >= 80.0:
                     filtered_res.append(r)
             good_res = filtered_res
 

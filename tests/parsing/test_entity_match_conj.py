@@ -9,7 +9,3 @@ def test_entity_match_conjunction():
     names = {m.entity.name for m in matches}
     assert "Вид на воду" in names
     assert "Вид на город" in names
-
-
-test_entity_match_conjunction()
-print("Success")
