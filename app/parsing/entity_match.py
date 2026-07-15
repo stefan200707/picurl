@@ -112,12 +112,12 @@ def _adjust_score(
     window_tokens = re.findall(r"[A-Za-zА-Яа-яЁё0-9]+(?:-[A-Za-zА-Яа-яЁё0-9]+)*", window_text)
     window_tokens = [t.lower() for t in window_tokens]
 
-    last_3_before = before_tokens[-3:] if before_tokens else []
+    last_5_before = before_tokens[-5:] if before_tokens else []
     entry_names = [entry.name.lower()] + [a.lower() for a in entry.aliases]
 
     def _is_marker_context(markers: list[str]) -> bool:
         for m in markers:
-            if m in last_3_before:
+            if m in last_5_before:
                 return True
             if m in window_tokens:
                 m_in_name = any(re.search(rf"\b{re.escape(m)}\b", name) for name in entry_names)
@@ -128,7 +128,7 @@ def _adjust_score(
     has_jk = _is_marker_context(["жк", "жилой комплекс"])
     has_district = _is_marker_context(["район", "районе"])
     has_county = _is_marker_context(["округ", "округе"])
-    has_metro = _is_marker_context(["м", "метро"]) or "м." in last_3_before
+    has_metro = _is_marker_context(["м", "метро"]) or "м." in last_5_before
 
     new_score = score
     if has_jk and etype == "complex":
@@ -197,19 +197,6 @@ def match_entities(text: str) -> tuple[list[EntityMatch], list[str]]:
             text_before = text[:start_idx]
             window_specs.append((window_tokens, text_before, start_idx, end_idx))
 
-    # Heuristic for conjunctions
-    for i, (tok_str, _start, _end) in enumerate(tokens_info):
-        if tok_str.lower() in {"и", "или"} and i >= 2 and i + 1 < len(tokens_info):
-            w2 = tokens_info[i + 1]
-            for n_mod in (1, 2):
-                if i - 1 - n_mod >= 0:
-                    mod_tokens = tokens_info[i - 1 - n_mod : i - 1]
-                    synthetic_tokens = [*mod_tokens, w2]
-                    s_start = w2[1]
-                    s_end = w2[2]
-                    t_before = text[: mod_tokens[0][1]]
-                    window_specs.append((synthetic_tokens, t_before, s_start, s_end))
-
     for window_tokens, text_before, start_idx, end_idx in window_specs:
         window_strings = [t[0] for t in window_tokens]
 
@@ -244,8 +231,6 @@ def match_entities(text: str) -> tuple[list[EntityMatch], list[str]]:
         threshold = TRIGGERED_SCORE_THRESHOLD if trigger_type or has_keyword else SCORE_THRESHOLD
 
         valid_choices = choices
-        if trigger_type:
-            valid_choices = [c for c in choices if c[1] == trigger_type]
 
         choice_strings = [c[0] for c in valid_choices]
         if not choice_strings:
@@ -254,13 +239,13 @@ def match_entities(text: str) -> tuple[list[EntityMatch], list[str]]:
         res = process.extract(query_norm, choice_strings, scorer=fuzz.WRatio, limit=3)
 
         good_res = [r for r in res if r[1] >= threshold]
-        if good_res and not (trigger_type or has_keyword or has_capital):
-            # For purely lowercase untriggered windows, require stricter match (QRatio)
+        if good_res and not (trigger_type or has_keyword):
+            # For untriggered windows, require stricter match (QRatio)
             # to avoid WRatio partial match false positives like "на востоке" in "выходом на крышу"
             filtered_res = []
             for r in good_res:
                 matched_str = choice_strings[r[2]]
-                if fuzz.QRatio(query_norm, matched_str) >= 80.0:
+                if fuzz.QRatio(query_norm, matched_str) >= 85.0:
                     filtered_res.append(r)
             good_res = filtered_res
 
