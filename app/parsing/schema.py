@@ -128,7 +128,7 @@ class Criteria(BaseModel):
     not_last_floor: bool = False
 
     # --- Отделка и заселение -------------------------------------------------
-    finish: bool | None = None
+    finish: bool | str | None = None
     ready: bool | None = None
 
     # --- Локации (результаты матчера, промпт 05) ---------------------------
