@@ -346,6 +346,12 @@ def test_extract_finish_conflict_last_mention_wins() -> None:
     assert len(spans) == 2  # оба упоминания «съедены»
 
 
+def test_extract_finish_conflict_last_mention_wins_2() -> None:
+    finish, spans = extract_finish("черновая отделка, хотя нет, лучше с отделкой под ключ")
+    assert finish is True
+    assert len(spans) == 3  # "черновая отделка" (False), "с отделкой" (True), "под ключ" (True)
+
+
 # ---------------------------------------------------------------------------
 # Заселение
 # ---------------------------------------------------------------------------
