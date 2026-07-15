@@ -61,8 +61,6 @@ def build_url(criteria: Criteria) -> str:
         path_segments.append("ready")
 
     # 2.5 Особенности планировки
-    if len(criteria.option_groups) == 1:
-        path_segments.append(criteria.option_groups[0])
 
     # 3. Локация
     total_locations = (
@@ -168,7 +166,7 @@ def build_url(criteria: Criteria) -> str:
     # Программы и опции
     if criteria.current_benefit:
         query_params["currentBenefit"] = criteria.current_benefit
-    if len(criteria.option_groups) > 1:
+    if criteria.option_groups:
         query_params["optionGroups"] = ",".join(criteria.option_groups)
     if criteria.options:
         query_params["options"] = ",".join(criteria.options)
