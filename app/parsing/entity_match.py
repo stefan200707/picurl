@@ -201,7 +201,7 @@ def match_entities(text: str) -> tuple[list[EntityMatch], list[str]]:
 
     window_specs = []
 
-    for n in range(1, 4):
+    for n in range(1, 6):
         for i in range(len(tokens_info) - n + 1):
             window_tokens = tokens_info[i : i + n]
             start_idx = window_tokens[0][1]
@@ -228,6 +228,10 @@ def match_entities(text: str) -> tuple[list[EntityMatch], list[str]]:
         window_strings = [t[0] for t in window_tokens]
 
         if _is_stop_word_window(window_strings):
+            continue
+
+        original_chunk = text[start_idx:end_idx]
+        if "," in original_chunk or ";" in original_chunk:
             continue
 
         clean_window = " ".join(w for w in window_strings if w.lower() not in STOP_WORDS).lower()
