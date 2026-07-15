@@ -121,12 +121,12 @@ def _adjust_score(
     window_tokens = re.findall(r"[A-Za-zА-Яа-яЁё0-9]+(?:-[A-Za-zА-Яа-яЁё0-9]+)*", window_text)
     window_tokens = [t.lower() for t in window_tokens]
 
-    last_3_before = before_tokens[-3:] if before_tokens else []
+    last_5_before = before_tokens[-5:] if before_tokens else []
     entry_names = [entry.name.lower()] + [a.lower() for a in entry.aliases]
 
     def _is_marker_context(markers: list[str]) -> bool:
         for m in markers:
-            if m in last_3_before:
+            if m in last_5_before:
                 return True
             if m in window_tokens:
                 m_in_name = any(re.search(rf"\b{re.escape(m)}\b", name) for name in entry_names)
@@ -137,7 +137,8 @@ def _adjust_score(
     has_jk = _is_marker_context(["жк", "жилой комплекс"])
     has_district = _is_marker_context(["район", "районе"])
     has_county = _is_marker_context(["округ", "округе"])
-    has_metro = _is_marker_context(["м", "метро"]) or "м." in last_3_before
+    has_metro = _is_marker_context(["м", "метро"]) or "м." in last_5_before
+    has_option = _is_marker_context(["вид", "видом"])
 
     new_score = score
     if has_jk and etype == "complex":
@@ -147,6 +148,8 @@ def _adjust_score(
     if has_county and etype == "county":
         new_score += 10.0
     if has_metro and etype == "metro":
+        new_score += 10.0
+    if has_option and etype in ("options", "option_groups"):
         new_score += 10.0
 
     last_word_before = before_tokens[-1] if before_tokens else ""
@@ -246,22 +249,22 @@ def match_entities(text: str) -> tuple[list[EntityMatch], list[str]]:
         window_lower = window_text.lower()
         window_words_lower = [w.lower() for w in window_strings]
 
-        has_keyword = any(kw in window_words_lower for kw in kw_exact) or any(
-            kw in window_lower for kw in kw_partial
+        has_keyword = (
+            any(kw in window_words_lower for kw in kw_exact)
+            or any(kw in window_lower for kw in kw_partial)
+            or any(kw in text_before[-30:].lower() for kw in kw_partial)
         )
 
         query_norm = normalize(window_text)
         threshold = TRIGGERED_SCORE_THRESHOLD if trigger_type or has_keyword else SCORE_THRESHOLD
 
         valid_choices = choices
-        if trigger_type:
-            valid_choices = [c for c in choices if c[1] == trigger_type]
 
         choice_strings = [c[0] for c in valid_choices]
         if not choice_strings:
             continue
 
-        res = process.extract(query_norm, choice_strings, scorer=fuzz.WRatio, limit=3)
+        res = process.extract(query_norm, choice_strings, scorer=fuzz.WRatio, limit=10)
 
         good_res = [r for r in res if r[1] >= threshold]
         if good_res and (is_synthetic or not (trigger_type or has_keyword)):
