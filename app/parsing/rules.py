@@ -391,24 +391,25 @@ _AREA_UNIT = r"(?:м²|м2|кв\.?\s*метр\w*|кв\.?\s*м\.?|квадрат\
 #: Связки между ключевым словом и числом: «кухня чтоб большая от 12», «кухня была от 12».
 _AREA_FILLER = r"(?:(?:была|будет|есть|чтоб\w*|больш\w*|маленьк\w*)\s+)*"
 
-#: «кухня от 8», «с кухней от 10 метров», «кухня 8-12», «кухня 10 м²», «кухня была от 12».
+#: «кухня от 8», «с кухней от 10 метров», «кухня 8-12», «кухня 10 м²», «кухня была от 12»,
+#: «кузня от 9 до 19».
 _KITCHEN = re.compile(
-    rf"(?:с\s+)?\bкухн\w*\s*{_AREA_FILLER}[—:\-]?\s*"
+    rf"(?:с\s+)?\b(?:кухн\w*|кузн\w*)\s*{_AREA_FILLER}[—:\-]?\s*"
     rf"(?:"
-    rf"(?:от|не\s+меньше|минимум)\s+({_NUM})"  # 1: min
-    rf"|(?:до|не\s+больше|максимум)\s+({_NUM})"  # 2: max
-    rf"|({_NUM})\s*[-–—]\s*({_NUM})"  # 3, 4: диапазон
+    rf"(?:от\s+)?({_NUM})\s*(?:[-–—]|до)\s*({_NUM})"  # 1, 2: диапазон
+    rf"|(?:от|не\s+меньше|минимум)\s+({_NUM})"  # 3: min
+    rf"|(?:до|не\s+больше|максимум)\s+({_NUM})"  # 4: max
     rf"|({_NUM})"  # 5: точное значение → min
     rf")"
     rf"(?:\s*{_AREA_UNIT})?"
 )
-#: «площадь от 40», «общей площадью 50-70», «общая от 60», «квадратов 60».
+#: «площадь от 40», «общей площадью 50-70», «общая от 60», «квадратов 60», «от 9 до 19 кв м».
 _AREA_KEYWORD = re.compile(
     rf"(?:(?:общ\w+\s+)?\bплощад\w*(?:\s+общ\w+)?|\bобщ\w+|\bквадрат\w*)\s*{_AREA_FILLER}[—:\-]?\s*"
     rf"(?:"
-    rf"(?:от|не\s+меньше|минимум)\s+({_NUM})"  # 1: min
-    rf"|(?:до|не\s+больше|максимум)\s+({_NUM})"  # 2: max
-    rf"|({_NUM})\s*[-–—]\s*({_NUM})"  # 3, 4: диапазон
+    rf"(?:от\s+)?({_NUM})\s*(?:[-–—]|до)\s*({_NUM})"  # 1, 2: диапазон
+    rf"|(?:от|не\s+меньше|минимум)\s+({_NUM})"  # 3: min
+    rf"|(?:до|не\s+больше|максимум)\s+({_NUM})"  # 4: max
     rf"|({_NUM})"  # 5: точное значение → min
     rf")"
     rf"(?:\s*{_AREA_UNIT})?"
@@ -422,13 +423,13 @@ _AREA_KVADRATOV = re.compile(rf"\b({_NUM})\s*квадрат\w*|\bквадрат\
 
 def _area_bounds(match: re.Match[str]) -> tuple[float | None, float | None]:
     """Разобрать группы _KITCHEN/_AREA_KEYWORD в пару (min, max)."""
-    g_min, g_max, g_lo, g_hi, g_exact = match.group(1, 2, 3, 4, 5)
+    g_lo, g_hi, g_min, g_max, g_exact = match.group(1, 2, 3, 4, 5)
+    if g_lo is not None and g_hi is not None:
+        return _to_number(g_lo), _to_number(g_hi)
     if g_min is not None:
         return _to_number(g_min), None
     if g_max is not None:
         return None, _to_number(g_max)
-    if g_lo is not None and g_hi is not None:
-        return _to_number(g_lo), _to_number(g_hi)
     if g_exact is not None:
         return _to_number(g_exact), None
     return None, None
@@ -655,23 +656,28 @@ def extract_floor(text: str) -> tuple[FloorFacts, list[Span]]:
 # Отделка и заселение
 # ---------------------------------------------------------------------------
 
-_FINISH_FALSE = re.compile(r"\bбез\s+(?:отделки|ремонта)\b|\bчернов\w+(?:\s+отделк\w+)?")
+_FINISH_FALSE = re.compile(
+    r"\bбез\s+(?:отделки|ремонта)\b|\bчернов\w+(?:\s+отделк\w+)?|\bотделк\w*\s+чернов\w+"
+)
+_FINISH_PRED = re.compile(r"\bпредчистов\w+(?:\s+отделк\w+)?|\bотделк\w*\s+предчистов\w+")
 _FINISH_TRUE = re.compile(
-    r"\bс\s+(?:отделкой|ремонтом)\b|\b(?:пред)?чистов\w+(?:\s+отделк\w+)?"
+    r"\bс\s+(?:отделкой|ремонтом)\b|\bчистов\w+(?:\s+отделк\w+)?|\bотделк\w*\s+чистов\w+"
     r"|\bготов\w+\s+отделк\w+|\bпод\s+ключ\b|\bотделк\w+\b|\bремонт\w+\b"
 )
 
 
-def extract_finish(text: str) -> tuple[bool | None, list[Span]]:
+def extract_finish(text: str) -> tuple[bool | str | None, list[Span]]:
     """Извлечь отделку: «с отделкой» → True, «без отделки»/«черновая» → False.
 
     При противоречивых упоминаниях побеждает последнее по тексту; все найденные
     диапазоны при этом считаются «съеденными».
     """
     norm = _normalize(text)
-    candidates: list[tuple[int, bool, Span]] = []
+    candidates: list[tuple[int, bool | str, Span]] = []
     for match in _FINISH_FALSE.finditer(norm):
         candidates.append((match.start(), False, match.span()))
+    for match in _FINISH_PRED.finditer(norm):
+        candidates.append((match.start(), "predchistovaya", match.span()))
     for match in _FINISH_TRUE.finditer(norm):
         is_inside_false = False
         for c in candidates:
@@ -800,6 +806,7 @@ def extract_housing_type(text: str) -> tuple[HousingType | None, list[Span]]:
 _ONLY_AVAILABLE = re.compile(
     r"\bне\s+бронь\b|\bбез\s+брони\b|\bне\s+забронированн\w+"
     r"|\bтолько\s+свободн\w+|\bтолько\s+доступн\w+|\bдоступн\w+"
+    r"|\bне\s+показывать\s+забронирован\w+"
 )
 
 

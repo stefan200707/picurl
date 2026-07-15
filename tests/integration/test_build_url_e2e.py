@@ -180,7 +180,7 @@ def test_e2e_massive_test_query(client):
 
     assert data["criteria"]["rooms"] == ["2", "3+"]
     assert data["criteria"]["counties"] == ["ЗАО"]
-    assert data["criteria"]["finish"] is True
+    assert data["criteria"]["finish"] == "predchistovaya"
     assert data["criteria"]["floor_min"] == 9
     assert data["criteria"]["floor_max"] == 16
     assert data["criteria"]["time_on_foot"] == 15

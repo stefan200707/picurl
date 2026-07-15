@@ -47,7 +47,7 @@ def test_build_url_single_vs_multi_rooms():
 
     # Multi
     url = build_url(Criteria(rooms=[Rooms.STUDIO, Rooms.ONE, Rooms.TWO]))
-    assert url == "https://www.pik.ru/search?rooms=-1%2C1%2C2"
+    assert url == "https://www.pik.ru/search?rooms=-1,1,2"
 
 
 def test_build_url_single_vs_multi_location():
@@ -64,7 +64,7 @@ def test_build_url_single_vs_multi_location():
             ]
         )
     )
-    assert url == "https://www.pik.ru/search?districtCounties=9%2C6"
+    assert url == "https://www.pik.ru/search?districtCounties=9,6"
 
     # Single metro
     url = build_url(Criteria(metro=[MatchedEntity(name="Внуково", slug="m-vnukovo", id="m-1")]))
@@ -79,7 +79,7 @@ def test_build_url_single_vs_multi_location():
             ]
         )
     )
-    assert url == "https://www.pik.ru/search?metroStations=m-1%2Cm-2"
+    assert url == "https://www.pik.ru/search?metroStations=m-1,m-2"
 
     # Mix county and metro (multi logic applies if len total > 1)
     url = build_url(
@@ -152,7 +152,7 @@ def test_build_url_other_query_params():
     assert "settlementMonthFrom=1" in url
     assert "settlementMonthTo=6" in url
     assert "currentBenefit=rassrochka" in url
-    assert "optionGroups=smartHomePIK%2Cbalcony" in url
+    assert "optionGroups=smartHomePIK,balcony" in url
     assert "options=vidNaVodu" in url
     assert "type=1" in url
     assert "status=free" in url

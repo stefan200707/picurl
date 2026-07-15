@@ -46,12 +46,19 @@ def build_url(criteria: Criteria) -> str:
     # 2. Отделка и заселение
     # В url-builder `finish` == True добавляем в путь 'finish'.
     # `finish` == False добавляем в путь 'bez-otdelki'.
+    # `finish` == "predchistovaya" добавляем в путь 'predchistovaya-otdelka'.
     if criteria.finish is True:
         path_segments.append("finish")
     elif criteria.finish is False:
         path_segments.append("bez-otdelki")
+    elif criteria.finish == "predchistovaya":
+        path_segments.append("predchistovaya-otdelka")
     if criteria.ready is True:
         path_segments.append("ready")
+
+    # 2.5 Особенности планировки
+    if len(criteria.option_groups) == 1:
+        path_segments.append(criteria.option_groups[0])
 
     # 3. Локация
     total_locations = (
@@ -157,7 +164,7 @@ def build_url(criteria: Criteria) -> str:
     # Программы и опции
     if criteria.current_benefit:
         query_params["currentBenefit"] = criteria.current_benefit
-    if criteria.option_groups:
+    if len(criteria.option_groups) > 1:
         query_params["optionGroups"] = ",".join(criteria.option_groups)
     if criteria.options:
         query_params["options"] = ",".join(criteria.options)
@@ -177,6 +184,6 @@ def build_url(criteria: Criteria) -> str:
         # Для фиксированного детерминированного порядка параметров в URL
         # (pydantic и dict сохраняют порядок, но лучше отсортировать или задать явный порядок,
         # однако dict с 3.7+ сохраняет порядок вставки, что уже детерминировано)
-        return f"{base_url}?{urlencode(query_params)}"
+        return f"{base_url}?{urlencode(query_params, safe=',')}"
 
     return base_url
