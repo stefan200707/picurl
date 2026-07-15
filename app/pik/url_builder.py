@@ -184,6 +184,6 @@ def build_url(criteria: Criteria) -> str:
         # Для фиксированного детерминированного порядка параметров в URL
         # (pydantic и dict сохраняют порядок, но лучше отсортировать или задать явный порядок,
         # однако dict с 3.7+ сохраняет порядок вставки, что уже детерминировано)
-        return f"{base_url}?{urlencode(query_params, safe=",")}"
+        return f"{base_url}?{urlencode(query_params, safe=',')}"
 
     return base_url
