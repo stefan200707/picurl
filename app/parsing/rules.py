@@ -307,6 +307,10 @@ def extract_price(text: str) -> tuple[PriceFacts, list[Span]]:
         value = _to_number(match.group(2))
         unit = match.group(3)
         if unit is None:
+            # Защита от дат (например, "до 15.07")
+            if re.fullmatch(r"\d{1,2}[.,]\d{2}", match.group(2)):
+                continue
+
             # Эвристика: «бюджет 15» → миллионы; «бюджет 15000000» → рубли.
             if value < 1_000:
                 mult = 1_000_000
@@ -810,8 +814,8 @@ def extract_sort(text: str) -> tuple[Sort | None, list[Span]]:
 
 _REQUIRED_TAGS_PATTERNS: list[tuple[re.Pattern[str], str]] = [
     (re.compile(r"\bготов\w+\s+квартир\w+"), "zos"),
-    (re.compile(r"\bипотек\w+\s+по\s+формуле\s+0,?1%?"), "cashback"),
-    (re.compile(r"\bспециальн\w+\s+цена(?:\s+до\s+15\.07)?"), "crossed"),
+    (re.compile(r"\bипотек\w+\s+по\s+формуле\s+0[.,]?1%?"), "cashback"),
+    (re.compile(r"\bспециальн\w+\s+цен\w*(?:\s+до\s+15\.07)?"), "crossed"),
     (re.compile(r"\bвыгода\s+до\s+-?15%(?:\s+до\s+15\.07)?"), "outlet"),
 ]
 
