@@ -354,7 +354,10 @@ def match_entities(text: str) -> tuple[list[EntityMatch], list[str]]:
             if entry.name != top_name:
                 continue
 
-            if any(_is_overlap(c["span"], used_span) and used_type == etype for used_span, used_type in used_spans_with_type):
+            if any(
+                _is_overlap(c["span"], used_span) and used_type == etype
+                for used_span, used_type in used_spans_with_type
+            ):
                 continue
 
             used_spans_with_type.append((c["span"], etype))
@@ -380,7 +383,11 @@ def match_entities(text: str) -> tuple[list[EntityMatch], list[str]]:
                     "options": "опция",
                     "option_groups": "группа опций",
                 }
-                chosen_types = [type_names.get(m[1], m[1]) for m in best_matches if m[2].name == top_name]
+                chosen_types = [
+                    type_names.get(m[1], m[1])
+                    for m in best_matches
+                    if m[2].name == top_name
+                ]
                 chosen_types_str = " и ".join(chosen_types)
                 alt_names = [f"{m[2].name} ({type_names.get(m[1], m[1])})" for m in other_matches]
                 warnings.append(
