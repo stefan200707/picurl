@@ -656,6 +656,7 @@ def extract_finish(text: str) -> tuple[bool | None, list[Span]]:
         candidates.append((match.start(), True, match.span()))
     if not candidates:
         return None, []
+    # При противоречии побеждает последнее упоминание
     candidates.sort(key=lambda item: item[0])
     return candidates[-1][1], sorted(span for _, _, span in candidates)
 
