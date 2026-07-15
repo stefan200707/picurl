@@ -417,6 +417,7 @@ _AREA_KEYWORD = re.compile(
 _AREA_RANGE = re.compile(rf"\b(?:от\s+)?({_NUM})\s*(?:[-–—]|до)\s*({_NUM})\s*{_AREA_UNIT}")
 _AREA_MIN = re.compile(rf"\b(?:от|не\s+меньше|минимум)\s+({_NUM})\s*{_AREA_UNIT}")
 _AREA_MAX = re.compile(rf"\b(?:до|не\s+больше|максимум)\s+({_NUM})\s*{_AREA_UNIT}")
+_AREA_KVADRATOV = re.compile(rf"\b({_NUM})\s*квадрат\w*|\bквадрат\w*\s+({_NUM})\b")
 
 
 def _area_bounds(match: re.Match[str]) -> tuple[float | None, float | None]:
@@ -453,7 +454,7 @@ def extract_area(text: str) -> tuple[AreaFacts, list[Span]]:
             kitchen_max = high
         spans.append(match.span())
 
-    for pattern in (_AREA_KEYWORD, _AREA_RANGE, _AREA_MIN, _AREA_MAX):
+    for pattern in (_AREA_KEYWORD, _AREA_RANGE, _AREA_MIN, _AREA_MAX, _AREA_KVADRATOV):
         for match in _iter_free(pattern, norm, spans):
             if pattern in (_AREA_KEYWORD, _KITCHEN):
                 low, high = _area_bounds(match)
@@ -461,6 +462,9 @@ def extract_area(text: str) -> tuple[AreaFacts, list[Span]]:
                 low, high = _to_number(match.group(1)), _to_number(match.group(2))
             elif pattern is _AREA_MIN:
                 low, high = _to_number(match.group(1)), None
+            elif pattern is _AREA_KVADRATOV:
+                val = match.group(1) if match.group(1) is not None else match.group(2)
+                low, high = _to_number(val), None
             else:
                 low, high = None, _to_number(match.group(1))
             if low is None and high is None:
