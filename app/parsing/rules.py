@@ -662,11 +662,11 @@ def extract_finish(text: str) -> tuple[bool | None, list[Span]]:
             candidates.append((match.start(), True, match.span()))
     if not candidates:
         return None, []
-    
+
     # Сначала сортируем по старту, при равном старте предпочтение более длинному матчу
     candidates.sort(key=lambda item: (item[0], item[2][1] - item[2][0]))
-    
-    # При противоречии побеждает последнее упоминание, 
+
+    # При противоречии побеждает последнее упоминание,
     # но только если они не перекрываются (иначе более длинный побеждает)
     # Удаляем полностью поглощенные
     filtered = []
@@ -676,12 +676,12 @@ def extract_finish(text: str) -> tuple[bool | None, list[Span]]:
         else:
             prev = filtered[-1]
             if prev[2][0] <= c[2][0] and prev[2][1] >= c[2][1]:
-                continue # c is completely inside prev, ignore
+                continue  # c is completely inside prev, ignore
             if c[2][0] <= prev[2][0] and c[2][1] >= prev[2][1]:
-                filtered[-1] = c # prev is completely inside c, replace
+                filtered[-1] = c  # prev is completely inside c, replace
             else:
                 filtered.append(c)
-    
+
     return filtered[-1][1], sorted(span for _, _, span in filtered)
 
 

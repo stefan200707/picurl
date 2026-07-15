@@ -241,10 +241,7 @@ def match_entities(text: str) -> tuple[list[EntityMatch], list[str]]:
         )
 
         query_norm = normalize(window_text)
-        if trigger_type or has_keyword:
-            threshold = TRIGGERED_SCORE_THRESHOLD
-        else:
-            threshold = SCORE_THRESHOLD
+        threshold = TRIGGERED_SCORE_THRESHOLD if trigger_type or has_keyword else SCORE_THRESHOLD
 
         valid_choices = choices
         if trigger_type:
