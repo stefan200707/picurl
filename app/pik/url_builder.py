@@ -1,6 +1,6 @@
 from urllib.parse import urlencode
 
-from app.parsing.schema import Criteria, HousingType, Rooms
+from app.parsing.schema import Criteria, Finish, HousingType, Rooms
 
 
 def build_url(criteria: Criteria) -> str:
@@ -44,15 +44,19 @@ def build_url(criteria: Criteria) -> str:
         query_params["rooms"] = ",".join(room_ids[r] for r in criteria.rooms)
 
     # 2. Отделка и заселение
-    # В url-builder `finish` == True добавляем в путь 'finish'.
-    # `finish` == False добавляем в путь 'bez-otdelki'.
-    # `finish` == "predchistovaya" добавляем в путь 'predchistovaya-otdelka'.
-    if criteria.finish is True:
-        path_segments.append("finish")
-    elif criteria.finish is False:
-        path_segments.append("bez-otdelki")
-    elif criteria.finish == "predchistovaya":
-        path_segments.append("predchistovaya-otdelka")
+    if len(criteria.finish) == 1:
+        f = criteria.finish[0]
+        if f == Finish.READY:
+            path_segments.append("finish")
+        elif f == Finish.NONE:
+            path_segments.append("bez-otdelki")
+        elif f == Finish.WHITE_BOX:
+            path_segments.append("predchistovaya-otdelka")
+        elif f == Finish.FURNISHED:
+            query_params["hasFinish"] = str(f.value)
+    elif len(criteria.finish) > 1:
+        query_params["hasFinish"] = ",".join(str(f.value) for f in criteria.finish)
+
     if criteria.ready is True:
         path_segments.append("ready")
 

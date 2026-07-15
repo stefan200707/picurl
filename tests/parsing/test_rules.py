@@ -321,34 +321,34 @@ def test_extract_floor(text: str, expected: FloorFacts) -> None:
 @pytest.mark.parametrize(
     ("text", "expected"),
     [
-        ("с отделкой", True),
-        ("квартира С ОТДЕЛКОЙ", True),
-        ("с ремонтом", True),
-        ("чистовая отделка", True),
-        ("под ключ", True),
-        ("без отделки", False),
-        ("без ремонта", False),
-        ("черновая", False),
-        ("черновая отделка", False),
-        ("у метро", None),
-        ("", None),
+        ("с отделкой", [1]),
+        ("квартира С ОТДЕЛКОЙ", [1]),
+        ("с ремонтом", [1]),
+        ("чистовая отделка", [1]),
+        ("под ключ", [1]),
+        ("без отделки", [0]),
+        ("без ремонта", [0]),
+        ("черновая", [0]),
+        ("черновая отделка", [0]),
+        ("у метро", []),
+        ("", []),
     ],
 )
-def test_extract_finish(text: str, expected: bool | None) -> None:
+def test_extract_finish(text: str, expected: list) -> None:
     finish, spans = extract_finish(text)
-    assert finish is expected
-    assert bool(spans) == (expected is not None)
+    assert finish == expected
+    assert bool(spans) == bool(expected)
 
 
 def test_extract_finish_conflict_last_mention_wins() -> None:
     finish, spans = extract_finish("без отделки, ну или с отделкой")
-    assert finish is True
+    assert finish == [0, 1]
     assert len(spans) == 2  # оба упоминания «съедены»
 
 
 def test_extract_finish_conflict_last_mention_wins_2() -> None:
     finish, spans = extract_finish("черновая отделка, хотя нет, лучше с отделкой под ключ")
-    assert finish is True
+    assert finish == [0, 1]
     assert len(spans) == 3  # "черновая отделка" (False), "с отделкой" (True), "под ключ" (True)
 
 
@@ -374,7 +374,7 @@ def test_extract_finish_conflict_last_mention_wins_2() -> None:
 def test_extract_ready(text: str, expected: bool | None) -> None:
     ready, spans = extract_ready(text)
     assert ready is expected
-    assert bool(spans) == (expected is not None)
+    assert bool(spans) == bool(expected)
 
 
 # ---------------------------------------------------------------------------
@@ -408,7 +408,7 @@ def test_extract_ready(text: str, expected: bool | None) -> None:
 def test_extract_sort(text: str, expected: Sort | None) -> None:
     sort, spans = extract_sort(text)
     assert sort is expected
-    assert bool(spans) == (expected is not None)
+    assert bool(spans) == bool(expected)
 
 
 def test_sort_field_order_mapping() -> None:
@@ -436,7 +436,7 @@ def test_sort_field_order_mapping() -> None:
 def test_extract_housing_type(text: str, expected: HousingType | None) -> None:
     housing, spans = extract_housing_type(text)
     assert housing is expected
-    assert bool(spans) == (expected is not None)
+    assert bool(spans) == bool(expected)
 
 
 @pytest.mark.parametrize(
@@ -492,7 +492,7 @@ def test_apply_rules_full_sentence() -> None:
     criteria = outcome.criteria
     assert criteria.rooms == [Rooms.TWO]
     assert criteria.price_max == 15_000_000
-    assert criteria.finish is True
+    assert criteria.finish == [1]
     assert criteria.sort is Sort.PRICE_ASC
     assert outcome.unsupported == []
     # «съеденные» диапазоны валидны, отсортированы и указывают на понятые куски
@@ -517,7 +517,7 @@ def test_apply_rules_rich_query() -> None:
     assert criteria.floor_min == 5
     assert criteria.floor_max == 20
     assert criteria.not_first_floor is True
-    assert criteria.finish is False
+    assert criteria.finish == [0]
     assert criteria.housing_type is HousingType.FLATS_ONLY
     assert criteria.only_available is True
     assert criteria.ready is True
