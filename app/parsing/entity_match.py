@@ -14,6 +14,14 @@ from app.reference.loader import RefEntry, load_all, normalize
 
 SCORE_THRESHOLD = 80.0
 TRIGGERED_SCORE_THRESHOLD = 75.0
+#: Доп. порог QRatio для окон без триггера/ключевого слова и для всех
+#: «синтетических» окон (эвристика союзов). WRatio завышает оценку для
+#: коротких/служебных слов, случайно похожих на длинное имя сущности
+#: («мы» ~ «Мытищи» = 50, «этаж и ищем» ~ «Два и более санузла» = 33,
+#: «Бульвар МЦК» ~ «Бульвар Адмирала Ушакова» = 57); держим порог как у основного
+#: WRatio-скоринга, чтобы не терять опечатки/склонения (напр. «Бабушкинском
+#: районе» ~ «Бабушкинский район» = 86.5, «Рокоссовсого» ~ «Рокоссовского» = 96).
+STRICT_QRATIO_THRESHOLD = SCORE_THRESHOLD
 
 
 class EntityMatch(NamedTuple):
@@ -31,6 +39,7 @@ TRIGGERS = [
     (r"(?i)\bм\.\s+$", "metro"),
     (r"(?i)\bм\s+$", "metro"),
     (r"(?i)\bв\s+районе\s+$", "district"),
+    (r"(?i)\bрайон\s+$", "district"),
     (r"(?i)\bокруг\s+$", "county"),
     (r"(?i)\bв\s+юзао\s+$", "county"),
     (r"(?i)\bв\s+жк\s+$", "complex"),
@@ -195,7 +204,7 @@ def match_entities(text: str) -> tuple[list[EntityMatch], list[str]]:
             start_idx = window_tokens[0][1]
             end_idx = window_tokens[-1][2]
             text_before = text[:start_idx]
-            window_specs.append((window_tokens, text_before, start_idx, end_idx))
+            window_specs.append((window_tokens, text_before, start_idx, end_idx, False))
 
     # Heuristic for conjunctions
     for i, (tok_str, _start, _end) in enumerate(tokens_info):
@@ -208,9 +217,11 @@ def match_entities(text: str) -> tuple[list[EntityMatch], list[str]]:
                     s_start = w2[1]
                     s_end = w2[2]
                     t_before = text[: mod_tokens[0][1]]
-                    window_specs.append((synthetic_tokens, t_before, s_start, s_end))
+                    # is_synthetic=True: слова склеены из разных мест текста
+                    # (не встречаются рядом буквально), поэтому проверяются строже.
+                    window_specs.append((synthetic_tokens, t_before, s_start, s_end, True))
 
-    for window_tokens, text_before, start_idx, end_idx in window_specs:
+    for window_tokens, text_before, start_idx, end_idx, is_synthetic in window_specs:
         window_strings = [t[0] for t in window_tokens]
 
         if _is_stop_word_window(window_strings):
@@ -229,7 +240,6 @@ def match_entities(text: str) -> tuple[list[EntityMatch], list[str]]:
         window_text = " ".join(window_strings)
 
         trigger_type, trigger_start = get_trigger_type(text_before)
-        has_capital = any(w[0].isupper() for w in window_strings)
 
         kw_exact = {"округ", "жк", "район", "метро", "м"}
         kw_partial = ["вид", "сануз", "пол", "балкон", "лоджи"]
@@ -254,13 +264,17 @@ def match_entities(text: str) -> tuple[list[EntityMatch], list[str]]:
         res = process.extract(query_norm, choice_strings, scorer=fuzz.WRatio, limit=3)
 
         good_res = [r for r in res if r[1] >= threshold]
-        if good_res and not (trigger_type or has_keyword or has_capital):
-            # For purely lowercase untriggered windows, require stricter match (QRatio)
-            # to avoid WRatio partial match false positives like "на востоке" in "выходом на крышу"
+        if good_res and (is_synthetic or not (trigger_type or has_keyword)):
+            # Строгая проверка QRatio: WRatio завышает оценку для коротких/служебных слов,
+            # случайно похожих на длинное имя сущности («мы» ~ «Мытищи», «молодая» ~
+            # «Молодежная»). Заглавная буква не признак имени собственного (первое слово
+            # предложения тоже с большой буквы) — сама по себе не освобождает от проверки.
+            # «Синтетические» окна (эвристика союзов, слова из разных мест текста) всегда
+            # проверяются строго, даже при наличии триггера/ключевого слова.
             filtered_res = []
             for r in good_res:
                 matched_str = choice_strings[r[2]]
-                if fuzz.QRatio(query_norm, matched_str) >= 80.0:
+                if fuzz.QRatio(query_norm, matched_str) >= STRICT_QRATIO_THRESHOLD:
                     filtered_res.append(r)
             good_res = filtered_res
 
