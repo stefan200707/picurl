@@ -553,8 +553,10 @@ def test_apply_rules_price_area_floor_do_not_collide() -> None:
     assert criteria.price_min is None
     assert criteria.price_max == 15_000_000
 
+
 def test_extract_required_tags():
     from app.parsing.rules import extract_required_tags
+
     tags, spans = extract_required_tags("хочу готовые квартиры и специальная цена до 15.07")
     assert tags == ["zos", "crossed"]
     assert len(spans) == 2

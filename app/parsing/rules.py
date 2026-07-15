@@ -815,6 +815,7 @@ _REQUIRED_TAGS_PATTERNS: list[tuple[re.Pattern[str], str]] = [
     (re.compile(r"\bвыгода\s+до\s+-?15%(?:\s+до\s+15\.07)?"), "outlet"),
 ]
 
+
 def extract_required_tags(text: str) -> tuple[list[str], list[Span]]:
     """Извлечь теги выгодных предложений (requiredTags)."""
     norm = _normalize(text)
@@ -828,6 +829,7 @@ def extract_required_tags(text: str) -> tuple[list[str], list[Span]]:
             spans.append(match.span())
 
     return tags, sorted(spans)
+
 
 # ---------------------------------------------------------------------------
 # Прочее: тип жилья, доступность, неподдерживаемое
