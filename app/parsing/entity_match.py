@@ -312,7 +312,8 @@ def match_entities(text: str) -> tuple[list[EntityMatch], list[str]]:
             # Filter out entries whose adjusted score is much lower than the best one,
             # unless they have the exact same name as the best entry.
             unique_entities = [
-                x for x in unique_entities
+                x
+                for x in unique_entities
                 if best_adj_score - x[0] < 5.0 or x[3].name == best_entry_name
             ]
 
@@ -384,9 +385,7 @@ def match_entities(text: str) -> tuple[list[EntityMatch], list[str]]:
                     "option_groups": "группа опций",
                 }
                 chosen_types = [
-                    type_names.get(m[1], m[1])
-                    for m in best_matches
-                    if m[2].name == top_name
+                    type_names.get(m[1], m[1]) for m in best_matches if m[2].name == top_name
                 ]
                 chosen_types_str = " и ".join(chosen_types)
                 alt_names = [f"{m[2].name} ({type_names.get(m[1], m[1])})" for m in other_matches]
