@@ -174,6 +174,7 @@ class Criteria(BaseModel):
     option_groups: list[str] = Field(default_factory=list)
     options: list[str] = Field(default_factory=list)
     view: str | None = None
+    required_tags: list[str] = Field(default_factory=list)
 
     @field_validator("rooms")
     @classmethod
@@ -247,5 +248,7 @@ class Criteria(BaseModel):
             public["option_groups"] = list(self.option_groups)
         if self.options:
             public["options"] = list(self.options)
+        if self.required_tags:
+            public["required_tags"] = list(self.required_tags)
 
         return public
