@@ -62,13 +62,19 @@ def build_url(criteria: Criteria) -> str:
     )
 
     if total_locations == 1:
-        if len(criteria.counties) == 1 and criteria.counties[0].slug:
-            path_segments.append(criteria.counties[0].slug)
-        elif len(criteria.metro) == 1 and criteria.metro[0].slug:
-            slug = criteria.metro[0].slug
-            if not slug.startswith("m-"):
-                slug = f"m-{slug}"
-            path_segments.append(slug)
+        if len(criteria.counties) == 1:
+            if criteria.counties[0].slug:
+                path_segments.append(criteria.counties[0].slug)
+            elif criteria.counties[0].id:
+                query_params["districtCounties"] = criteria.counties[0].id
+        elif len(criteria.metro) == 1:
+            if criteria.metro[0].slug:
+                slug = criteria.metro[0].slug
+                if not slug.startswith("m-"):
+                    slug = f"m-{slug}"
+                path_segments.append(slug)
+            elif criteria.metro[0].id:
+                query_params["metroStations"] = criteria.metro[0].id
         elif len(criteria.districts) == 1 and criteria.districts[0].id:
             query_params["districtLocations"] = criteria.districts[0].id
         elif len(criteria.complexes) == 1 and criteria.complexes[0].id:
