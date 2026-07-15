@@ -56,7 +56,7 @@ def test_e2e_full_cycle_success(client, mock_validator_client):
     assert criteria["rooms"] == "2"
     assert criteria["price_max"] == 15000000
     assert criteria["metro"] == ["Аэропорт Внуково"]
-    assert criteria["finish"] is True
+    assert criteria["finish"] == "готовая"
     assert criteria["sort"] == "price_asc"
 
 
@@ -66,7 +66,7 @@ def test_e2e_full_cycle_success(client, mock_validator_client):
         (
             "хочу двушку у Сокола до 12м с отделкой",
             "search/two-room/finish/m-sokol?priceFrom=0&priceTo=12000000",
-            {"rooms": "2", "metro": ["Сокол"], "price_max": 12000000, "finish": True},
+            {"rooms": "2", "metro": ["Сокол"], "price_max": 12000000, "finish": "готовая"},
         ),
         (
             "трёшка в Бабушкинском районе",
@@ -180,7 +180,7 @@ def test_e2e_massive_test_query(client):
 
     assert data["criteria"]["rooms"] == ["2", "3+"]
     assert data["criteria"]["counties"] == ["ЗАО"]
-    assert data["criteria"]["finish"] == "predchistovaya"
+    assert data["criteria"]["finish"] == "предчистовая"
     assert data["criteria"]["floor_min"] == 9
     assert data["criteria"]["floor_max"] == 16
     assert data["criteria"]["time_on_foot"] == 15
@@ -193,3 +193,23 @@ def test_e2e_massive_test_query(client):
     assert "видом на парк" not in warnings_str
     assert "два и более санузла" not in warnings_str
     assert "тёплым полом" not in warnings_str
+
+
+def test_e2e_required_tags(client):
+    """10. Выгодные предложения (requiredTags)."""
+    text = (
+        "хочу готовые квартиры, ипотеку по формуле 0,1%, "
+        "специальная цена до 15.07, выгода до -15% до 15.07"
+    )
+    response = client.post("/build-url", json={"text": text})
+    assert response.status_code == 200
+    data = response.json()
+
+    assert "requiredTags=zos,cashback,crossed,outlet" in data["url"]
+
+    criteria = data["criteria"]
+    assert criteria["required_tags"] == ["zos", "cashback", "crossed", "outlet"]
+
+    warnings_str = " ".join(data["warnings"])
+    assert "готовые квартиры" not in warnings_str
+    assert "выгода" not in warnings_str

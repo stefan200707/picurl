@@ -31,7 +31,7 @@
   представление критериев для ответа даёт :meth:`Criteria.to_public_dict`.
 """
 
-from enum import StrEnum
+from enum import IntEnum, StrEnum
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -52,6 +52,23 @@ ROOMS_LABELS: dict[Rooms, str] = {
     Rooms.ONE: "1",
     Rooms.TWO: "2",
     Rooms.THREE_PLUS: "3+",
+}
+
+
+class Finish(IntEnum):
+    """Отделка."""
+
+    NONE = 0
+    READY = 1
+    WHITE_BOX = 2
+    FURNISHED = 3
+
+
+FINISH_LABELS: dict[Finish, str] = {
+    Finish.NONE: "без отделки",
+    Finish.READY: "готовая",
+    Finish.WHITE_BOX: "предчистовая",
+    Finish.FURNISHED: "с мебелью",
 }
 
 
@@ -128,7 +145,7 @@ class Criteria(BaseModel):
     not_last_floor: bool = False
 
     # --- Отделка и заселение -------------------------------------------------
-    finish: bool | str | None = None
+    finish: list[Finish] = Field(default_factory=list)
     ready: bool | None = None
 
     # --- Локации (результаты матчера, промпт 05) ---------------------------
@@ -157,11 +174,18 @@ class Criteria(BaseModel):
     option_groups: list[str] = Field(default_factory=list)
     options: list[str] = Field(default_factory=list)
     view: str | None = None
+    required_tags: list[str] = Field(default_factory=list)
 
     @field_validator("rooms")
     @classmethod
     def _dedupe_rooms(cls, value: list[Rooms]) -> list[Rooms]:
         """Схлопнуть дубликаты комнатности, сохранив порядок упоминания."""
+        return list(dict.fromkeys(value))
+
+    @field_validator("finish")
+    @classmethod
+    def _dedupe_finish(cls, value: list[Finish]) -> list[Finish]:
+        """Схлопнуть дубликаты отделки, сохранив порядок упоминания."""
         return list(dict.fromkeys(value))
 
     def to_public_dict(self) -> dict[str, Any]:
@@ -179,6 +203,10 @@ class Criteria(BaseModel):
             labels = [ROOMS_LABELS[room] for room in self.rooms]
             public["rooms"] = labels[0] if len(labels) == 1 else labels
 
+        if self.finish:
+            labels = [FINISH_LABELS[f] for f in self.finish]
+            public["finish"] = labels[0] if len(labels) == 1 else labels
+
         scalar_fields = (
             "price_min",
             "price_max",
@@ -188,7 +216,6 @@ class Criteria(BaseModel):
             "area_kitchen_max",
             "floor_min",
             "floor_max",
-            "finish",
             "ready",
             "time_on_foot",
             "time_on_transport",
@@ -221,5 +248,7 @@ class Criteria(BaseModel):
             public["option_groups"] = list(self.option_groups)
         if self.options:
             public["options"] = list(self.options)
+        if self.required_tags:
+            public["required_tags"] = list(self.required_tags)
 
         return public

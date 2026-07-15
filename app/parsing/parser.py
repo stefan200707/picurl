@@ -255,6 +255,23 @@ def parse(text: str) -> ParseResult:
         for cx in criteria.complexes:
             if not cx.id:
                 warnings.append(f'ЖК "{cx.name}" не имеет id, в ссылку не попадет')
+    elif total_locations == 1:
+        if len(criteria.metro) == 1:
+            m = criteria.metro[0]
+            if not m.slug and not m.id:
+                warnings.append(f'Метро "{m.name}" не имеет slug или id, в ссылку не попадет')
+        elif len(criteria.counties) == 1:
+            c = criteria.counties[0]
+            if not c.slug and not c.id:
+                warnings.append(f'Округ "{c.name}" не имеет slug или id, в ссылку не попадет')
+        elif len(criteria.districts) == 1:
+            d = criteria.districts[0]
+            if not d.id:
+                warnings.append(f'Район "{d.name}" не имеет id, в ссылку не попадет')
+        elif len(criteria.complexes) == 1:
+            cx = criteria.complexes[0]
+            if not cx.id:
+                warnings.append(f'ЖК "{cx.name}" не имеет id, в ссылку не попадет')
 
     # 4. Вычисляем нераспознанные куски текста
     merged_consumed = _merge_spans(consumed)
