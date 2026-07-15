@@ -99,6 +99,7 @@ JSON-справочниках (промпт 03).
 | `currentBenefit` | программа покупки, слаг | `currentBenefit=rassrochka-na-12-mesyacev-7` |
 | `optionGroups` | «Особенности планировки», comma-list слагов | `optionGroups=smartHomePIK,balcony` |
 | `options` | «Вид из окна», слаг | `options=vidNaVodu` |
+| `requiredTags` | Выгодные предложения (Готовые квартиры, Ипотеку по формуле 0,1% и т.п.), comma-list | `requiredTags=zos,cashback,crossed,outlet` |
 | `type` | `1` = только квартиры (без апартаментов); параметр отсутствует = показывать оба типа | `type=1` |
 | `status` | `free` = «Не показывать забронированные» | `status=free` |
 

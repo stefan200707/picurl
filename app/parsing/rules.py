@@ -805,6 +805,31 @@ def extract_sort(text: str) -> tuple[Sort | None, list[Span]]:
 
 
 # ---------------------------------------------------------------------------
+# Выгодные предложения (requiredTags)
+# ---------------------------------------------------------------------------
+
+_REQUIRED_TAGS_PATTERNS: list[tuple[re.Pattern[str], str]] = [
+    (re.compile(r"\bготов\w+\s+квартир\w+"), "zos"),
+    (re.compile(r"\bипотек\w+\s+по\s+формуле\s+0,?1%?"), "cashback"),
+    (re.compile(r"\bспециальн\w+\s+цена(?:\s+до\s+15\.07)?"), "crossed"),
+    (re.compile(r"\bвыгода\s+до\s+-?15%(?:\s+до\s+15\.07)?"), "outlet"),
+]
+
+def extract_required_tags(text: str) -> tuple[list[str], list[Span]]:
+    """Извлечь теги выгодных предложений (requiredTags)."""
+    norm = _normalize(text)
+    tags: list[str] = []
+    spans: list[Span] = []
+
+    for pattern, tag in _REQUIRED_TAGS_PATTERNS:
+        for match in _iter_free(pattern, norm, spans):
+            if tag not in tags:
+                tags.append(tag)
+            spans.append(match.span())
+
+    return tags, sorted(spans)
+
+# ---------------------------------------------------------------------------
 # Прочее: тип жилья, доступность, неподдерживаемое
 # ---------------------------------------------------------------------------
 
@@ -896,6 +921,7 @@ def apply_rules(text: str) -> RulesOutcome:
     ready, ready_spans = extract_ready(text)
     settle_year_from, settle_year_to, settle_spans = extract_settlement_year(text)
     sort, sort_spans = extract_sort(text)
+    required_tags, tags_spans = extract_required_tags(text)
     housing_type, housing_spans = extract_housing_type(text)
     only_available, available_spans = extract_only_available(text)
     unsupported, unsupported_spans = extract_unsupported(text)
@@ -922,6 +948,7 @@ def apply_rules(text: str) -> RulesOutcome:
         settlement_year_from=settle_year_from,
         settlement_year_to=settle_year_to,
         sort=sort,
+        required_tags=required_tags,
         housing_type=housing_type,
         only_available=only_available,
     )
@@ -936,6 +963,7 @@ def apply_rules(text: str) -> RulesOutcome:
             *ready_spans,
             *settle_spans,
             *sort_spans,
+            *tags_spans,
             *housing_spans,
             *available_spans,
             *unsupported_spans,

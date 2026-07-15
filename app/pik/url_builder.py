@@ -170,6 +170,8 @@ def build_url(criteria: Criteria) -> str:
         query_params["optionGroups"] = ",".join(criteria.option_groups)
     if criteria.options:
         query_params["options"] = ",".join(criteria.options)
+    if getattr(criteria, "required_tags", None):
+        query_params["requiredTags"] = ",".join(criteria.required_tags)
 
     # Тип и статус
     if criteria.housing_type == HousingType.FLATS_ONLY:
