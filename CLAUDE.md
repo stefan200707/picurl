@@ -51,8 +51,7 @@ API pik.ru; нераспознанное всегда уходит в `warnings`
   опираются парсинг (промпты 04–06) и `url_builder` (07). «Пустой» `Criteria()`
   валиден: скаляры — `None`, списки — пустые. Ключевые решения — в докстринге
   модуля: `rooms` — всегда список (single vs multi решает url_builder по длине);
-  `finish` — `bool | None` (URL выражает только `True` — слаг `finish`;
-  `False` url_builder обязан отправить в warnings); `sort` — строковый ключ
+  `finish` — `bool | None` (URL выражает `True` — слаг `finish`, и `False` — слаг `bez-otdelki`); `sort` — строковый ключ
   `price_asc|price_desc|area_asc|area_desc` с properties `field`/`order`
   для `sortBy`/`orderBy`.
 - **Модели API** `BuildUrlRequest`/`BuildUrlResponse` живут в `app/main.py`
