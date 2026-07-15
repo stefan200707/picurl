@@ -130,6 +130,7 @@ _ROOMS_NUM = re.compile(
     r"(?:\s*[-–—]?\s*х)?"
     r"\s*[-–—]?\s*"
     r"(?:комнат\w*|комн\.|к\b)"
+    r"(?:\s+кв-р\w*|\s+квартир\w*|\s+кв\b)?"
 )
 
 #: Голый чип «3+» (без слова «комнат»).
@@ -230,16 +231,16 @@ class PriceFacts(NamedTuple):
     price_max: int | None = None
 
 
-_PRICE_UNIT = r"млн\.?|миллион\w*|тыс\w*|руб\w*|р\.|₽"
+_PRICE_UNIT = r"млн\.?|миллион\w*|тыс\w*|руб\w*|р\.|₽|лям\w*"
 _OPT_RUB = r"(?:\s+(?:рублей|руб\w*|р\.|₽))?"  # опциональный суффикс рублей
 
 #: «10-15 млн», «от 10 до 15 млн»; без единицы — только большие числа (рубли).
 _PRICE_RANGE = re.compile(
-    rf"\b(?:от\s+)?({_NUM})\s*(?:[-–—]|до)\s*({_NUM})\s*({_PRICE_UNIT})?{_OPT_RUB}(?![\w²])"
+    rf"\b(?:(?:бюджет\w*|цена|стоимость\w*)\s*[—:\-]?\s*)?(?:от\s+)?({_NUM})\s*({_PRICE_UNIT}|[мmкk])?\s*(?:[-–—]|до)\s*({_NUM})\s*({_PRICE_UNIT}|[мmкk])?{_OPT_RUB}(?![\w²])"
 )
 #: «бюджет 15м», «цена до 15 млн», «бюджет 15» (число <1000 → миллионы).
 _PRICE_BUDGET = re.compile(
-    rf"\b(?:бюджет\w*|цена|стоимость\w*)\s*[—:\-]?\s*(не\s+более|до|от)?\s*({_NUM})\s*"
+    rf"\b(?:бюджет\w*|цена|стоимость\w*|баб\w+)\s*[—:\-]?\s*(не\s+более|до|от)?\s*({_NUM})\s*"
     rf"({_PRICE_UNIT}|м|m|к|k)?{_OPT_RUB}(?![\w²])"
 )
 _PRICE_MIN = re.compile(
@@ -256,15 +257,16 @@ _PRICE_SUFFIX = re.compile(rf"\b(до|от|за)\s+({_NUM})([мmкk]){_OPT_RUB}\
 #: Голое большое число: «до 15000000» (≥ 100 000 → рубли).
 _PRICE_PLAIN_MAX = re.compile(rf"\b(?:до|не\s+дороже)\s+({_NUM}){_OPT_RUB}\b")
 _PRICE_PLAIN_MIN = re.compile(rf"\b(?:от|не\s+дешевле)\s+({_NUM}){_OPT_RUB}\b")
+_PRICE_STANDALONE = re.compile(rf"\b({_NUM})\s*({_PRICE_UNIT}){_OPT_RUB}\b")
 
 #: Порог «голое число — это рубли» (иначе слишком похоже на этаж/площадь).
 _RUBLE_THRESHOLD = 100_000
 
 
 def _price_multiplier(unit: str) -> int:
-    """Множитель денежной единицы: млн/м → 1e6, тыс/к → 1e3, руб → 1."""
+    """Множитель денежной единицы: млн/м/лям → 1e6, тыс/к → 1e3, руб → 1."""
     u = unit.strip().rstrip(".")
-    if u in ("м", "m") or u.startswith(("млн", "миллион")):
+    if u in ("м", "m") or u.startswith(("млн", "миллион", "лям")):
         return 1_000_000
     if u in ("к", "k") or u.startswith("тыс"):
         return 1_000
@@ -287,16 +289,17 @@ def extract_price(text: str) -> tuple[PriceFacts, list[Span]]:
         price_max = max(price_max, value) if price_max is not None else value
 
     for match in _iter_free(_PRICE_RANGE, norm, spans):
-        low, high = _to_number(match.group(1)), _to_number(match.group(2))
-        unit = match.group(3)
-        if unit is None:
+        low, high = _to_number(match.group(1)), _to_number(match.group(3))
+        unit1, unit2 = match.group(2), match.group(4)
+        if unit1 is None and unit2 is None:
             if low < _RUBLE_THRESHOLD or high < _RUBLE_THRESHOLD:
                 continue  # «70-100 метров», «5-20 этаж» — не цена
-            mult = 1
+            mult_low, mult_high = 1, 1
         else:
-            mult = _price_multiplier(unit)
-        _update_min(round(low * mult))
-        _update_max(round(high * mult))
+            mult_low = _price_multiplier(unit1) if unit1 else _price_multiplier(unit2)
+            mult_high = _price_multiplier(unit2) if unit2 else _price_multiplier(unit1)
+        _update_min(round(low * mult_low))
+        _update_max(round(high * mult_high))
         spans.append(match.span())
 
     for match in _iter_free(_PRICE_BUDGET, norm, spans):
@@ -359,6 +362,13 @@ def extract_price(text: str) -> tuple[PriceFacts, list[Span]]:
                 _update_max(round(value))
                 spans.append(match.span())
 
+    for match in _iter_free(_PRICE_STANDALONE, norm, spans):
+        value = _to_number(match.group(1))
+        unit = match.group(2)
+        rubles = round(value * _price_multiplier(unit))
+        _update_max(rubles)
+        spans.append(match.span())
+
     return PriceFacts(price_min, price_max), sorted(spans)
 
 
@@ -380,7 +390,7 @@ _AREA_UNIT = r"(?:м²|м2|кв\.?\s*метр\w*|кв\.?\s*м\.?|квадрат\
 
 #: «кухня от 8», «с кухней от 10 метров», «кухня 8-12», «кухня 10 м²».
 _KITCHEN = re.compile(
-    rf"(?:с\s+)?\bкухн\w*\s*[—:\-]?\s*"
+    rf"(?:с\s+)?\bкухн\w*\s*(?:чтоб\w*\s+)?(?:была\s+)?(?:больш\w+\s+)?[—:\-]?\s*"
     rf"(?:"
     rf"(?:от|не\s+меньше|минимум)\s+({_NUM})"  # 1: min
     rf"|(?:до|не\s+больше|максимум)\s+({_NUM})"  # 2: max
@@ -389,9 +399,9 @@ _KITCHEN = re.compile(
     rf")"
     rf"(?:\s*{_AREA_UNIT})?"
 )
-#: «площадь от 40», «общей площадью 50-70» (единица опциональна).
+#: «площадь от 40», «общей площадью 50-70», «общая от 60», «квадратов 60».
 _AREA_KEYWORD = re.compile(
-    rf"(?:общ\w+\s+)?\bплощад\w*\s*[—:\-]?\s*"
+    rf"(?:(?:общ\w+\s+)?\bплощад\w*(?:\s+общ\w+)?|\bобщ\w+|\bквадрат\w*)\s*[—:\-]?\s*"
     rf"(?:"
     rf"(?:от|не\s+меньше|минимум)\s+({_NUM})"  # 1: min
     rf"|(?:до|не\s+больше|максимум)\s+({_NUM})"  # 2: max
@@ -571,10 +581,13 @@ _FLOOR_RANGE_A = re.compile(r"\bс\s+(\d+)\s+(?:по|до)\s+(\d+)\s*(?:-?го)?
 _FLOOR_RANGE_B = re.compile(r"\bэтаж\w*\s*[—:\-]?\s*с\s+(\d+)\s+(?:по|до)\s+(\d+)")
 _FLOOR_RANGE_C = re.compile(r"\b(\d+)\s*[-–—]\s*(\d+)\s+этаж\w*")
 _FLOOR_RANGE_D = re.compile(r"\bэтаж\w*\s*[—:\-]?\s*(\d+)\s*[-–—]\s*(\d+)")
+_FLOOR_RANGE_E = re.compile(r"\bс\s+(\d+)\s+(?:по|до)\s+(\d+)\b")
 _FLOOR_MIN = re.compile(r"\b(?:не\s+ниже|от|начиная\s+с|с)\s+(\d+)(?:-?го)?\s+этаж\w*")
 _FLOOR_MAX = re.compile(r"\b(?:не\s+выше|до)\s+(\d+)(?:-?го)?\s+этаж\w*")
 _FLOOR_NOT_FIRST = re.compile(r"\b(?:не\s+(?:на\s+)?|кроме\s+|выше\s+)перв\w+(?:\s+этаж\w*)?")
-_FLOOR_HIGH = re.compile(r"\bвысок\w+\s+этаж\w*|\bэтаж\w*\s+повыше|\bповыше\s+этаж\w*")
+_FLOOR_HIGH = re.compile(
+    r"\bвысок\w+\s+этаж\w*|\bэтаж\w*\s+высок\w+|\bэтаж\w*\s+повыше|\bповыше\s+этаж\w*"
+)
 _FLOOR_NOT_LAST = re.compile(r"\b(?:не\s+|кроме\s+)(?:на\s+)?последн\w+(?:\s+этаж\w*)?")
 _FLOOR_LAST = re.compile(r"\b(?:на\s+)?последн\w+(?:\s+этаж\w*)?")
 #: Отрицание перед «последний …» — «не последний этаж» не должен дать last_floor.
@@ -592,7 +605,7 @@ def extract_floor(text: str) -> tuple[FloorFacts, list[Span]]:
 
     not_last = False
 
-    for pattern in (_FLOOR_RANGE_A, _FLOOR_RANGE_B, _FLOOR_RANGE_C, _FLOOR_RANGE_D):
+    for pattern in (_FLOOR_RANGE_A, _FLOOR_RANGE_B, _FLOOR_RANGE_C, _FLOOR_RANGE_D, _FLOOR_RANGE_E):
         for match in _iter_free(pattern, norm, spans):
             if floor_min is None:
                 floor_min = int(match.group(1))
