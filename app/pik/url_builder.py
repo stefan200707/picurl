@@ -44,10 +44,12 @@ def build_url(criteria: Criteria) -> str:
         query_params["rooms"] = ",".join(room_ids[r] for r in criteria.rooms)
 
     # 2. Отделка и заселение
-    # В url-builder `finish` == True добавляем в путь.
-    # `finish` == False уходит в warnings в парсере.
+    # В url-builder `finish` == True добавляем в путь 'finish'.
+    # `finish` == False добавляем в путь 'bez-otdelki'.
     if criteria.finish is True:
         path_segments.append("finish")
+    elif criteria.finish is False:
+        path_segments.append("bez-otdelki")
     if criteria.ready is True:
         path_segments.append("ready")
 

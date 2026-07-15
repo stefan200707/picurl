@@ -45,6 +45,7 @@
 |--------|----------|--------|--------|
 | Комнатность | `studio`, `one-room`, `two-room`, `three-room` (чип «3+» на сайте → `three-room`) | `/search/two-room` | ✅ |
 | Отделка «Готовая» | `finish` | `/search/two-room/finish` | ✅ |
+| Отделка «Без отделки» | `bez-otdelki` | `/search/two-room/bez-otdelki` | ✅ |
 | «Заселение сразу» | `ready` | `/search/two-room/ready` | ✅ |
 | Округ (Москва) | код округа, напр. `zao` | `/search/three-room/zao` | ✅ |
 | Метро | `m-<слаг-станции>` | `/search/two-room/m-aeroport-vnukovo` | ✅ |
