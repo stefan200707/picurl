@@ -237,3 +237,26 @@ def test_e2e_required_tags(client):
     warnings_str = " ".join(data["warnings"])
     assert "готовые квартиры" not in warnings_str
     assert "выгода" not in warnings_str
+
+
+def test_e2e_solncevo_bug(client):
+    """Bugfix: район Солнцево should not trigger Кунцево."""
+    text = (
+        "3к, от 70 м², кухня от 16 м², до 20 млн руб, чистовая отделка, "
+        "этаж 5–10, не крайний, район Солнцево, метро Озерная, только "
+        "готовые квартиры, без альтернативы, подешевле."
+    )
+    response = client.post("/build-url", json={"text": text})
+    assert response.status_code == 200
+    data = response.json()
+
+    # "Кунцево" shouldn't be in the URL or the criteria
+    districts = data["criteria"].get("districts", [])
+    assert "Кунцево" not in districts
+
+    # "Солнцево" should be matched as metro
+    metro_names = [
+        m["name"] if isinstance(m, dict) else getattr(m, "name", m)
+        for m in data["criteria"].get("metro", [])
+    ]
+    assert "Солнцево" in metro_names
