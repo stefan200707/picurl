@@ -86,6 +86,7 @@ JSON-справочниках (промпт 03).
 | `floorFrom` / `floorTo` | этаж (диапазон) | `floorFrom=5&floorTo=20` |
 | `notFirstFloor=1` | чекбокс «Не первый» | `notFirstFloor=1` |
 | `lastFloor=1` | чекбокс «Последний» | `lastFloor=1` |
+| `notLastFloor=1` | чекбокс «Не последний» | `notLastFloor=1` |
 | `timeOnFoot` | время до метро пешком, мин | `timeOnFoot=15` |
 | `timeOnTransport` | время до метро на транспорте, мин | `timeOnTransport=15` |
 | `sortBy` + `orderBy` | сортировка: `sortBy=price\|area`, `orderBy=asc\|desc` | `sortBy=price&orderBy=asc` |
