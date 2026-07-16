@@ -619,10 +619,14 @@ def extract_floor(text: str) -> tuple[FloorFacts, list[Span]]:
 
     for pattern in (_FLOOR_RANGE_A, _FLOOR_RANGE_B, _FLOOR_RANGE_C, _FLOOR_RANGE_D, _FLOOR_RANGE_E):
         for match in _iter_free(pattern, norm, spans):
+            f_min = int(match.group(1))
+            f_max = int(match.group(2))
+            if f_min > 200 or f_max > 200:
+                continue
             if floor_min is None:
-                floor_min = int(match.group(1))
+                floor_min = f_min
             if floor_max is None:
-                floor_max = int(match.group(2))
+                floor_max = f_max
             spans.append(match.span())
 
     for match in _iter_free(_FLOOR_MIN, norm, spans):
@@ -748,15 +752,32 @@ def extract_ready(text: str) -> tuple[bool | None, list[Span]]:
 # ---------------------------------------------------------------------------
 
 _SETTLEMENT_THIS_YEAR = re.compile(r"\b(?:заселение|сдача|въезд)\s+в\s+этом\s+году\b")
+_SETTLEMENT_YEAR_RANGE = re.compile(
+    r"\b(?:заселение|сдача|въезд)\s+с\s+(\d{4})\s+(?:по|до)\s+(\d{4})(?:\s+год\w*)?\b"
+)
+_SETTLEMENT_YEAR_EXACT = re.compile(
+    r"\b(?:заселение|сдача|въезд)\s+(?:в\s+)?(\d{4})(?:\s+год\w*)?\b"
+)
 
 
 def extract_settlement_year(text: str) -> tuple[int | None, int | None, list[Span]]:
-    """Извлечь сроки заселения (например 'в этом году')."""
+    """Извлечь сроки заселения (например 'в этом году', 'заселение с 2026 по 2027')."""
     norm = _normalize(text)
-    spans = [match.span() for match in _SETTLEMENT_THIS_YEAR.finditer(norm)]
-    if spans:
+    spans: list[Span] = []
+
+    for match in _iter_free(_SETTLEMENT_YEAR_RANGE, norm, spans):
+        spans.append(match.span())
+        return int(match.group(1)), int(match.group(2)), spans
+
+    for match in _iter_free(_SETTLEMENT_YEAR_EXACT, norm, spans):
+        spans.append(match.span())
+        return int(match.group(1)), int(match.group(1)), spans
+
+    for match in _iter_free(_SETTLEMENT_THIS_YEAR, norm, spans):
+        spans.append(match.span())
         current_year = datetime.now().year
         return current_year, current_year, spans
+
     return None, None, []
 
 
