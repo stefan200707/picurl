@@ -77,8 +77,6 @@ STOP_WORDS = {
     "но",
     "же",
     "только",
-    "районе",
-    "округе",
     "пик",
 }
 
@@ -248,7 +246,7 @@ def match_entities(text: str) -> tuple[list[EntityMatch], list[str]]:
 
         trigger_type, trigger_start = get_trigger_type(text_before)
 
-        kw_exact = {"округ", "жк", "район", "метро", "м"}
+        kw_exact = {"округ", "округе", "жк", "район", "районе", "метро", "м"}
         kw_partial = ["вид", "сануз", "пол", "балкон", "лоджи"]
         window_lower = window_text.lower()
         window_words_lower = [w.lower() for w in window_strings]
@@ -290,9 +288,12 @@ def match_entities(text: str) -> tuple[list[EntityMatch], list[str]]:
             top_matches = [r for r in good_res if best_score - r[1] < 5.0]
 
             matched_entities_info = []
-            for _matched_str, score, idx in top_matches:
+            for matched_str, score, idx in top_matches:
+                # Use QRatio as a tie-breaker when WRatio scores are similar (e.g. partial matches)
+                q_ratio = fuzz.QRatio(query_norm, matched_str)
+                adjusted_base_score = score + (q_ratio / 1000.0)
                 _, etype, entry = valid_choices[idx]
-                matched_entities_info.append((score, etype, entry))
+                matched_entities_info.append((adjusted_base_score, etype, entry))
 
             seen = set()
             unique_entities = []
