@@ -281,6 +281,8 @@ def test_extract_time_to_metro(text: str, expected: TimeFacts) -> None:
         ("с 5 по 20 этаж", FloorFacts(floor_min=5, floor_max=20)),
         ("с 5 до 20 этажа", FloorFacts(floor_min=5, floor_max=20)),
         ("этаж с 3 по 7", FloorFacts(floor_min=3, floor_max=7)),
+        ("этажность от 9 до 16", FloorFacts(floor_min=9, floor_max=16)),
+        ("от 9 до 16 этажа", FloorFacts(floor_min=9, floor_max=16)),
         ("5-20 этаж", FloorFacts(floor_min=5, floor_max=20)),
         ("не ниже 4 этажа", FloorFacts(floor_min=4)),
         ("с 6-го этажа", FloorFacts(floor_min=6)),

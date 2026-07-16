@@ -589,11 +589,11 @@ class FloorFacts(NamedTuple):
     not_last_floor: bool = False
 
 
-_FLOOR_RANGE_A = re.compile(r"\bс\s+(\d+)\s+(?:по|до)\s+(\d+)\s*(?:-?го)?\s*этаж\w*")
-_FLOOR_RANGE_B = re.compile(r"\bэтаж\w*\s*[—:\-]?\s*с\s+(\d+)\s+(?:по|до)\s+(\d+)")
+_FLOOR_RANGE_A = re.compile(r"\b(?:с|от)\s+(\d+)\s+(?:по|до)\s+(\d+)\s*(?:-?го)?\s*этаж\w*")
+_FLOOR_RANGE_B = re.compile(r"\bэтаж\w*\s*[—:\-]?\s*(?:с|от)\s+(\d+)\s+(?:по|до)\s+(\d+)")
 _FLOOR_RANGE_C = re.compile(r"\b(\d+)\s*[-–—]\s*(\d+)\s+этаж\w*")
 _FLOOR_RANGE_D = re.compile(r"\bэтаж\w*\s*[—:\-]?\s*(\d+)\s*[-–—]\s*(\d+)")
-_FLOOR_RANGE_E = re.compile(r"\bс\s+(\d+)\s+(?:по|до)\s+(\d+)\b")
+_FLOOR_RANGE_E = re.compile(r"\b(?:с|от)\s+(\d+)\s+(?:по|до)\s+(\d+)\b")
 _FLOOR_MIN = re.compile(r"\b(?:не\s+ниже|от|начиная\s+с|с)\s+(\d+)(?:-?го)?\s+этаж\w*")
 _FLOOR_MAX = re.compile(r"\b(?:не\s+выше|до)\s+(\d+)(?:-?го)?\s+этаж\w*")
 _FLOOR_NOT_FIRST = re.compile(r"\b(?:не\s+(?:на\s+)?|кроме\s+|выше\s+)перв\w+(?:\s+этаж\w*)?")
