@@ -1,6 +1,6 @@
 from urllib.parse import urlencode
 
-from app.parsing.schema import Criteria, Finish, HousingType, Rooms
+from app.parsing.schema import Criteria, Finish
 
 
 def build_url(criteria: Criteria) -> str:
@@ -27,21 +27,9 @@ def build_url(criteria: Criteria) -> str:
 
     # 1. Комнатность
     if len(criteria.rooms) == 1:
-        room_slugs = {
-            Rooms.STUDIO: "studio",
-            Rooms.ONE: "one-room",
-            Rooms.TWO: "two-room",
-            Rooms.THREE_PLUS: "three-room",
-        }
-        path_segments.append(room_slugs[criteria.rooms[0]])
+        path_segments.append(criteria.rooms[0].slug)
     elif len(criteria.rooms) > 1:
-        room_ids = {
-            Rooms.STUDIO: "-1",
-            Rooms.ONE: "1",
-            Rooms.TWO: "2",
-            Rooms.THREE_PLUS: "3",
-        }
-        query_params["rooms"] = ",".join(room_ids[r] for r in criteria.rooms)
+        query_params["rooms"] = ",".join(r.id for r in criteria.rooms)
 
     # 2. Отделка и заселение
     if len(criteria.finish) == 1:
@@ -107,77 +95,8 @@ def build_url(criteria: Criteria) -> str:
             if ids:
                 query_params["blocks"] = ",".join(ids)
 
-    # --- Query ---
-
-    # Цена (добавляем priceFrom=0, если задан только priceTo)
-    if criteria.price_min is not None:
-        query_params["priceFrom"] = str(criteria.price_min)
-    elif criteria.price_max is not None:
-        query_params["priceFrom"] = "0"
-
-    if criteria.price_max is not None:
-        query_params["priceTo"] = str(criteria.price_max)
-
-    # Площадь
-    if criteria.area_min is not None:
-        query_params["areaFrom"] = str(criteria.area_min)
-    if criteria.area_max is not None:
-        query_params["areaTo"] = str(criteria.area_max)
-
-    # Площадь кухни
-    if criteria.area_kitchen_min is not None:
-        query_params["areaKitchenFrom"] = str(criteria.area_kitchen_min)
-    if criteria.area_kitchen_max is not None:
-        query_params["areaKitchenTo"] = str(criteria.area_kitchen_max)
-
-    # Этаж
-    if criteria.floor_min is not None:
-        query_params["floorFrom"] = str(criteria.floor_min)
-    if criteria.floor_max is not None:
-        query_params["floorTo"] = str(criteria.floor_max)
-    if criteria.not_first_floor:
-        query_params["notFirstFloor"] = "1"
-    if criteria.last_floor:
-        query_params["lastFloor"] = "1"
-    if criteria.not_last_floor:
-        query_params["notLastFloor"] = "1"
-
-    # Время
-    if criteria.time_on_foot is not None:
-        query_params["timeOnFoot"] = str(criteria.time_on_foot)
-    if criteria.time_on_transport is not None:
-        query_params["timeOnTransport"] = str(criteria.time_on_transport)
-
-    # Сортировка
-    if criteria.sort is not None:
-        query_params["sortBy"] = criteria.sort.field
-        query_params["orderBy"] = criteria.sort.order
-
-    # Год и месяц сдачи
-    if criteria.settlement_year_from is not None:
-        query_params["settlementYearFrom"] = str(criteria.settlement_year_from)
-    if criteria.settlement_year_to is not None:
-        query_params["settlementYearTo"] = str(criteria.settlement_year_to)
-    if criteria.settlement_month_from is not None:
-        query_params["settlementMonthFrom"] = str(criteria.settlement_month_from)
-    if criteria.settlement_month_to is not None:
-        query_params["settlementMonthTo"] = str(criteria.settlement_month_to)
-
-    # Программы и опции
-    if criteria.current_benefit:
-        query_params["currentBenefit"] = criteria.current_benefit
-    if criteria.option_groups:
-        query_params["optionGroups"] = ",".join(criteria.option_groups)
-    if criteria.options:
-        query_params["options"] = ",".join(criteria.options)
-    if getattr(criteria, "required_tags", None):
-        query_params["requiredTags"] = ",".join(criteria.required_tags)
-
-    # Тип и статус
-    if criteria.housing_type == HousingType.FLATS_ONLY:
-        query_params["type"] = "1"
-    if criteria.only_available:
-        query_params["status"] = "free"
+    # Общие query-параметры добавляем в конец
+    query_params.update(criteria.to_query_dict())
 
     # Сборка URL
     base_url = "https://www.pik.ru/search"

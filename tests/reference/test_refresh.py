@@ -15,6 +15,7 @@ import pytest
 from app.reference import refresh as refresh_mod
 from app.reference.loader import REFERENCE_FILES, RefEntry
 from app.reference.refresh import (
+    BlockPayload,
     complexes_from_blocks,
     counties_from_blocks,
     districts_from_blocks,
@@ -79,7 +80,7 @@ class TestFetchBlocks:
         with make_client(BLOCKS_PAYLOAD) as client:
             blocks = fetch_blocks(client)
 
-        assert [b.get("id") for b in blocks[:2]] == [1108, 481]
+        assert [b.id for b in blocks[:2]] == [1108, 481]
 
     def test_raises_on_http_error(self) -> None:
         with make_client({}, status_code=503) as client, pytest.raises(httpx.HTTPStatusError):
@@ -93,7 +94,7 @@ class TestFetchBlocks:
 class TestExtractors:
     def test_complexes_have_both_url_forms(self) -> None:
         """ЖК: слаг (url без ведущего /) и числовой id — обе формы для url_builder."""
-        entries = complexes_from_blocks(BLOCKS_PAYLOAD)
+        entries = complexes_from_blocks([BlockPayload.model_validate(b) for b in BLOCKS_PAYLOAD])
 
         mpark = next(e for e in entries if e.name == "Мичуринский парк")
         assert mpark.slug == "mpark"
@@ -103,23 +104,25 @@ class TestExtractors:
         assert no_url.slug is None
 
     def test_complexes_skip_nameless(self) -> None:
-        names = [e.name for e in complexes_from_blocks(BLOCKS_PAYLOAD)]
+        payloads = [BlockPayload.model_validate(b) for b in BLOCKS_PAYLOAD]
+        names = [e.name for e in complexes_from_blocks(payloads)]
         assert None not in names
         assert len(names) == 4
 
     def test_counties_only_moscow_and_deduped(self) -> None:
-        entries = counties_from_blocks(BLOCKS_PAYLOAD)
+        entries = counties_from_blocks([BlockPayload.model_validate(b) for b in BLOCKS_PAYLOAD])
 
         assert [(e.name, e.slug) for e in entries] == [("ЗАО", "zao"), ("ВАО", "vao")]
 
     def test_metro_names_deduped_without_ids(self) -> None:
-        entries = metro_from_blocks(BLOCKS_PAYLOAD)
+        entries = metro_from_blocks([BlockPayload.model_validate(b) for b in BLOCKS_PAYLOAD])
 
         assert [e.name for e in entries] == ["Озёрная", "Щёлковская"]
         assert all(e.slug is None and e.id is None for e in entries)
 
     def test_districts_names_only(self) -> None:
-        names = [e.name for e in districts_from_blocks(BLOCKS_PAYLOAD)]
+        payloads = [BlockPayload.model_validate(b) for b in BLOCKS_PAYLOAD]
+        names = [e.name for e in districts_from_blocks(payloads)]
 
         assert names == ["Очаково-Матвеевское", "Гольяново", "Первомайский"]
 

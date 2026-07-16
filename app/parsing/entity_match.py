@@ -4,12 +4,14 @@ TODO(prompt 05): implement fuzzy entity matching.
 """
 
 import re
+from functools import cache
 from typing import NamedTuple
 
 from rapidfuzz import fuzz, process
 
 from app.parsing.rules import Span
 from app.parsing.schema import MatchedEntity
+from app.parsing.stopwords import LOCATION_MARKERS, STOP_WORDS
 from app.reference.loader import RefEntry, load_all, normalize
 
 SCORE_THRESHOLD = 80.0
@@ -22,6 +24,19 @@ TRIGGERED_SCORE_THRESHOLD = 75.0
 #: WRatio-скоринга, чтобы не терять опечатки/склонения (напр. «Бабушкинском
 #: районе» ~ «Бабушкинский район» = 86.5, «Рокоссовсого» ~ «Рокоссовского» = 96).
 STRICT_QRATIO_THRESHOLD = SCORE_THRESHOLD
+
+SCORE_BONUS_MARKER = 10.0
+SCORE_BONUS_PREP_MATCH = 5.0
+SCORE_PENALTY_PREP_MISMATCH = -5.0
+
+HIERARCHY_SCORES = {
+    "county": 0.5,
+    "district": 0.4,
+    "metro": 0.3,
+    "complex": 0.2,
+    "options": 0.1,
+    "option_groups": 0.0,
+}
 
 
 class EntityMatch(NamedTuple):
@@ -48,39 +63,10 @@ TRIGGERS = [
 
 COMPILED_TRIGGERS = [(re.compile(pat), ttype) for pat, ttype in TRIGGERS]
 
-STOP_WORDS = {
-    "в",
-    "на",
-    "у",
-    "с",
-    "по",
-    "и",
-    "или",
-    "для",
-    "к",
-    "от",
-    "до",
-    "за",
-    "около",
-    "рядом",
-    "хочу",
-    "ищу",
-    "квартиру",
-    "квартиры",
-    "квартира",
-    "куплю",
-    "мне",
-    "нужна",
-    "пожалуйста",
-    "подскажите",
-    "а",
-    "но",
-    "же",
-    "только",
-    "пик",
-}
+# STOP_WORDS imported from app.parsing.stopwords
 
 
+@cache
 def build_choices() -> list[tuple[str, str, RefEntry]]:
     data = load_all()
     choices = []
@@ -140,15 +126,15 @@ def _adjust_score(
 
     new_score = score
     if has_jk and etype == "complex":
-        new_score += 10.0
+        new_score += SCORE_BONUS_MARKER
     if has_district and etype == "district":
-        new_score += 10.0
+        new_score += SCORE_BONUS_MARKER
     if has_county and etype == "county":
-        new_score += 10.0
+        new_score += SCORE_BONUS_MARKER
     if has_metro and etype == "metro":
-        new_score += 10.0
+        new_score += SCORE_BONUS_MARKER
     if has_option and etype in ("options", "option_groups"):
-        new_score += 10.0
+        new_score += SCORE_BONUS_MARKER
 
     last_word_before = before_tokens[-1] if before_tokens else ""
     first_word_window = window_tokens[0] if window_tokens else ""
@@ -164,26 +150,18 @@ def _adjust_score(
         )
         if first_in_name:
             if etype in ("county", "district"):
-                new_score += 5.0
+                new_score += SCORE_BONUS_PREP_MATCH
             elif etype == "complex":
-                new_score -= 5.0
+                new_score += SCORE_PENALTY_PREP_MISMATCH
 
     if prep_v:
         first_in_name = first_word_window == "в" or any(
             first_word_window in name for name in entry_names
         )
         if first_in_name and etype == "complex":
-            new_score += 5.0
+            new_score += SCORE_BONUS_PREP_MATCH
 
-    hierarchy = {
-        "county": 0.5,
-        "district": 0.4,
-        "metro": 0.3,
-        "complex": 0.2,
-        "options": 0.1,
-        "option_groups": 0.0,
-    }
-    new_score += hierarchy.get(etype, 0.0)
+    new_score += HIERARCHY_SCORES.get(etype, 0.0)
 
     return new_score
 
@@ -238,7 +216,10 @@ def match_entities(text: str) -> tuple[list[EntityMatch], list[str]]:
 
         # Отсекаем окна, которые начинаются или заканчиваются на висячий союз/предлог
         # (если они часть устойчивого названия, они останутся внутри окна)
-        if window_strings[0].lower() in STOP_WORDS or window_strings[-1].lower() in STOP_WORDS:
+        bounds_stopwords = STOP_WORDS - LOCATION_MARKERS
+        first_w = window_strings[0].lower()
+        last_w = window_strings[-1].lower()
+        if first_w in bounds_stopwords or last_w in bounds_stopwords:
             continue
 
         # Формируем текст окна из очищенных токенов, чтобы знаки препинания не прилипали

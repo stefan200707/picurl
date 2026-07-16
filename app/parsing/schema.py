@@ -45,6 +45,26 @@ class Rooms(StrEnum):
     TWO = "two"
     THREE_PLUS = "three_plus"
 
+    @property
+    def slug(self) -> str:
+        slugs = {
+            Rooms.STUDIO: "studio",
+            Rooms.ONE: "one-room",
+            Rooms.TWO: "two-room",
+            Rooms.THREE_PLUS: "three-room",
+        }
+        return slugs[self]
+
+    @property
+    def id(self) -> str:
+        ids = {
+            Rooms.STUDIO: "-1",
+            Rooms.ONE: "1",
+            Rooms.TWO: "2",
+            Rooms.THREE_PLUS: "3",
+        }
+        return ids[self]
+
 
 #: Человекочитаемые метки комнатности для публичного представления критериев.
 ROOMS_LABELS: dict[Rooms, str] = {
@@ -197,7 +217,11 @@ class Criteria(BaseModel):
             {"rooms": "2", "price_max": 15000000,
              "metro": ["Аэропорт Внуково"], "finish": true, "sort": "price_asc"}
         """
-        public: dict[str, Any] = {}
+        public: dict[str, Any] = self.model_dump(exclude_none=True, exclude_unset=True)
+
+        # Очищаем то, что нужно преобразовать вручную
+        for k in ["rooms", "finish", "metro", "counties", "districts", "complexes"]:
+            public.pop(k, None)
 
         if self.rooms:
             labels = [ROOMS_LABELS[room] for room in self.rooms]
@@ -207,48 +231,111 @@ class Criteria(BaseModel):
             labels = [FINISH_LABELS[f] for f in self.finish]
             public["finish"] = labels[0] if len(labels) == 1 else labels
 
-        scalar_fields = (
-            "price_min",
-            "price_max",
-            "area_min",
-            "area_max",
-            "area_kitchen_min",
-            "area_kitchen_max",
-            "floor_min",
-            "floor_max",
-            "ready",
-            "time_on_foot",
-            "time_on_transport",
-            "settlement_year_from",
-            "settlement_year_to",
-            "settlement_month_from",
-            "settlement_month_to",
-            "current_benefit",
-            "view",
-        )
-        for field_name in scalar_fields:
-            value = getattr(self, field_name)
-            if value is not None:
-                public[field_name] = value
-
         for flag_name in ("not_first_floor", "last_floor", "not_last_floor", "only_available"):
-            if getattr(self, flag_name):
-                public[flag_name] = True
+            if not getattr(self, flag_name):
+                public.pop(flag_name, None)
 
         for entity_field in ("metro", "counties", "districts", "complexes"):
             entities: list[MatchedEntity] = getattr(self, entity_field)
             if entities:
                 public[entity_field] = [entity.name for entity in entities]
 
-        if self.sort is not None:
+        if "sort" in public:
             public["sort"] = self.sort.value
-        if self.housing_type is not None:
+
+        if "housing_type" in public:
             public["housing_type"] = self.housing_type.value
-        if self.option_groups:
-            public["option_groups"] = list(self.option_groups)
-        if self.options:
-            public["options"] = list(self.options)
-        if self.required_tags:
-            public["required_tags"] = list(self.required_tags)
+
+        # Списки выводим если они не пусты
+        for lst_f in ("option_groups", "options", "required_tags"):
+            val = getattr(self, lst_f)
+            if not val:
+                public.pop(lst_f, None)
+            else:
+                public[lst_f] = list(val)
 
         return public
+
+    def to_query_dict(self) -> dict[str, str]:
+        """Собирает общие query-параметры для url_builder и validator."""
+        query_params = {}
+
+        # 4. Цена (добавляем priceFrom=0, если задан только priceTo)
+        if self.price_min is not None:
+            query_params["priceFrom"] = str(self.price_min)
+        elif self.price_max is not None:
+            query_params["priceFrom"] = "0"
+
+        if self.price_max is not None:
+            query_params["priceTo"] = str(self.price_max)
+
+        # 5. Площадь
+        if self.area_min is not None:
+            query_params["areaFrom"] = str(self.area_min)
+        if self.area_max is not None:
+            query_params["areaTo"] = str(self.area_max)
+        if self.area_kitchen_min is not None:
+            query_params["areaKitchenFrom"] = str(self.area_kitchen_min)
+        if self.area_kitchen_max is not None:
+            query_params["areaKitchenTo"] = str(self.area_kitchen_max)
+
+        # 6. Этаж
+        if self.floor_min is not None:
+            query_params["floorFrom"] = str(self.floor_min)
+        if self.floor_max is not None:
+            query_params["floorTo"] = str(self.floor_max)
+        if self.not_first_floor:
+            query_params["notFirstFloor"] = "1"
+        if self.last_floor:
+            query_params["lastFloor"] = "1"
+        if self.not_last_floor:
+            query_params["notLastFloor"] = "1"
+
+        # 7. Время
+        if self.time_on_foot is not None:
+            query_params["timeOnFoot"] = str(self.time_on_foot)
+        if self.time_on_transport is not None:
+            query_params["timeOnTransport"] = str(self.time_on_transport)
+
+        # 8. Год и месяц сдачи
+        if self.settlement_year_from is not None:
+            query_params["settlementYearFrom"] = str(self.settlement_year_from)
+        if self.settlement_year_to is not None:
+            query_params["settlementYearTo"] = str(self.settlement_year_to)
+        if self.settlement_month_from is not None:
+            query_params["settlementMonthFrom"] = str(self.settlement_month_from)
+        if self.settlement_month_to is not None:
+            query_params["settlementMonthTo"] = str(self.settlement_month_to)
+
+        # 9. Программы и опции
+        if self.current_benefit:
+            query_params["currentBenefit"] = self.current_benefit
+        if self.option_groups:
+            query_params["optionGroups"] = ",".join(self.option_groups)
+        if self.options:
+            query_params["options"] = ",".join(self.options)
+        if getattr(self, "required_tags", None):
+            query_params["requiredTags"] = ",".join(self.required_tags)
+
+        # 10. Тип и статус
+        if self.housing_type == HousingType.FLATS_ONLY:
+            query_params["type"] = "1"
+        if self.only_available:
+            query_params["status"] = "free"
+
+        # 11. Сортировка
+        if self.sort:
+            if self.sort == Sort.PRICE_ASC:
+                query_params["sortBy"] = "price"
+                query_params["orderBy"] = "asc"
+            elif self.sort == Sort.PRICE_DESC:
+                query_params["sortBy"] = "price"
+                query_params["orderBy"] = "desc"
+            elif self.sort == Sort.AREA_ASC:
+                query_params["sortBy"] = "area"
+                query_params["orderBy"] = "asc"
+            elif self.sort == Sort.AREA_DESC:
+                query_params["sortBy"] = "area"
+                query_params["orderBy"] = "desc"
+
+        return query_params
