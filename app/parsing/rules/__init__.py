@@ -8,6 +8,8 @@ from .area import AreaFacts as AreaFacts
 from .area import extract_area
 from .core import Span, _normalize
 from .finish import extract_finish, extract_ready
+from .floor import FloorFacts as FloorFacts
+from .floor import extract_floor as extract_floor
 from .misc import (
     extract_fallback_metro,
     extract_housing_type,
@@ -20,9 +22,7 @@ from .misc import (
 from .price import PriceFacts as PriceFacts
 from .price import extract_price as extract_price
 from .rooms import extract_rooms as extract_rooms
-from .time import FloorFacts as FloorFacts
 from .time import TimeFacts as TimeFacts
-from .time import extract_floor as extract_floor
 from .time import extract_time_to_metro as extract_time_to_metro
 
 

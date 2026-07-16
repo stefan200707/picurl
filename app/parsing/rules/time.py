@@ -1,74 +1,34 @@
 import re
 from typing import NamedTuple
 
-from yargy import Parser, or_, rule
-from yargy.interpretation import fact
-from yargy.pipelines import morph_pipeline
-from yargy.predicates import dictionary
-from yargy.predicates import type as yargy_type
-
-from .core import Span, _iter_free, _normalize, _overlaps
-
-# --- Время до метро ---
+from .core import Span, _iter_free, _normalize
 
 
 class TimeFacts(NamedTuple):
     """Время до метро."""
-
     time_on_foot: int | None = None
     time_on_transport: int | None = None
 
+_PREP = r"(?:в|до|от|за|не\s+более|менее|на)"
+_MINUTES = r"(?:минут\w*|мин\w*)"
+_METRO = r"(?:метро|станци\w*)"
+_TRANSPORT = r"(?:транспорт\w*|машин\w*|авто|автомобил\w*)"
+_FOOT = r"(?:пешком|шаг\w*)"
 
-_TimeFact = fact("TimeFact", ["time"])
+_T_TRANS_1 = re.compile(
+    rf"\b(?:{_PREP}\s+)?(\d+)(?:\s+{_MINUTES})?(?:\s+{_PREP})?(?:\s+{_METRO})?(?:\s+{_PREP})?\s+"
+    rf"{_TRANSPORT}\b"
+)
+_T_TRANS_2 = re.compile(
+    rf"\b(?:{_PREP}\s+)?{_METRO}(?:\s+{_PREP})?\s+(\d+)(?:\s+{_MINUTES})?(?:\s+{_PREP})?\s+"
+    rf"{_TRANSPORT}\b"
+)
 
-_PREP = dictionary({"в", "до", "от", "за", "не более", "менее", "на"})
-_NUMBER_TOKEN = yargy_type("INT").interpretation(_TimeFact.time.custom(int))
-_MINUTES = morph_pipeline(["минута", "мин", "минут"])
-_METRO = morph_pipeline(["метро", "станция"])
-_TRANSPORT = morph_pipeline(["транспорт", "машина", "авто", "автомобиль", "транспортом"])
-_FOOT = morph_pipeline(["пешком", "шаг"])
-
-_TIME_ON_TRANSPORT_RULE = rule(
-    or_(
-        rule(
-            _PREP.optional(),
-            _NUMBER_TOKEN,
-            _MINUTES.optional(),
-            _PREP.optional(),
-            _METRO.optional(),
-            _PREP.optional(),
-            _TRANSPORT,
-        ),
-        rule(
-            _PREP.optional(),
-            _METRO,
-            _PREP.optional(),
-            _NUMBER_TOKEN,
-            _MINUTES.optional(),
-            _PREP.optional(),
-            _TRANSPORT,
-        ),
-    )
-).interpretation(_TimeFact)
-
-_TIME_ON_FOOT_RULE = rule(
-    or_(
-        rule(_PREP.optional(), _NUMBER_TOKEN, _MINUTES.optional(), _PREP.optional(), _METRO),
-        rule(
-            _PREP.optional(),
-            _METRO,
-            _PREP.optional(),
-            _NUMBER_TOKEN,
-            _MINUTES.optional(),
-            _FOOT.optional(),
-        ),
-        rule(_PREP.optional(), _NUMBER_TOKEN, _MINUTES, _FOOT),
-        rule(_PREP.optional(), _NUMBER_TOKEN, _MINUTES.optional(), _FOOT),
-    )
-).interpretation(_TimeFact)
-
-_parser_time_foot = Parser(_TIME_ON_FOOT_RULE)
-_parser_time_transport = Parser(_TIME_ON_TRANSPORT_RULE)
+_T_FOOT_1 = re.compile(rf"\b(?:{_PREP}\s+)?(\d+)(?:\s+{_MINUTES})?(?:\s+{_PREP})?\s+{_METRO}\b")
+_T_FOOT_2 = re.compile(
+    rf"\b(?:{_PREP}\s+)?{_METRO}(?:\s+{_PREP})?\s+(\d+)(?:\s+{_MINUTES})?(?:\s+{_FOOT})?\b"
+)
+_T_FOOT_3 = re.compile(rf"\b(?:{_PREP}\s+)?(\d+)(?:\s+{_MINUTES})?\s+{_FOOT}\b")
 
 
 def extract_time_to_metro(text: str) -> tuple[TimeFacts, list[Span]]:
@@ -79,106 +39,17 @@ def extract_time_to_metro(text: str) -> tuple[TimeFacts, list[Span]]:
     time_on_transport: int | None = None
 
     # Транспорт
-    for match in _parser_time_transport.findall(norm):
-        match_span = (match.span.start, match.span.stop)
-        if not _overlaps(match_span, spans):
+    for pattern in (_T_TRANS_1, _T_TRANS_2):
+        for match in _iter_free(pattern, norm, spans):
             if time_on_transport is None:
-                time_on_transport = match.fact.time
-            spans.append(match_span)
+                time_on_transport = int(match.group(1))
+            spans.append(match.span())
 
     # Пешком
-    for match in _parser_time_foot.findall(norm):
-        match_span = (match.span.start, match.span.stop)
-        if not _overlaps(match_span, spans):
+    for pattern in (_T_FOOT_1, _T_FOOT_2, _T_FOOT_3):
+        for match in _iter_free(pattern, norm, spans):
             if time_on_foot is None:
-                time_on_foot = match.fact.time
-            spans.append(match_span)
+                time_on_foot = int(match.group(1))
+            spans.append(match.span())
 
     return TimeFacts(time_on_foot, time_on_transport), sorted(spans)
-
-
-# ---------------------------------------------------------------------------
-# Этаж
-
-# ---------------------------------------------------------------------------
-
-
-class FloorFacts(NamedTuple):
-    """Ограничения по этажу."""
-
-    floor_min: int | None = None
-    floor_max: int | None = None
-    not_first_floor: bool = False
-    last_floor: bool = False
-    not_last_floor: bool = False
-
-
-_FLOOR_RANGE_A = re.compile(r"\b(?:с|от)\s+(\d+)\s+(?:по|до)\s+(\d+)\s*(?:-?го)?\s*этаж\w*")
-_FLOOR_RANGE_B = re.compile(r"\bэтаж\w*\s*[—:\-]?\s*(?:с|от)\s+(\d+)\s+(?:по|до)\s+(\d+)")
-_FLOOR_RANGE_C = re.compile(r"\b(\d+)\s*[-–—]\s*(\d+)\s+этаж\w*")
-_FLOOR_RANGE_D = re.compile(r"\bэтаж\w*\s*[—:\-]?\s*(\d+)\s*[-–—]\s*(\d+)")
-_FLOOR_RANGE_E = re.compile(r"\b(?:с|от)\s+(\d+)\s+(?:по|до)\s+(\d+)\b")
-_FLOOR_MIN = re.compile(r"\b(?:не\s+ниже|от|начиная\s+с|с)\s+(\d+)(?:-?го)?\s+этаж\w*")
-_FLOOR_MAX = re.compile(r"\b(?:не\s+выше|до)\s+(\d+)(?:-?го)?\s+этаж\w*")
-_FLOOR_NOT_FIRST = re.compile(r"\b(?:не\s+(?:на\s+)?|кроме\s+|выше\s+)перв\w+(?:\s+этаж\w*)?")
-_FLOOR_HIGH = re.compile(
-    r"\bвысок\w+\s+этаж\w*|\bэтаж\w*\s+высок\w+|\bэтаж\w*\s+повыше|\bповыше\s+этаж\w*"
-)
-_FLOOR_NOT_LAST = re.compile(r"\b(?:не\s+|кроме\s+)(?:на\s+)?последн\w+(?:\s+этаж\w*)?")
-_FLOOR_LAST = re.compile(r"\b(?:на\s+)?последн\w+(?:\s+этаж\w*)?")
-#: Отрицание перед «последний …» — «не последний этаж» не должен дать last_floor.
-_NEGATION_BEFORE = re.compile(r"(?:\bне|\bбез|\bтолько\s+не)\s+$")
-
-
-def extract_floor(text: str) -> tuple[FloorFacts, list[Span]]:
-    """Извлечь ограничения по этажу («с 5 по 20», «не первый», «последний»)."""
-    norm = _normalize(text)
-    spans: list[Span] = []
-    floor_min: int | None = None
-    floor_max: int | None = None
-    not_first = False
-    last = False
-
-    not_last = False
-
-    for pattern in (_FLOOR_RANGE_A, _FLOOR_RANGE_B, _FLOOR_RANGE_C, _FLOOR_RANGE_D, _FLOOR_RANGE_E):
-        for match in _iter_free(pattern, norm, spans):
-            f_min = int(match.group(1))
-            f_max = int(match.group(2))
-            if f_min > 200 or f_max > 200:
-                continue
-            if floor_min is None:
-                floor_min = f_min
-            if floor_max is None:
-                floor_max = f_max
-            spans.append(match.span())
-
-    for match in _iter_free(_FLOOR_MIN, norm, spans):
-        if floor_min is None:
-            floor_min = int(match.group(1))
-            spans.append(match.span())
-
-    for match in _iter_free(_FLOOR_MAX, norm, spans):
-        if floor_max is None:
-            floor_max = int(match.group(1))
-            spans.append(match.span())
-
-    for match in _iter_free(_FLOOR_NOT_FIRST, norm, spans):
-        not_first = True
-        spans.append(match.span())
-
-    for match in _iter_free(_FLOOR_HIGH, norm, spans):
-        not_first = True
-        spans.append(match.span())
-
-    for match in _iter_free(_FLOOR_NOT_LAST, norm, spans):
-        not_last = True
-        spans.append(match.span())
-
-    for match in _iter_free(_FLOOR_LAST, norm, spans):
-        if _NEGATION_BEFORE.search(norm[: match.start()]):
-            continue  # «не последний этаж» — в URL не выражается, уйдёт в warnings
-        last = True
-        spans.append(match.span())
-
-    return FloorFacts(floor_min, floor_max, not_first, last, not_last), sorted(spans)
