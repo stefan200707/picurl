@@ -5,8 +5,9 @@
 указывают на «понятые» куски исходного текста.
 """
 
-import pytest
 from datetime import datetime
+
+import pytest
 
 from app.parsing.rules import (
     AreaFacts,
@@ -397,12 +398,15 @@ def test_extract_ready(text: str, expected: bool | None) -> None:
         ("", None, None),
     ],
 )
-def test_extract_settlement_year(text: str, expected_min: int | None, expected_max: int | None) -> None:
+def test_extract_settlement_year(
+    text: str, expected_min: int | None, expected_max: int | None
+) -> None:
     y_min, y_max, spans = extract_settlement_year(text)
     assert y_min == expected_min
     assert y_max == expected_max
     has_value = y_min is not None or y_max is not None
     assert bool(spans) == has_value
+
 
 # ---------------------------------------------------------------------------
 # Сортировка
