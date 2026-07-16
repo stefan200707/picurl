@@ -296,10 +296,10 @@ def test_extract_time_to_metro(text: str, expected: TimeFacts) -> None:
         ("высокий этаж", FloorFacts(not_first_floor=True)),
         ("последний этаж", FloorFacts(last_floor=True)),
         ("на последнем этаже", FloorFacts(last_floor=True)),
-        ("не последний этаж", FloorFacts()),
-        ("не на последнем этаже", FloorFacts()),
-        ("кроме последнего", FloorFacts()),
-        ("этаж не первый и не последний", FloorFacts(not_first_floor=True)),
+        ("не последний этаж", FloorFacts(not_last_floor=True)),
+        ("не на последнем этаже", FloorFacts(not_last_floor=True)),
+        ("кроме последнего", FloorFacts(not_last_floor=True)),
+        ("этаж не первый и не последний", FloorFacts(not_first_floor=True, not_last_floor=True)),
         # Комбинация
         (
             "не первый и не выше 12 этажа",
