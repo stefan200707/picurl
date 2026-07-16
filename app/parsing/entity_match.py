@@ -270,6 +270,11 @@ def match_entities(text: str) -> tuple[list[EntityMatch], list[str]]:
             if r[1] < item_threshold:
                 continue
 
+            if is_triggered:
+                clean_wratio = fuzz.WRatio(clean_window, matched_str)
+                if clean_wratio < TRIGGERED_SCORE_THRESHOLD:
+                    continue
+
             # Строгая проверка QRatio для окон без релевантного триггера и для «синтетических» окон
             if (is_synthetic or not is_triggered) and fuzz.QRatio(
                 query_norm, matched_str
