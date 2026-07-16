@@ -15,133 +15,7 @@ class ParseResult(NamedTuple):
     warnings: list[str]
 
 
-STOP_WORDS = {
-    "в",
-    "на",
-    "у",
-    "с",
-    "по",
-    "и",
-    "или",
-    "для",
-    "к",
-    "от",
-    "до",
-    "за",
-    "около",
-    "рядом",
-    "хочу",
-    "ищу",
-    "квартиру",
-    "квартиры",
-    "квартира",
-    "куплю",
-    "мне",
-    "нужна",
-    "пожалуйста",
-    "подскажите",
-    "а",
-    "но",
-    "же",
-    "только",
-    "район",
-    "районе",
-    "района",
-    "районам",
-    "округ",
-    "округе",
-    "округа",
-    "округам",
-    "жк",
-    "метров",
-    "кв",
-    "м",
-    "метро",
-    "этаж",
-    "сортировка",
-    "сортировки",
-    "остальные",
-    "варианты",
-    "недвижимости",
-    "покупку",
-    "рассматриваю",
-    "обязательно",
-    "была",
-    "чтобы",
-    "желательно",
-    "цена",
-    "пик",
-    "семьи",
-    "семья",
-    "большой",
-    # --- Дискурсивные связки/слова-паразиты без собственного смысла ---
-    "может",
-    "лучше",
-    "ну",
-    "хотя",
-    "если",
-    "будет",
-    "то",
-    "готов",
-    "рассмотреть",
-    "главное",
-    "поближе",
-    "смысле",
-    "где-нибудь",
-    "был",
-    "было",
-    "были",
-    "быть",
-    "отсортируй",
-    "сортировать",
-    "хата",
-    "хату",
-    "хаты",
-    "купить",
-    "шоб",
-    "не",
-    "интересует",
-    "новострой",
-    "ищем",
-    "нет",
-    "кароче",
-    "короче",
-    "здравствуйте",
-    "мы",
-    "молодая",
-    "себе",
-    "жилье",
-    "жильё",
-    "жилья",
-    "нас",
-    "просторная",
-    "хорошая",
-    "мцд",
-    "мцк",
-    "бабок",
-    "бабки",
-    "кв-ра",
-    "бюджет",
-    "готовы",
-    "потратить",
-    "очень",
-    "важно",
-    "так",
-    "как",
-    "любим",
-    "готовить",
-    "рассматриваем",
-    "сразу",
-    "заехать",
-    "жить",
-    "чтоб",
-    "большая",
-    "вариант",
-    "любить",
-    "рассматривать",
-    "люберцы",
-    "раменки",
-}
+from app.parsing.stopwords import STOP_WORDS
 
 
 def _merge_spans(spans: list[Span]) -> list[Span]:
@@ -242,36 +116,19 @@ def parse(text: str) -> ParseResult:
         + len(criteria.districts)
         + len(criteria.complexes)
     )
-    if total_locations > 1:
-        for m in criteria.metro:
-            if not m.id:
-                warnings.append(f'Метро "{m.name}" не имеет id, в ссылку не попадет')
-        for c in criteria.counties:
-            if not c.id:
-                warnings.append(f'Округ "{c.name}" не имеет id, в ссылку не попадет')
-        for d in criteria.districts:
-            if not d.id:
-                warnings.append(f'Район "{d.name}" не имеет id, в ссылку не попадет')
-        for cx in criteria.complexes:
-            if not cx.id:
-                warnings.append(f'ЖК "{cx.name}" не имеет id, в ссылку не попадет')
-    elif total_locations == 1:
-        if len(criteria.metro) == 1:
-            m = criteria.metro[0]
-            if not m.slug and not m.id:
-                warnings.append(f'Метро "{m.name}" не имеет slug или id, в ссылку не попадет')
-        elif len(criteria.counties) == 1:
-            c = criteria.counties[0]
-            if not c.slug and not c.id:
-                warnings.append(f'Округ "{c.name}" не имеет slug или id, в ссылку не попадет')
-        elif len(criteria.districts) == 1:
-            d = criteria.districts[0]
-            if not d.id:
-                warnings.append(f'Район "{d.name}" не имеет id, в ссылку не попадет')
-        elif len(criteria.complexes) == 1:
-            cx = criteria.complexes[0]
-            if not cx.id:
-                warnings.append(f'ЖК "{cx.name}" не имеет id, в ссылку не попадет')
+    if total_locations > 0:
+        for entity_field, entity_name in [("metro", "Метро"), ("counties", "Округ"), ("districts", "Район"), ("complexes", "ЖК")]:
+            for ent in getattr(criteria, entity_field):
+                if total_locations > 1:
+                    if not ent.id:
+                        warnings.append(f'{entity_name} "{ent.name}" не имеет id, в ссылку не попадет')
+                else:
+                    if entity_field in ("districts", "complexes"):
+                        if not ent.id:
+                            warnings.append(f'{entity_name} "{ent.name}" не имеет id, в ссылку не попадет')
+                    else:
+                        if not ent.slug and not ent.id:
+                            warnings.append(f'{entity_name} "{ent.name}" не имеет slug или id, в ссылку не попадет')
 
     # 4. Вычисляем нераспознанные куски текста
     merged_consumed = _merge_spans(consumed)

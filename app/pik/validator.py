@@ -1,3 +1,4 @@
+import logging
 from urllib.parse import urlencode
 
 import httpx
@@ -20,20 +21,14 @@ async def validate(criteria: Criteria, client: httpx.AsyncClient) -> ValidationR
     Это единственный сетевой вызов в рантайме. Если сеть недоступна, возвращает
     result_count=None, не роняя сервис (best-effort).
     """
-    params: dict[str, str] = {}
+    params: dict[str, str] = criteria.to_query_dict()
 
     # 1. Комнатность
     if criteria.rooms:
-        room_ids = {
-            Rooms.STUDIO: "-1",
-            Rooms.ONE: "1",
-            Rooms.TWO: "2",
-            Rooms.THREE_PLUS: "3",
-        }
-        params["rooms"] = ",".join(room_ids[r] for r in criteria.rooms)
+        params["rooms"] = ",".join(r.id for r in criteria.rooms)
 
     # 2. Отделка и заселение
-    if criteria.finish is True:
+    if criteria.finish:
         params["finish"] = "1"
     if criteria.ready is True:
         params["ready"] = "1"
@@ -56,67 +51,6 @@ async def validate(criteria: Criteria, client: httpx.AsyncClient) -> ValidationR
         if ids:
             params["blocks"] = ",".join(ids)
 
-    # 4. Цена
-    if criteria.price_min is not None:
-        params["priceFrom"] = str(criteria.price_min)
-    elif criteria.price_max is not None:
-        params["priceFrom"] = "0"
-
-    if criteria.price_max is not None:
-        params["priceTo"] = str(criteria.price_max)
-
-    # 5. Площадь
-    if criteria.area_min is not None:
-        params["areaFrom"] = str(criteria.area_min)
-    if criteria.area_max is not None:
-        params["areaTo"] = str(criteria.area_max)
-    if criteria.area_kitchen_min is not None:
-        params["areaKitchenFrom"] = str(criteria.area_kitchen_min)
-    if criteria.area_kitchen_max is not None:
-        params["areaKitchenTo"] = str(criteria.area_kitchen_max)
-
-    # 6. Этаж
-    if criteria.floor_min is not None:
-        params["floorFrom"] = str(criteria.floor_min)
-    if criteria.floor_max is not None:
-        params["floorTo"] = str(criteria.floor_max)
-    if criteria.not_first_floor:
-        params["notFirstFloor"] = "1"
-    if criteria.last_floor:
-        params["lastFloor"] = "1"
-    if criteria.not_last_floor:
-        params["notLastFloor"] = "1"
-
-    # 7. Время
-    if criteria.time_on_foot is not None:
-        params["timeOnFoot"] = str(criteria.time_on_foot)
-    if criteria.time_on_transport is not None:
-        params["timeOnTransport"] = str(criteria.time_on_transport)
-
-    # 8. Год и месяц сдачи
-    if criteria.settlement_year_from is not None:
-        params["settlementYearFrom"] = str(criteria.settlement_year_from)
-    if criteria.settlement_year_to is not None:
-        params["settlementYearTo"] = str(criteria.settlement_year_to)
-    if criteria.settlement_month_from is not None:
-        params["settlementMonthFrom"] = str(criteria.settlement_month_from)
-    if criteria.settlement_month_to is not None:
-        params["settlementMonthTo"] = str(criteria.settlement_month_to)
-
-    # 9. Программы и опции
-    if criteria.current_benefit:
-        params["currentBenefit"] = criteria.current_benefit
-    if criteria.option_groups:
-        params["optionGroups"] = ",".join(criteria.option_groups)
-    if criteria.options:
-        params["options"] = ",".join(criteria.options)
-
-    # 10. Тип и статус
-    if criteria.housing_type == HousingType.FLATS_ONLY:
-        params["type"] = "1"
-    if criteria.only_available:
-        params["status"] = "free"
-
     # Сортировка не влияет на количество результатов (count),
     # поэтому её можно не передавать в backend-API,
     # но передадим для полной аутентичности если нужно.
@@ -132,9 +66,12 @@ async def validate(criteria: Criteria, client: httpx.AsyncClient) -> ValidationR
         data = response.json()
         count = data.get("count", 0)
         return ValidationResult(result_count=count, ok=count > 0)
-    except httpx.RequestError:
+    except httpx.RequestError as e:
+        logging.warning("Ошибка запроса при валидации: %s", e, exc_info=True)
         return ValidationResult(result_count=None, ok=True, warning="выдача не проверена")
-    except httpx.HTTPStatusError:
+    except httpx.HTTPStatusError as e:
+        logging.warning("Ошибка статуса при валидации: %s", e, exc_info=True)
         return ValidationResult(result_count=None, ok=True, warning="выдача не проверена")
-    except (ValueError, TypeError, KeyError):
+    except (ValueError, TypeError) as e:
+        logging.warning("Ошибка парсинга ответа при валидации: %s", e, exc_info=True)
         return ValidationResult(result_count=None, ok=True, warning="выдача не проверена")
