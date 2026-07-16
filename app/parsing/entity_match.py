@@ -246,42 +246,53 @@ def match_entities(text: str) -> tuple[list[EntityMatch], list[str]]:
 
         trigger_type, trigger_start = get_trigger_type(text_before)
 
-        kw_exact = {"округ", "округе", "жк", "район", "районе", "метро", "м"}
+        triggered_types = set()
+        if trigger_type:
+            triggered_types.add(trigger_type)
+            
         kw_partial = ["вид", "сануз", "пол", "балкон", "лоджи"]
         window_lower = window_text.lower()
         window_words_lower = [w.lower() for w in window_strings]
 
-        has_keyword = (
-            any(kw in window_words_lower for kw in kw_exact)
-            or any(kw in window_lower for kw in kw_partial)
-            or any(kw in text_before[-30:].lower() for kw in kw_partial)
-        )
+        if any(kw in window_words_lower for kw in ["округ", "округе"]):
+            triggered_types.add("county")
+        if "жк" in window_words_lower:
+            triggered_types.add("complex")
+        if any(kw in window_words_lower for kw in ["район", "районе"]):
+            triggered_types.add("district")
+        if any(kw in window_words_lower for kw in ["метро", "м"]):
+            triggered_types.add("metro")
+        if any(kw in window_lower for kw in kw_partial) or any(kw in text_before[-30:].lower() for kw in kw_partial):
+            triggered_types.add("options")
+            triggered_types.add("option_groups")
 
         query_norm = normalize(window_text)
-        threshold = TRIGGERED_SCORE_THRESHOLD if trigger_type or has_keyword else SCORE_THRESHOLD
-
+        
         valid_choices = choices
 
         choice_strings = [c[0] for c in valid_choices]
         if not choice_strings:
             continue
 
-        res = process.extract(query_norm, choice_strings, scorer=fuzz.WRatio, limit=10)
+        res = process.extract(query_norm, choice_strings, scorer=fuzz.WRatio, limit=100)
 
-        good_res = [r for r in res if r[1] >= threshold]
-        if good_res and (is_synthetic or not (trigger_type or has_keyword)):
-            # Строгая проверка QRatio: WRatio завышает оценку для коротких/служебных слов,
-            # случайно похожих на длинное имя сущности («мы» ~ «Мытищи», «молодая» ~
-            # «Молодежная»). Заглавная буква не признак имени собственного (первое слово
-            # предложения тоже с большой буквы) — сама по себе не освобождает от проверки.
-            # «Синтетические» окна (эвристика союзов, слова из разных мест текста) всегда
-            # проверяются строго, даже при наличии триггера/ключевого слова.
-            filtered_res = []
-            for r in good_res:
-                matched_str = choice_strings[r[2]]
-                if fuzz.QRatio(query_norm, matched_str) >= STRICT_QRATIO_THRESHOLD:
-                    filtered_res.append(r)
-            good_res = filtered_res
+        good_res = []
+        for r in res:
+            matched_str = choice_strings[r[2]]
+            _, etype, entry = valid_choices[r[2]]
+            
+            is_triggered = etype in triggered_types
+            
+            item_threshold = TRIGGERED_SCORE_THRESHOLD if is_triggered else SCORE_THRESHOLD
+            if r[1] < item_threshold:
+                continue
+                
+            # Строгая проверка QRatio для окон без релевантного триггера и для «синтетических» окон
+            if is_synthetic or not is_triggered:
+                if fuzz.QRatio(query_norm, matched_str) < STRICT_QRATIO_THRESHOLD:
+                    continue
+                    
+            good_res.append(r)
 
         if good_res:
             best_score = good_res[0][1]
