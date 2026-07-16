@@ -31,6 +31,7 @@ from pathlib import Path
 from typing import Any
 
 import httpx
+from pydantic import BaseModel, RootModel
 
 from app.reference.loader import DATA_DIR, REFERENCE_FILES, RefEntry, normalize
 
@@ -42,56 +43,90 @@ BLOCKS_PARAMS: dict[str, str] = {"types": "1,2", "metadata": "1"}
 REFRESHABLE = ("complexes", "counties", "metro", "districts")
 
 
-def fetch_blocks(client: httpx.Client) -> list[dict[str, Any]]:
+class LocationChild(BaseModel):
+    name: str | None = None
+    url: str | None = None
+
+
+class LocationParent(BaseModel):
+    name: str | None = None
+
+
+class Locations(BaseModel):
+    parent: LocationParent | None = None
+    child: LocationChild | None = None
+
+
+class BlockPayload(BaseModel):
+    id: int | None = None
+    name: str | None = None
+    url: str | None = None
+    locations: Locations | None = None
+    metro: str | None = None
+    district: str | None = None
+
+
+class BlocksResponse(RootModel[list[BlockPayload]]):
+    pass
+
+
+def fetch_blocks(client: httpx.Client) -> list[BlockPayload]:
     """Скачать список ЖК с ``api.pik.ru/v2/block``."""
     response = client.get(BLOCKS_URL, params=BLOCKS_PARAMS)
     response.raise_for_status()
     payload = response.json()
     if not isinstance(payload, list):
         raise ValueError(f"Неожиданный ответ {BLOCKS_URL}: ожидался список ЖК")
-    return payload
+    return BlocksResponse.model_validate(payload).root
 
 
-def complexes_from_blocks(blocks: list[dict[str, Any]]) -> list[RefEntry]:
+async def fetch_blocks_async(client: httpx.AsyncClient) -> list[BlockPayload]:
+    """Асинхронная версия скачивания списка ЖК."""
+    response = await client.get(BLOCKS_URL, params=BLOCKS_PARAMS)
+    response.raise_for_status()
+    payload = response.json()
+    if not isinstance(payload, list):
+        raise ValueError(f"Неожиданный ответ {BLOCKS_URL}: ожидался список ЖК")
+    return BlocksResponse.model_validate(payload).root
+
+
+def complexes_from_blocks(blocks: list[BlockPayload]) -> list[RefEntry]:
     """ЖК: имя, слаг (``url`` без ведущего ``/``) и числовой id для ``blocks``."""
     entries: list[RefEntry] = []
     for block in blocks:
-        name = block.get("name")
-        if not name:
+        if not block.name:
             continue
-        url = block.get("url") or ""
+        url = block.url or ""
         slug = url.strip("/") or None
-        block_id = block.get("id")
         entries.append(
-            RefEntry(name=name, slug=slug, id=str(block_id) if block_id is not None else None)
+            RefEntry(name=block.name, slug=slug, id=str(block.id) if block.id is not None else None)
         )
     return _dedupe(entries)
 
 
-def counties_from_blocks(blocks: list[dict[str, Any]]) -> list[RefEntry]:
+def counties_from_blocks(blocks: list[BlockPayload]) -> list[RefEntry]:
     """Округа Москвы: имя и слаг из ``locations.child`` (id front-API не отдаёт)."""
     entries: list[RefEntry] = []
     for block in blocks:
-        locations = block.get("locations") or {}
-        parent = locations.get("parent") or {}
-        child = locations.get("child") or {}
-        if parent.get("name") != "Москва":
+        if not block.locations or not block.locations.parent or not block.locations.child:
             continue
-        name = child.get("name")
+        if block.locations.parent.name != "Москва":
+            continue
+        name = block.locations.child.name
         if not name:
             continue
-        entries.append(RefEntry(name=name, slug=child.get("url") or None))
+        entries.append(RefEntry(name=name, slug=block.locations.child.url or None))
     return _dedupe(entries)
 
 
-def metro_from_blocks(blocks: list[dict[str, Any]]) -> list[RefEntry]:
+def metro_from_blocks(blocks: list[BlockPayload]) -> list[RefEntry]:
     """Станции метро, упомянутые у ЖК (только имена; слаг/GUID — вручную)."""
-    return _dedupe(RefEntry(name=block["metro"]) for block in blocks if block.get("metro"))
+    return _dedupe(RefEntry(name=block.metro) for block in blocks if block.metro)
 
 
-def districts_from_blocks(blocks: list[dict[str, Any]]) -> list[RefEntry]:
+def districts_from_blocks(blocks: list[BlockPayload]) -> list[RefEntry]:
     """Районы, упомянутые у ЖК (только имена; id для ``districtLocations`` — вручную)."""
-    return _dedupe(RefEntry(name=block["district"]) for block in blocks if block.get("district"))
+    return _dedupe(RefEntry(name=block.district) for block in blocks if block.district)
 
 
 def _dedupe(entries: Any) -> list[RefEntry]:
@@ -165,6 +200,28 @@ def load_existing(path: Path) -> list[RefEntry]:
 def refresh(client: httpx.Client, data_dir: Path = DATA_DIR) -> dict[str, int]:
     """Обновить справочники в ``data_dir``; вернуть итоговые размеры по файлам."""
     blocks = fetch_blocks(client)
+    fetched_by_kind: dict[str, list[RefEntry]] = {
+        "complexes": complexes_from_blocks(blocks),
+        "counties": counties_from_blocks(blocks),
+        "metro": metro_from_blocks(blocks),
+        "districts": districts_from_blocks(blocks),
+    }
+
+    counts: dict[str, int] = {}
+    for kind in REFRESHABLE:
+        path = data_dir / REFERENCE_FILES[kind]
+        merged = merge_entries(load_existing(path), fetched_by_kind[kind], kind)
+        write_entries(path, merged)
+        counts[kind] = len(merged)
+    return counts
+
+
+async def run_refresh(data_dir: Path = DATA_DIR) -> dict[str, int]:
+    """Асинхронная обёртка для использования в эндпоинтах."""
+    headers = {"User-Agent": "picurl-refresh/0.1 (+https://github.com/stefan200707/picurl)"}
+    async with httpx.AsyncClient(timeout=30, headers=headers) as client:
+        blocks = await fetch_blocks_async(client)
+
     fetched_by_kind: dict[str, list[RefEntry]] = {
         "complexes": complexes_from_blocks(blocks),
         "counties": counties_from_blocks(blocks),

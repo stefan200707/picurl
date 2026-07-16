@@ -3,7 +3,7 @@
 import pytest
 from pydantic import ValidationError
 
-from app.main import BuildUrlRequest, BuildUrlResponse
+from app.api.schemas import BuildUrlRequest, BuildUrlResponse
 from app.parsing.schema import Criteria, HousingType, MatchedEntity, Rooms, Sort
 
 
