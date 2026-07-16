@@ -19,7 +19,7 @@ _FLOOR_RANGE_B = re.compile(r"\bэтаж\w*\s*[—:\-]?\s*(?:с|от)\s+(\d+)\s+
 _FLOOR_RANGE_C = re.compile(r"\b(\d+)\s*[-–—]\s*(\d+)\s+этаж\w*")
 _FLOOR_RANGE_D = re.compile(r"\bэтаж\w*\s*[—:\-]?\s*(\d+)\s*[-–—]\s*(\d+)")
 _FLOOR_RANGE_E = re.compile(r"\b(?:с|от)\s+(\d+)\s+(?:по|до)\s+(\d+)\b")
-_FLOOR_MIN = re.compile(r"\b(?:не\s+ниже|от|начиная\s+с|с)\s+(\d+)(?:-?го)?\s+этаж\w*")
+_FLOOR_MIN = re.compile(r"\b(?:не\s+ниже|от|начиная\s+с|с|выше)\s+(\d+)(?:-?го)?\s+этаж\w*")
 _FLOOR_MAX = re.compile(r"\b(?:не\s+выше|до)\s+(\d+)(?:-?го)?\s+этаж\w*")
 _FLOOR_NOT_FIRST = re.compile(r"\b(?:не\s+(?:на\s+)?|кроме\s+|выше\s+)перв\w+(?:\s+этаж\w*)?")
 _FLOOR_HIGH = re.compile(
@@ -53,14 +53,14 @@ def extract_floor(text: str) -> tuple[FloorFacts, list[Span]]:
                 floor_max = f_max
             spans.append(match.span())
 
-    for match in _iter_free(_FLOOR_MIN, norm, spans):
-        if floor_min is None:
-            floor_min = int(match.group(1))
-            spans.append(match.span())
-
     for match in _iter_free(_FLOOR_MAX, norm, spans):
         if floor_max is None:
             floor_max = int(match.group(1))
+            spans.append(match.span())
+
+    for match in _iter_free(_FLOOR_MIN, norm, spans):
+        if floor_min is None:
+            floor_min = int(match.group(1))
             spans.append(match.span())
 
     for match in _iter_free(_FLOOR_NOT_FIRST, norm, spans):
