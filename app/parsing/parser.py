@@ -6,6 +6,7 @@ from typing import NamedTuple
 from app.parsing.entity_match import match_entities
 from app.parsing.rules import Span, apply_rules
 from app.parsing.schema import Criteria
+from app.parsing.stopwords import STOP_WORDS
 
 
 class ParseResult(NamedTuple):
@@ -13,9 +14,6 @@ class ParseResult(NamedTuple):
 
     criteria: Criteria
     warnings: list[str]
-
-
-from app.parsing.stopwords import STOP_WORDS
 
 
 def _merge_spans(spans: list[Span]) -> list[Span]:
@@ -117,18 +115,31 @@ def parse(text: str) -> ParseResult:
         + len(criteria.complexes)
     )
     if total_locations > 0:
-        for entity_field, entity_name in [("metro", "Метро"), ("counties", "Округ"), ("districts", "Район"), ("complexes", "ЖК")]:
+        fields = [
+            ("metro", "Метро"),
+            ("counties", "Округ"),
+            ("districts", "Район"),
+            ("complexes", "ЖК"),
+        ]
+        for entity_field, entity_name in fields:
             for ent in getattr(criteria, entity_field):
                 if total_locations > 1:
                     if not ent.id:
-                        warnings.append(f'{entity_name} "{ent.name}" не имеет id, в ссылку не попадет')
+                        warnings.append(
+                            f'{entity_name} "{ent.name}" не имеет id, в ссылку не попадет'
+                        )
                 else:
                     if entity_field in ("districts", "complexes"):
                         if not ent.id:
-                            warnings.append(f'{entity_name} "{ent.name}" не имеет id, в ссылку не попадет')
+                            warnings.append(
+                                f'{entity_name} "{ent.name}" не имеет id, в ссылку не попадет'
+                            )
                     else:
                         if not ent.slug and not ent.id:
-                            warnings.append(f'{entity_name} "{ent.name}" не имеет slug или id, в ссылку не попадет')
+                            warnings.append(
+                                f'{entity_name} "{ent.name}" '
+                                "не имеет slug или id, в ссылку не попадет"
+                            )
 
     # 4. Вычисляем нераспознанные куски текста
     merged_consumed = _merge_spans(consumed)

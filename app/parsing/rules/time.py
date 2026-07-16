@@ -1,4 +1,3 @@
-
 import re
 from typing import NamedTuple
 
@@ -183,5 +182,3 @@ def extract_floor(text: str) -> tuple[FloorFacts, list[Span]]:
         spans.append(match.span())
 
     return FloorFacts(floor_min, floor_max, not_first, last, not_last), sorted(spans)
-
-

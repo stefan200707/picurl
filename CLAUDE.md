@@ -210,13 +210,14 @@ Entrypoint FastAPI объявлен в `pyproject.toml` (`[tool.fastapi] entrypo
 
 ```
 app/
-  main.py            # FastAPI-app, health, POST /build-url (501-заглушка) + модели API
-  parsing/           # schema.py — Criteria; rules.py — regex-правила; parser.py — фасад парсера; entity_match.py — матчинг сущностей (готовы)
-  reference/         # *.json — справочники; loader.py — загрузка/кэш; refresh.py — обновление (готовы)
-  pik/               # url_builder.py (готов), validator.py — заглушки
+  main.py            # FastAPI-app, health
+  api/               # эндпоинты (endpoints.py) и pydantic-модели API (schemas.py)
+  parsing/           # schema.py — Criteria; rules/ — пакет regex-правил; parser.py — фасад; entity_match.py — матчинг; stopwords.py — стопслова
+  reference/         # *.json — справочники; loader.py — загрузка/кэш; refresh.py — обновление
+  pik/               # url_builder.py — генератор URL; validator.py — проверка URL
 tests/               # pytest; integration/ — E2E тесты; test_health.py — smoke; parsing/ — Criteria/API + rules; reference/ — loader+refresh
 docs/                # pik-url-schema.md — спецификация URL-схемы pik.ru (источник правды)
-prompts/             # декомпозиция задачи (см. ниже)
+prompts/             # декомпозиция задачи
 ```
 
 ---

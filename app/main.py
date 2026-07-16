@@ -1,9 +1,8 @@
-"""FastAPI application: health check and the POST /build-url endpoint (stub).
+"""FastAPI application: health check and entrypoint.
 
-Здесь же живут модели HTTP-контракта `BuildUrlRequest`/`BuildUrlResponse`
-(решение промпта 02: это слой API, а не парсинга; внутренний контракт критериев —
-`app.parsing.schema.Criteria`, его публичное представление для поля ``criteria``
-ответа даёт ``Criteria.to_public_dict()``).
+Модели HTTP-контракта вынесены в `app.api.schemas`, а эндпоинты в `app.api.endpoints`.
+Внутренний контракт критериев — `app.parsing.schema.Criteria`, его публичное
+представление для поля ``criteria`` ответа даёт ``Criteria.to_public_dict()``.
 """
 
 from contextlib import asynccontextmanager

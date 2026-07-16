@@ -4,15 +4,14 @@ TODO(prompt 05): implement fuzzy entity matching.
 """
 
 import re
+from functools import cache
 from typing import NamedTuple
 
 from rapidfuzz import fuzz, process
 
-from functools import cache
-
 from app.parsing.rules import Span
 from app.parsing.schema import MatchedEntity
-from app.parsing.stopwords import STOP_WORDS, LOCATION_MARKERS
+from app.parsing.stopwords import LOCATION_MARKERS, STOP_WORDS
 from app.reference.loader import RefEntry, load_all, normalize
 
 SCORE_THRESHOLD = 80.0
@@ -218,7 +217,9 @@ def match_entities(text: str) -> tuple[list[EntityMatch], list[str]]:
         # Отсекаем окна, которые начинаются или заканчиваются на висячий союз/предлог
         # (если они часть устойчивого названия, они останутся внутри окна)
         bounds_stopwords = STOP_WORDS - LOCATION_MARKERS
-        if window_strings[0].lower() in bounds_stopwords or window_strings[-1].lower() in bounds_stopwords:
+        first_w = window_strings[0].lower()
+        last_w = window_strings[-1].lower()
+        if first_w in bounds_stopwords or last_w in bounds_stopwords:
             continue
 
         # Формируем текст окна из очищенных токенов, чтобы знаки препинания не прилипали

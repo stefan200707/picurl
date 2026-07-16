@@ -2,6 +2,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
+
 class BuildUrlRequest(BaseModel):
     """Запрос: свободный текст с пожеланиями к квартире."""
 

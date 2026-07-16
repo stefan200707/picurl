@@ -1,6 +1,6 @@
 from urllib.parse import urlencode
 
-from app.parsing.schema import Criteria, Finish, HousingType, Rooms
+from app.parsing.schema import Criteria, Finish
 
 
 def build_url(criteria: Criteria) -> str:

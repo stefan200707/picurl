@@ -1,4 +1,3 @@
-
 import re
 
 from app.parsing.schema import Finish
@@ -88,5 +87,3 @@ def extract_ready(text: str) -> tuple[bool | None, list[Span]]:
     norm = _normalize(text)
     spans = [match.span() for match in _READY.finditer(norm)]
     return (True, spans) if spans else (None, [])
-
-

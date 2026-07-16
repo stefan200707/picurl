@@ -1,4 +1,3 @@
-
 import re
 
 from app.parsing.schema import Rooms
@@ -119,5 +118,3 @@ def extract_rooms(text: str) -> tuple[list[Rooms], list[Span]]:
     found.sort(key=lambda item: (item[0], item[1]))
     unique = list(dict.fromkeys(room for _, _, room in found))
     return unique, sorted(spans)
-
-

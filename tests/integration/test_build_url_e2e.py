@@ -4,8 +4,8 @@ import httpx
 import pytest
 from fastapi.testclient import TestClient
 
-from app.main import app
 from app.api.endpoints import get_http_client
+from app.main import app
 
 
 @pytest.fixture

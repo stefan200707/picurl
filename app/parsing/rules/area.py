@@ -1,4 +1,3 @@
-
 import re
 from typing import NamedTuple
 
@@ -106,5 +105,3 @@ def extract_area(text: str) -> tuple[AreaFacts, list[Span]]:
             spans.append(match.span())
 
     return AreaFacts(area_min, area_max, kitchen_min, kitchen_max), sorted(spans)
-
-

@@ -89,5 +89,3 @@ def _to_number(raw: str) -> float:
     """Разобрать число из текста: разделители тысяч, запятая как точка."""
     cleaned = re.sub(r"[\s\xa0\u202f]", "", raw).replace(",", ".")
     return float(cleaned)
-
-

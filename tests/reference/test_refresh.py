@@ -104,7 +104,8 @@ class TestExtractors:
         assert no_url.slug is None
 
     def test_complexes_skip_nameless(self) -> None:
-        names = [e.name for e in complexes_from_blocks([BlockPayload.model_validate(b) for b in BLOCKS_PAYLOAD])]
+        payloads = [BlockPayload.model_validate(b) for b in BLOCKS_PAYLOAD]
+        names = [e.name for e in complexes_from_blocks(payloads)]
         assert None not in names
         assert len(names) == 4
 
@@ -120,7 +121,8 @@ class TestExtractors:
         assert all(e.slug is None and e.id is None for e in entries)
 
     def test_districts_names_only(self) -> None:
-        names = [e.name for e in districts_from_blocks([BlockPayload.model_validate(b) for b in BLOCKS_PAYLOAD])]
+        payloads = [BlockPayload.model_validate(b) for b in BLOCKS_PAYLOAD]
+        names = [e.name for e in districts_from_blocks(payloads)]
 
         assert names == ["Очаково-Матвеевское", "Гольяново", "Первомайский"]
 

@@ -1,6 +1,5 @@
-from datetime import datetime
-
 import re
+from datetime import datetime
 
 from app.parsing.schema import HousingType, Sort
 
@@ -167,5 +166,3 @@ def extract_fallback_metro(text: str) -> tuple[list[str], list[Span]]:
         fragments.append(match.group(1))
         spans.append(match.span())
     return fragments, spans
-
-

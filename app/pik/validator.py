@@ -4,7 +4,7 @@ from urllib.parse import urlencode
 import httpx
 from pydantic import BaseModel
 
-from app.parsing.schema import Criteria, HousingType, Rooms
+from app.parsing.schema import Criteria
 
 
 class ValidationResult(BaseModel):

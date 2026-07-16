@@ -1,27 +1,39 @@
 """Regex-правила извлечения структурных фактов из свободного текста (промпт 04)."""
 
 from typing import NamedTuple
+
 from app.parsing.schema import Criteria
 
+from .area import AreaFacts as AreaFacts
+from .area import extract_area
 from .core import Span, _normalize
-from .rooms import extract_rooms
-from .price import extract_price, PriceFacts
-from .area import extract_area, AreaFacts
-from .time import extract_time_to_metro, TimeFacts
-from .time import extract_floor, FloorFacts
 from .finish import extract_finish, extract_ready
 from .misc import (
-    extract_settlement_year, extract_sort, extract_required_tags,
-    extract_housing_type, extract_only_available, extract_unsupported,
-    extract_fallback_metro
+    extract_fallback_metro,
+    extract_housing_type,
+    extract_only_available,
+    extract_required_tags,
+    extract_settlement_year,
+    extract_sort,
+    extract_unsupported,
 )
+from .price import PriceFacts as PriceFacts
+from .price import extract_price as extract_price
+from .rooms import extract_rooms as extract_rooms
+from .time import FloorFacts as FloorFacts
+from .time import TimeFacts as TimeFacts
+from .time import extract_floor as extract_floor
+from .time import extract_time_to_metro as extract_time_to_metro
+
 
 class RulesOutcome(NamedTuple):
     """Результат работы всех правил агрегатора."""
+
     criteria: Criteria
     consumed: list[Span]
     unsupported: list[tuple[str, str]]
     fallback_metro: list[tuple[str, Span]]
+
 
 def apply_rules(text: str) -> RulesOutcome:
     """Прогнать все правила по тексту и собрать итоговый Criteria."""
@@ -111,7 +123,7 @@ def apply_rules(text: str) -> RulesOutcome:
     consumed.extend(spans)
 
     fm_names, spans = extract_fallback_metro(norm)
-    fallback_metro_tuples = list(zip(fm_names, spans))
+    fallback_metro_tuples = list(zip(fm_names, spans, strict=False))
 
     return RulesOutcome(
         criteria=criteria,

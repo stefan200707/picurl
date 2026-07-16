@@ -1,4 +1,3 @@
-
 import re
 from typing import NamedTuple
 
@@ -158,5 +157,3 @@ def extract_price(text: str) -> tuple[PriceFacts, list[Span]]:
         spans.append(match.span())
 
     return PriceFacts(price_min, price_max), sorted(spans)
-
-

@@ -31,7 +31,7 @@ from pathlib import Path
 from typing import Any
 
 import httpx
-from pydantic import BaseModel, Field, RootModel
+from pydantic import BaseModel, RootModel
 
 from app.reference.loader import DATA_DIR, REFERENCE_FILES, RefEntry, normalize
 
@@ -47,12 +47,15 @@ class LocationChild(BaseModel):
     name: str | None = None
     url: str | None = None
 
+
 class LocationParent(BaseModel):
     name: str | None = None
+
 
 class Locations(BaseModel):
     parent: LocationParent | None = None
     child: LocationChild | None = None
+
 
 class BlockPayload(BaseModel):
     id: int | None = None
@@ -61,6 +64,7 @@ class BlockPayload(BaseModel):
     locations: Locations | None = None
     metro: str | None = None
     district: str | None = None
+
 
 class BlocksResponse(RootModel[list[BlockPayload]]):
     pass
@@ -74,6 +78,7 @@ def fetch_blocks(client: httpx.Client) -> list[BlockPayload]:
     if not isinstance(payload, list):
         raise ValueError(f"Неожиданный ответ {BLOCKS_URL}: ожидался список ЖК")
     return BlocksResponse.model_validate(payload).root
+
 
 async def fetch_blocks_async(client: httpx.AsyncClient) -> list[BlockPayload]:
     """Асинхронная версия скачивания списка ЖК."""
@@ -216,7 +221,7 @@ async def run_refresh(data_dir: Path = DATA_DIR) -> dict[str, int]:
     headers = {"User-Agent": "picurl-refresh/0.1 (+https://github.com/stefan200707/picurl)"}
     async with httpx.AsyncClient(timeout=30, headers=headers) as client:
         blocks = await fetch_blocks_async(client)
-    
+
     fetched_by_kind: dict[str, list[RefEntry]] = {
         "complexes": complexes_from_blocks(blocks),
         "counties": counties_from_blocks(blocks),

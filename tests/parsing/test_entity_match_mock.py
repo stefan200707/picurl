@@ -19,6 +19,7 @@ def mock_load_all():
 @patch("app.parsing.entity_match.load_all", side_effect=mock_load_all)
 def test_ambiguity_county_priority(mock_fn):
     from app.parsing.entity_match import build_choices
+
     build_choices.cache_clear()
     # Without context, County > District > Complex
     matches, _warnings = match_entities("ищу квартиру: Западный")
@@ -29,6 +30,7 @@ def test_ambiguity_county_priority(mock_fn):
 @patch("app.parsing.entity_match.load_all", side_effect=mock_load_all)
 def test_ambiguity_preposition_na(mock_fn):
     from app.parsing.entity_match import build_choices
+
     build_choices.cache_clear()
     # "на" favors county
     matches, _warnings = match_entities("на Западный")
@@ -39,6 +41,7 @@ def test_ambiguity_preposition_na(mock_fn):
 @patch("app.parsing.entity_match.load_all", side_effect=mock_load_all)
 def test_ambiguity_preposition_v(mock_fn):
     from app.parsing.entity_match import build_choices
+
     build_choices.cache_clear()
     # "в" favors complex
     matches, _warnings = match_entities("в Западный")
@@ -49,6 +52,7 @@ def test_ambiguity_preposition_v(mock_fn):
 @patch("app.parsing.entity_match.load_all", side_effect=mock_load_all)
 def test_ambiguity_context_jk(mock_fn):
     from app.parsing.entity_match import build_choices
+
     build_choices.cache_clear()
     # "ЖК" strongly favors complex
     matches, _warnings = match_entities("в жк Западный")

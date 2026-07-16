@@ -8,8 +8,8 @@ from app.api.schemas import BuildUrlRequest, BuildUrlResponse
 from app.parsing.parser import parse
 from app.pik.url_builder import build_url as pik_build_url
 from app.pik.validator import validate
-from app.reference.refresh import run_refresh
 from app.reference.loader import clear_cache
+from app.reference.refresh import run_refresh
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["build-url"])
@@ -83,8 +83,9 @@ async def refresh_dicts():
         await run_refresh()
         clear_cache()
         from app.parsing.entity_match import build_choices
+
         build_choices.cache_clear()
         return {"status": "ok", "message": "Справочники успешно обновлены, кэш сброшен."}
     except Exception as e:
         logger.error("Ошибка при обновлении справочников: %s", e, exc_info=True)
-        raise HTTPException(status_code=500, detail="Ошибка при обновлении справочников.")
+        raise HTTPException(status_code=500, detail="Ошибка при обновлении справочников.") from e
