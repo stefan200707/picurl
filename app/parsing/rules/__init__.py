@@ -80,8 +80,6 @@ def apply_rules(text: str) -> RulesOutcome:
         criteria.not_first_floor = True
     if floor.last_floor:
         criteria.last_floor = True
-    if floor.not_last_floor:
-        criteria.not_last_floor = True
     consumed.extend(spans)
 
     finish_list, spans = extract_finish(norm)
