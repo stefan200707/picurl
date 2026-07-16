@@ -11,6 +11,12 @@ _SETTLEMENT_THIS_YEAR = re.compile(r"\b(?:заселение|сдача|въез
 _SETTLEMENT_YEAR_RANGE = re.compile(
     r"\b(?:заселение|сдача|въезд)\s+с\s+(\d{4})\s+(?:по|до)\s+(\d{4})(?:\s+год\w*)?\b"
 )
+_SETTLEMENT_YEAR_MAX = re.compile(
+    r"\b(?:заселение|сдача|въезд)\s+(?:до|по|не\s+позднее)\s+(\d{4})(?:\s+год\w*)?\b"
+)
+_SETTLEMENT_YEAR_MIN = re.compile(
+    r"\b(?:заселение|сдача|въезд)\s+(?:с|от|после|не\s+раннее|не\s+ранее)\s+(\d{4})(?:\s+год\w*)?\b"
+)
 _SETTLEMENT_YEAR_EXACT = re.compile(
     r"\b(?:заселение|сдача|въезд)\s+(?:в\s+)?(\d{4})(?:\s+год\w*)?\b"
 )
@@ -24,6 +30,14 @@ def extract_settlement_year(text: str) -> tuple[int | None, int | None, list[Spa
     for match in _iter_free(_SETTLEMENT_YEAR_RANGE, norm, spans):
         spans.append(match.span())
         return int(match.group(1)), int(match.group(2)), spans
+
+    for match in _iter_free(_SETTLEMENT_YEAR_MAX, norm, spans):
+        spans.append(match.span())
+        return None, int(match.group(1)), spans
+
+    for match in _iter_free(_SETTLEMENT_YEAR_MIN, norm, spans):
+        spans.append(match.span())
+        return int(match.group(1)), None, spans
 
     for match in _iter_free(_SETTLEMENT_YEAR_EXACT, norm, spans):
         spans.append(match.span())

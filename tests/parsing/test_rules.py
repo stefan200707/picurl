@@ -5,6 +5,8 @@
 указывают на «понятые» куски исходного текста.
 """
 
+from datetime import datetime
+
 import pytest
 
 from app.parsing.rules import (
@@ -21,6 +23,7 @@ from app.parsing.rules import (
     extract_price,
     extract_ready,
     extract_rooms,
+    extract_settlement_year,
     extract_sort,
     extract_time_to_metro,
     extract_unsupported,
@@ -286,6 +289,7 @@ def test_extract_time_to_metro(text: str, expected: TimeFacts) -> None:
         ("5-20 этаж", FloorFacts(floor_min=5, floor_max=20)),
         ("не ниже 4 этажа", FloorFacts(floor_min=4)),
         ("с 6-го этажа", FloorFacts(floor_min=6)),
+        ("выше 7 этажа", FloorFacts(floor_min=7)),
         ("не выше 10 этажа", FloorFacts(floor_max=10)),
         ("до 9 этажа", FloorFacts(floor_max=9)),
         ("не первый", FloorFacts(not_first_floor=True)),
@@ -377,6 +381,31 @@ def test_extract_ready(text: str, expected: bool | None) -> None:
     ready, spans = extract_ready(text)
     assert ready is expected
     assert bool(spans) == bool(expected)
+
+
+@pytest.mark.parametrize(
+    ("text", "expected_min", "expected_max"),
+    [
+        ("заселение в 2030 году", 2030, 2030),
+        ("сдача 2026", 2026, 2026),
+        ("заселение с 2026 по 2028", 2026, 2028),
+        ("въезд в этом году", datetime.now().year, datetime.now().year),
+        ("заселение до 2030 года", None, 2030),
+        ("заселение не позднее 2027", None, 2027),
+        ("сдача от 2025 года", 2025, None),
+        ("заселение после 2026", 2026, None),
+        ("что-то другое", None, None),
+        ("", None, None),
+    ],
+)
+def test_extract_settlement_year(
+    text: str, expected_min: int | None, expected_max: int | None
+) -> None:
+    y_min, y_max, spans = extract_settlement_year(text)
+    assert y_min == expected_min
+    assert y_max == expected_max
+    has_value = y_min is not None or y_max is not None
+    assert bool(spans) == has_value
 
 
 # ---------------------------------------------------------------------------
