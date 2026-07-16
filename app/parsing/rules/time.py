@@ -6,8 +6,10 @@ from .core import Span, _iter_free, _normalize
 
 class TimeFacts(NamedTuple):
     """Время до метро."""
+
     time_on_foot: int | None = None
     time_on_transport: int | None = None
+
 
 _PREP = r"(?:в|до|от|за|не\s+более|менее|на)"
 _MINUTES = r"(?:минут\w*|мин\w*)"

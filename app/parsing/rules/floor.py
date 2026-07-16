@@ -6,11 +6,13 @@ from .core import Span, _iter_free, _normalize
 
 class FloorFacts(NamedTuple):
     """Ограничения по этажу."""
+
     floor_min: int | None = None
     floor_max: int | None = None
     not_first_floor: bool = False
     last_floor: bool = False
     not_last_floor: bool = False
+
 
 _FLOOR_RANGE_A = re.compile(r"\b(?:с|от)\s+(\d+)\s+(?:по|до)\s+(\d+)\s*(?:-?го)?\s*этаж\w*")
 _FLOOR_RANGE_B = re.compile(r"\bэтаж\w*\s*[—:\-]?\s*(?:с|от)\s+(\d+)\s+(?:по|до)\s+(\d+)")
@@ -27,6 +29,7 @@ _FLOOR_NOT_LAST = re.compile(r"\b(?:не\s+|кроме\s+)(?:на\s+)?после
 _FLOOR_LAST = re.compile(r"\b(?:на\s+)?последн\w+(?:\s+этаж\w*)?")
 #: Отрицание перед «последний …» — «не последний этаж» не должен дать last_floor.
 _NEGATION_BEFORE = re.compile(r"(?:\bне|\bбез|\bтолько\s+не)\s+$")
+
 
 def extract_floor(text: str) -> tuple[FloorFacts, list[Span]]:
     """Извлечь ограничения по этажу («с 5 по 20», «не первый», «последний»)."""
