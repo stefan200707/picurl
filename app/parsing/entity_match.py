@@ -249,7 +249,7 @@ def match_entities(text: str) -> tuple[list[EntityMatch], list[str]]:
         triggered_types = set()
         if trigger_type:
             triggered_types.add(trigger_type)
-            
+
         kw_partial = ["вид", "сануз", "пол", "балкон", "лоджи"]
         window_lower = window_text.lower()
         window_words_lower = [w.lower() for w in window_strings]
@@ -262,12 +262,14 @@ def match_entities(text: str) -> tuple[list[EntityMatch], list[str]]:
             triggered_types.add("district")
         if any(kw in window_words_lower for kw in ["метро", "м"]):
             triggered_types.add("metro")
-        if any(kw in window_lower for kw in kw_partial) or any(kw in text_before[-30:].lower() for kw in kw_partial):
+        if any(kw in window_lower for kw in kw_partial) or any(
+            kw in text_before[-30:].lower() for kw in kw_partial
+        ):
             triggered_types.add("options")
             triggered_types.add("option_groups")
 
         query_norm = normalize(window_text)
-        
+
         valid_choices = choices
 
         choice_strings = [c[0] for c in valid_choices]
@@ -280,18 +282,19 @@ def match_entities(text: str) -> tuple[list[EntityMatch], list[str]]:
         for r in res:
             matched_str = choice_strings[r[2]]
             _, etype, entry = valid_choices[r[2]]
-            
+
             is_triggered = etype in triggered_types
-            
+
             item_threshold = TRIGGERED_SCORE_THRESHOLD if is_triggered else SCORE_THRESHOLD
             if r[1] < item_threshold:
                 continue
-                
+
             # Строгая проверка QRatio для окон без релевантного триггера и для «синтетических» окон
-            if is_synthetic or not is_triggered:
-                if fuzz.QRatio(query_norm, matched_str) < STRICT_QRATIO_THRESHOLD:
-                    continue
-                    
+            if (is_synthetic or not is_triggered) and fuzz.QRatio(
+                query_norm, matched_str
+            ) < STRICT_QRATIO_THRESHOLD:
+                continue
+
             good_res.append(r)
 
         if good_res:
