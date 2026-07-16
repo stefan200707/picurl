@@ -11,7 +11,6 @@ class FloorFacts(NamedTuple):
     floor_max: int | None = None
     not_first_floor: bool = False
     last_floor: bool = False
-    not_last_floor: bool = False
 
 
 _FLOOR_RANGE_A = re.compile(r"\b(?:с|от)\s+(\d+)\s+(?:по|до)\s+(\d+)\s*(?:-?го)?\s*этаж\w*")
@@ -25,10 +24,9 @@ _FLOOR_NOT_FIRST = re.compile(r"\b(?:не\s+(?:на\s+)?|кроме\s+|выше\
 _FLOOR_HIGH = re.compile(
     r"\bвысок\w+\s+этаж\w*|\bэтаж\w*\s+высок\w+|\bэтаж\w*\s+повыше|\bповыше\s+этаж\w*"
 )
-_FLOOR_NOT_LAST = re.compile(r"\b(?:не\s+|кроме\s+)(?:на\s+)?последн\w+(?:\s+этаж\w*)?")
 _FLOOR_LAST = re.compile(r"\b(?:на\s+)?последн\w+(?:\s+этаж\w*)?")
 #: Отрицание перед «последний …» — «не последний этаж» не должен дать last_floor.
-_NEGATION_BEFORE = re.compile(r"(?:\bне|\bбез|\bтолько\s+не)\s+$")
+_NEGATION_BEFORE = re.compile(r"(?:\bне|\bбез|\bтолько\s+не|\bкроме)\s+$")
 
 
 def extract_floor(text: str) -> tuple[FloorFacts, list[Span]]:
@@ -39,7 +37,6 @@ def extract_floor(text: str) -> tuple[FloorFacts, list[Span]]:
     floor_max: int | None = None
     not_first = False
     last = False
-    not_last = False
 
     for pattern in (_FLOOR_RANGE_A, _FLOOR_RANGE_B, _FLOOR_RANGE_C, _FLOOR_RANGE_D, _FLOOR_RANGE_E):
         for match in _iter_free(pattern, norm, spans):
@@ -71,14 +68,10 @@ def extract_floor(text: str) -> tuple[FloorFacts, list[Span]]:
         not_first = True
         spans.append(match.span())
 
-    for match in _iter_free(_FLOOR_NOT_LAST, norm, spans):
-        not_last = True
-        spans.append(match.span())
-
     for match in _iter_free(_FLOOR_LAST, norm, spans):
         if _NEGATION_BEFORE.search(norm[: match.start()]):
             continue  # «не последний этаж» — в URL не выражается, уйдёт в warnings
         last = True
         spans.append(match.span())
 
-    return FloorFacts(floor_min, floor_max, not_first, last, not_last), sorted(spans)
+    return FloorFacts(floor_min, floor_max, not_first, last), sorted(spans)

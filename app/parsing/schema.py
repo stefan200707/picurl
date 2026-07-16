@@ -162,7 +162,6 @@ class Criteria(BaseModel):
     floor_max: int | None = Field(default=None, ge=1)
     not_first_floor: bool = False
     last_floor: bool = False
-    not_last_floor: bool = False
 
     # --- Отделка и заселение -------------------------------------------------
     finish: list[Finish] = Field(default_factory=list)
@@ -231,7 +230,7 @@ class Criteria(BaseModel):
             labels = [FINISH_LABELS[f] for f in self.finish]
             public["finish"] = labels[0] if len(labels) == 1 else labels
 
-        for flag_name in ("not_first_floor", "last_floor", "not_last_floor", "only_available"):
+        for flag_name in ("not_first_floor", "last_floor", "only_available"):
             if not getattr(self, flag_name):
                 public.pop(flag_name, None)
 
@@ -288,8 +287,6 @@ class Criteria(BaseModel):
             query_params["notFirstFloor"] = "1"
         if self.last_floor:
             query_params["lastFloor"] = "1"
-        if self.not_last_floor:
-            query_params["notLastFloor"] = "1"
 
         # 7. Время
         if self.time_on_foot is not None:

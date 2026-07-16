@@ -120,7 +120,6 @@ def test_build_url_other_query_params():
         floor_max=5,
         not_first_floor=True,
         last_floor=True,
-        not_last_floor=True,
         time_on_foot=15,
         time_on_transport=20,
         settlement_year_from=2025,
@@ -144,7 +143,6 @@ def test_build_url_other_query_params():
     assert "floorTo=5" in url
     assert "notFirstFloor=1" in url
     assert "lastFloor=1" in url
-    assert "notLastFloor=1" in url
     assert "timeOnFoot=15" in url
     assert "timeOnTransport=20" in url
     assert "settlementYearFrom=2025" in url
