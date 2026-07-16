@@ -26,7 +26,7 @@ _FLOOR_HIGH = re.compile(
 )
 _FLOOR_LAST = re.compile(r"\b(?:на\s+)?последн\w+(?:\s+этаж\w*)?")
 #: Отрицание перед «последний …» — «не последний этаж» не должен дать last_floor.
-_NEGATION_BEFORE = re.compile(r"(?:\bне|\bбез|\bтолько\s+не)\s+$")
+_NEGATION_BEFORE = re.compile(r"(?:\bне|\bбез|\bтолько\s+не|\bкроме)\s+$")
 
 
 def extract_floor(text: str) -> tuple[FloorFacts, list[Span]]:
