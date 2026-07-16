@@ -62,11 +62,14 @@ def test_e2e_full_cycle_success(client, mock_validator_client):
 
 def test_e2e_acceptance_criteria(client):
     """Acceptance criteria test from prompt."""
-    text = "хочу двушку у метро Каширская, до метро до 19 минут пешком, этажность от 9 до 16, сдача с 2026 по 2028, до 30 млн"
+    text = (
+        "хочу двушку у метро Каширская, до метро до 19 минут пешком, "
+        "этажность от 9 до 16, сдача с 2026 по 2028, до 30 млн"
+    )
     response = client.post("/build-url", json={"text": text})
     assert response.status_code == 200
     data = response.json()
-    
+
     assert data["criteria"]["rooms"] == "2"
     assert data["criteria"]["price_max"] == 30000000
     assert data["criteria"]["time_on_foot"] == 19
@@ -75,7 +78,7 @@ def test_e2e_acceptance_criteria(client):
     assert data["criteria"]["metro"] == ["Каширская"]
     assert data["criteria"]["floor_min"] == 9
     assert data["criteria"]["floor_max"] == 16
-    
+
     warnings_str = " ".join(data["warnings"])
     assert "этажность от 9 до 16" not in warnings_str
 
