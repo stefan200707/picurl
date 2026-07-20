@@ -194,13 +194,15 @@ regex скомпилированы один раз на уровне модул�
 ### Стек
 
 Python 3.12 · FastAPI · pydantic v2 · httpx · rapidfuzz · pytest · uv · ruff.
-Для v2 (ИИ-обогащение) добавлены: Anthropic SDK, Postgres (с pgvector) и pydantic-settings.
+Для v2 (ИИ-обогащение) добавлены: Anthropic SDK, PostgreSQL 15+ (с pgvector), sentence-transformers, asyncpg, и pydantic-settings.
 Entrypoint FastAPI объявлен в `pyproject.toml` (`[tool.fastapi] entrypoint = "app.main:app"`).
 
 ### Команды
 
 - Установка: `uv sync`
 - Запуск dev-сервера: `uv run fastapi dev` (или `uv run uvicorn app.main:app --reload`)
+- Запуск БД ИИ (pgvector): `docker compose up -d postgres`
+- Накатывание миграций: `psql $DATABASE_URL -f app/ai/migrations/01_memory_tables.sql`
 - Тесты: `uv run pytest`
 - Линт: `uv run ruff check`; формат: `uv run ruff format` (проверка: `--check`)
 
@@ -220,6 +222,7 @@ app/
   reference/         # *.json — справочники; loader.py — загрузка/кэш; refresh.py — обновление
   pik/               # url_builder.py — генератор URL; validator.py — проверка URL
   geo/               # distance.py — гео-эвристики; poi.py — получение POI из OSM; refresh_poi.py — обновление кэша POI (команда: python -m app.geo.refresh_poi)
+  ai/                # embeddings.py — эмбеддинги; memory.py — работа с pgvector; migrations/ — миграции БД
   knowledge_base/    # база знаний ИИ (кеширование семантики и гео-привязок)
 tests/               # pytest; integration/ — E2E тесты; test_health.py — smoke; parsing/ — Criteria/API + rules; reference/ — loader+refresh
 docs/                # pik-url-schema.md — спецификация URL-схемы; ai_architecture_proposal.md — предложение по внедрению ИИ
