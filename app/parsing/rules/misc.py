@@ -136,7 +136,7 @@ def extract_housing_type(text: str) -> tuple[HousingType | None, list[Span]]:
 
 _ONLY_AVAILABLE = re.compile(
     r"\bне\s+бронь\b|\bбез\s+брони\b|\bне\s+забронированн\w+"
-    r"|\bтолько\s+свободн\w+|\bтолько\s+доступн\w+|\bдоступн\w+"
+    r"|\bтолько\s+свободн\w+|\bтолько\s+доступн\w+"
     r"|\bне\s+показывать\s+забронирован\w+"
 )
 
