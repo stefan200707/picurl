@@ -36,9 +36,7 @@ class EnrichmentResult(BaseModel):
 
     @property
     def meta(self) -> AIMeta:
-        return AIMeta(
-            ai_used=self.ai_used, cache_hit=self.cache_hit, explanation=self.explanation
-        )
+        return AIMeta(ai_used=self.ai_used, cache_hit=self.cache_hit, explanation=self.explanation)
 
     @classmethod
     def noop(cls):
@@ -184,6 +182,7 @@ async def enrich(text: str, criteria: Criteria, warnings: list[str]) -> Enrichme
     except (ValueError, Exception) as e:
         from anthropic import APIStatusError, APITimeoutError
         from pydantic import ValidationError
+
         if isinstance(e, (APIStatusError, APITimeoutError, ValueError, ValidationError)):
             logger.error(f"AI enrichment failed: {e}", exc_info=True)
             warnings.append("не удалось обработать ИИ-обогащение (ошибка сервиса)")
