@@ -163,7 +163,6 @@ def _adjust_score(
     return new_score
 
 
-
 def _build_window_specs(tokens_info, text):
     window_specs = []
     for n in range(1, 6):
@@ -296,9 +295,7 @@ def _score_window(window_tokens, text_before, start_idx, end_idx, is_synthetic, 
         x for x in unique_entities if best_adj_score - x[0] < 5.0 or x[3].name == best_entry_name
     ]
 
-    final_unique = [
-        (orig_score, etyp, ent) for adj, orig_score, etyp, ent in unique_entities
-    ]
+    final_unique = [(orig_score, etyp, ent) for adj, orig_score, etyp, ent in unique_entities]
 
     actual_start_idx = start_idx
     if trigger_type and trigger_start is not None:
@@ -311,6 +308,7 @@ def _score_window(window_tokens, text_before, start_idx, end_idx, is_synthetic, 
         "best_score": best_adj_score,
         "window_size": len(window_tokens),
     }
+
 
 def _resolve_candidates(candidates):
     def _is_overlap(span1: Span, span2: Span) -> bool:
@@ -370,6 +368,7 @@ def _resolve_candidates(candidates):
                 )
 
     return final_matches, warnings
+
 
 def match_entities(text: str) -> tuple[list[EntityMatch], list[str]]:
     choices = build_choices()

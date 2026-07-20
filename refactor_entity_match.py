@@ -1,4 +1,3 @@
-
 with open("app/parsing/entity_match.py") as f:
     code = f.read()
 
