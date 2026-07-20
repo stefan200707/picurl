@@ -19,6 +19,24 @@ os.environ["DATABASE_URL"] = os.getenv(
     "TEST_DATABASE_URL", "postgresql://postgres:password@localhost:5432/picurl_ai"
 )
 
+import socket
+import urllib.parse
+
+
+def is_db_available():
+    parsed = urllib.parse.urlparse(os.environ["DATABASE_URL"])
+    host = parsed.hostname or "localhost"
+    port = parsed.port or 5432
+    try:
+        with socket.create_connection((host, port), timeout=0.5):
+            return True
+    except OSError:
+        return False
+
+
+if not is_db_available():
+    pytest.skip("PostgreSQL is not available, skipping memory tests.", allow_module_level=True)
+
 
 @pytest.fixture(scope="session", autouse=True)
 def setup_db_schema():
