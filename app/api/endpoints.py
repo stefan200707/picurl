@@ -1,11 +1,11 @@
 import logging
 from typing import Annotated
 
+import asyncpg
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 
 from app.api.schemas import BuildUrlRequest, BuildUrlResponse
-import asyncpg
 from app.parsing.parser import parse
 from app.pik.url_builder import build_url as pik_build_url
 from app.pik.validator import validate

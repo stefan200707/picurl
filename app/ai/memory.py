@@ -34,8 +34,6 @@ class CachedAnswer(BaseModel):
     last_used_at: datetime
 
 
-
-
 async def lookup_structured_fact(
     pool: asyncpg.Pool, subject_type: str, subject_id: str, fact_type: str
 ) -> StructuredFact | None:
@@ -87,7 +85,6 @@ async def store_structured_fact(
             value,
         )
 
-
     query = """
         INSERT INTO ai_structured_facts (
             subject_type, subject_id, fact_type, fact_value, source, confidence
@@ -111,7 +108,11 @@ async def store_structured_fact(
 
 
 async def lookup_semantic(
-    pool: asyncpg.Pool, query_signature: str, embedding: list[float], threshold: float = 0.15, ef_search: int = 40
+    pool: asyncpg.Pool,
+    query_signature: str,
+    embedding: list[float],
+    threshold: float = 0.15,
+    ef_search: int = 40,
 ) -> CachedAnswer | None:
     # pgvector cosine distance
     query = """
@@ -147,7 +148,11 @@ async def lookup_semantic(
 
 
 async def store_semantic(
-    pool: asyncpg.Pool, query_signature: str, embedding: list[float], raw_question: str, answer: dict[str, Any]
+    pool: asyncpg.Pool,
+    query_signature: str,
+    embedding: list[float],
+    raw_question: str,
+    answer: dict[str, Any],
 ) -> None:
     query = """
         INSERT INTO ai_semantic_cache (query_signature, embedding, raw_question, answer)

@@ -1,5 +1,6 @@
 import logging
 
+import asyncpg
 from pydantic import BaseModel
 
 from app.ai.client import call_model
@@ -126,16 +127,22 @@ def sanitize_against_shortlist(
     return answer
 
 
-import asyncpg
-
-async def persist(answer: AIEnrichmentAnswer, signature: str, raw_question: str, pool: asyncpg.Pool | None):
+async def persist(
+    answer: AIEnrichmentAnswer, signature: str, raw_question: str, pool: asyncpg.Pool | None
+):
     if pool is None:
         return
     # Persist structured facts
     for cid in answer.center_district_ids:
         # Simplistic approach for district centering
         await store_structured_fact(
-            pool, "district", cid, "is_center", {"is_center": True}, "ai_inference", answer.confidence
+            pool,
+            "district",
+            cid,
+            "is_center",
+            {"is_center": True},
+            "ai_inference",
+            answer.confidence,
         )
 
     for cid, findings in answer.poi_findings.items():
@@ -160,7 +167,9 @@ async def persist(answer: AIEnrichmentAnswer, signature: str, raw_question: str,
     await store_semantic(pool, signature, embedding, raw_question, answer_dict)
 
 
-async def enrich(text: str, criteria: Criteria, warnings: list[str], pool: asyncpg.Pool | None = None) -> EnrichmentResult:
+async def enrich(
+    text: str, criteria: Criteria, warnings: list[str], pool: asyncpg.Pool | None = None
+) -> EnrichmentResult:
     if not criteria.poi_requirements and not criteria.center_requested:
         return EnrichmentResult.noop()
 

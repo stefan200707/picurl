@@ -19,20 +19,24 @@ async def lifespan(app: FastAPI):
     """Жизненный цикл приложения: инициализация и закрытие httpx-клиента."""
     app.state.http_client = httpx.AsyncClient()
     app.state.memory_pool = None
-    
+
     from app.config import get_settings
+
     settings = get_settings()
     if settings.AI_ENRICHMENT_ENABLED:
         try:
             import asyncpg
+
             from app.ai.memory import DATABASE_URL
+
             app.state.memory_pool = await asyncpg.create_pool(DATABASE_URL)
         except Exception as e:
             import logging
+
             logging.getLogger(__name__).warning("Не удалось инициализировать пул БД: %s", e)
 
     yield
-    
+
     if app.state.memory_pool:
         await app.state.memory_pool.close()
     await app.state.http_client.aclose()
