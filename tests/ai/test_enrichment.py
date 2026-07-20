@@ -57,7 +57,7 @@ def test_sanitize_against_shortlist():
         ComplexCandidate(
             id="valid1",
             name="ЖК 1",
-            district=None,
+            district="dist_valid",
             county=None,
             metro=[],
             is_center=None,
@@ -76,6 +76,7 @@ def test_sanitize_against_shortlist():
 
     answer = AIEnrichmentAnswer(
         matched_complex_ids=["valid1", "invalid3"],
+        center_district_ids=["dist_valid", "dist_invalid"],
         poi_findings={"valid1": {"school": True}, "invalid3": {"school": True}},
         explanation="test",
         confidence=0.9,
@@ -84,6 +85,8 @@ def test_sanitize_against_shortlist():
     sanitized = sanitize_against_shortlist(answer, candidates)
     assert "valid1" in sanitized.matched_complex_ids
     assert "invalid3" not in sanitized.matched_complex_ids
+    assert "dist_valid" in sanitized.center_district_ids
+    assert "dist_invalid" not in sanitized.center_district_ids
     assert "valid1" in sanitized.poi_findings
     assert "invalid3" not in sanitized.poi_findings
 

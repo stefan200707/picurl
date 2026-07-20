@@ -108,9 +108,13 @@ def sanitize_against_shortlist(
     answer: AIEnrichmentAnswer, candidates: list[ComplexCandidate]
 ) -> AIEnrichmentAnswer:
     candidate_ids = {c.id for c in candidates}
+    candidate_district_ids = {c.district for c in candidates if c.district}
 
     # Filter matched_complex_ids
     answer.matched_complex_ids = [cid for cid in answer.matched_complex_ids if cid in candidate_ids]
+
+    # Filter center_district_ids
+    answer.center_district_ids = [did for did in answer.center_district_ids if did in candidate_district_ids]
 
     # Filter poi_findings
     answer.poi_findings = {
