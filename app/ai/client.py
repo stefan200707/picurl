@@ -1,9 +1,10 @@
 import json
 import logging
 
+from google.antigravity import Agent, LocalAgentConfig
+
 from app.ai.schema import AIEnrichmentAnswer
 from app.config import get_settings
-from google.antigravity import Agent, LocalAgentConfig
 
 logger = logging.getLogger(__name__)
 
@@ -29,7 +30,7 @@ async def call_model(system_prompt: str, user_payload: dict) -> AIEnrichmentAnsw
             text_chunks = []
             async for token in response:
                 text_chunks.append(token)
-            
+
             full_response = "".join(text_chunks)
             # The agent is constrained by response_schema, so it returns valid JSON.
             return AIEnrichmentAnswer.model_validate_json(full_response)
