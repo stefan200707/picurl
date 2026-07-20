@@ -55,7 +55,8 @@ API pik.ru; нераспознанное всегда уходит в `warnings`
   модуля: `rooms` — всегда список (single vs multi решает url_builder по длине);
   `finish` — список `Finish` (`list[Finish]`); `sort` — строковый ключ
   `price_asc|price_desc|area_asc|area_desc` с properties `field`/`order`
-  для `sortBy`/`orderBy`.
+  для `sortBy`/`orderBy`. Для подготовки к ИИ (промпт 16) добавлены поля
+  `poi_requirements` (список POI, извлеченных из текста) и `center_requested` (булево).
 - **Модели API** `BuildUrlRequest`/`BuildUrlResponse` живут в `app/main.py`
   (это контракт HTTP-слоя, не парсинга). Ответ: `{url, criteria, result_count,
   warnings}`; человекочитаемое представление критериев для поля `criteria` даёт
@@ -218,6 +219,7 @@ app/
   parsing/           # schema.py — Criteria; rules/ — пакет regex-правил; parser.py — фасад; entity_match.py — матчинг; stopwords.py — стопслова
   reference/         # *.json — справочники; loader.py — загрузка/кэш; refresh.py — обновление
   pik/               # url_builder.py — генератор URL; validator.py — проверка URL
+  geo/               # distance.py — гео-эвристики; poi.py — получение POI из OSM; refresh_poi.py — обновление кэша POI (команда: python -m app.geo.refresh_poi)
   knowledge_base/    # база знаний ИИ (кеширование семантики и гео-привязок)
 tests/               # pytest; integration/ — E2E тесты; test_health.py — smoke; parsing/ — Criteria/API + rules; reference/ — loader+refresh
 docs/                # pik-url-schema.md — спецификация URL-схемы; ai_architecture_proposal.md — предложение по внедрению ИИ

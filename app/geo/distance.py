@@ -1,0 +1,34 @@
+import math
+
+# Координаты Кремля (приблизительно) как центр Москвы
+MOSCOW_CENTER_LAT = 55.7522200
+MOSCOW_CENTER_LON = 37.6155600
+
+# Радиус центра Москвы в метрах.
+# Эвристика: радиус в 5 км примерно покрывает пределы ТТК и ЦАО по прямой.
+# Это осознанное приближение, и финальное слово по спорным случаям (граница центра)
+# может оставаться за ИИ/картой памяти (промпт 17).
+CENTER_RADIUS_M = 5000.0
+
+
+def haversine(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    """Вычислить расстояние между двумя точками на Земле (в метрах)."""
+    r = 6371000.0  # Радиус Земли в метрах
+    phi1 = math.radians(lat1)
+    phi2 = math.radians(lat2)
+    delta_phi = math.radians(lat2 - lat1)
+    delta_lambda = math.radians(lon2 - lon1)
+
+    a = (
+        math.sin(delta_phi / 2.0) ** 2
+        + math.cos(phi1) * math.cos(phi2) * math.sin(delta_lambda / 2.0) ** 2
+    )
+    c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+
+    return r * c
+
+
+def is_center(lat: float, lon: float, radius_m: float = CENTER_RADIUS_M) -> bool:
+    """Эвристическая проверка, находится ли точка в 'центре Москвы'."""
+    dist = haversine(MOSCOW_CENTER_LAT, MOSCOW_CENTER_LON, lat, lon)
+    return dist <= radius_m

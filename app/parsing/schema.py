@@ -36,6 +36,8 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from app.geo.poi import POICategory
+
 
 class Rooms(StrEnum):
     """Комнатность (чипы на pik.ru: студия / 1 / 2 / 3+)."""
@@ -120,6 +122,14 @@ class HousingType(StrEnum):
     ANY = "any"
 
 
+class POIRequirement(BaseModel):
+    """Требование к окружению (школа, парк и т.д.), извлечённое из текста."""
+
+    category: POICategory
+    raw_phrase: str
+    max_distance_m: int | None = None
+
+
 class MatchedEntity(BaseModel):
     """Сущность справочника (метро/округ/район/ЖК), найденная матчером.
 
@@ -188,6 +198,10 @@ class Criteria(BaseModel):
     sort: Sort | None = None
     housing_type: HousingType | None = None
     only_available: bool = False
+
+    # --- ИИ / Гео (промпт 16) --------------------------------------------------
+    poi_requirements: list[POIRequirement] = Field(default_factory=list)
+    center_requested: bool = False
 
     # --- Расширяемость: слаги «как есть» (см. docs/pik-url-schema.md) --------
     current_benefit: str | None = None
