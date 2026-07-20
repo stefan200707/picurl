@@ -102,6 +102,23 @@ def merge_enrichment(criteria: Criteria, enrichment: EnrichmentResult) -> Criter
                     )
                     break
         criteria.complexes = new_complexes
+
+    if enrichment.center_district_ids:
+        from app.parsing.schema import MatchedEntity
+        from app.reference.loader import load_districts
+
+        districts_data = load_districts()
+
+        new_districts = []
+        for did in enrichment.center_district_ids:
+            for entry in districts_data:
+                if entry.id == did:
+                    new_districts.append(
+                        MatchedEntity(name=entry.name, slug=entry.slug, id=entry.id)
+                    )
+                    break
+        criteria.districts.extend(new_districts)
+
     return criteria
 
 

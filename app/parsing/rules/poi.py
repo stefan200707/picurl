@@ -6,7 +6,7 @@ from app.parsing.schema import POIRequirement
 
 _POI_PATTERNS: list[tuple[re.Pattern[str], POICategory]] = [
     (re.compile(r"(?<!вид на )(?<!видом на )\bшкол\w+"), POICategory.SCHOOL),
-    (re.compile(r"\bсадик\w*|\bдетск\w+\s+сад\w*"), POICategory.KINDERGARTEN),
+    (re.compile(r"\bсадик\w*|\bдетск\w+\s+сад\w*|\bдетсад\w*"), POICategory.KINDERGARTEN),
     (re.compile(r"\bмагазин\w*|\bпродукт\w+|\bсупермаркет\w*"), POICategory.SHOP),
     (re.compile(r"\bпарковк\w*|\bпаркинг\w*"), POICategory.PARKING),
     (
