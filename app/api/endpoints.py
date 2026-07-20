@@ -1,6 +1,7 @@
 import logging
 from typing import Annotated
 
+import asyncpg
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 
@@ -20,6 +21,11 @@ def get_http_client(request: Request) -> httpx.AsyncClient:
     return request.app.state.http_client
 
 
+def get_memory_pool(request: Request) -> "asyncpg.Pool | None":
+    """Dependency для получения пула БД из state."""
+    return getattr(request.app.state, "memory_pool", None)
+
+
 @router.post(
     "/build-url",
     summary="Сгенерировать ссылку на pik.ru",
@@ -30,6 +36,7 @@ def get_http_client(request: Request) -> httpx.AsyncClient:
 async def build_url(
     request: BuildUrlRequest,
     client: Annotated[httpx.AsyncClient, Depends(get_http_client)],
+    pool: Annotated["asyncpg.Pool | None", Depends(get_memory_pool)],
 ) -> BuildUrlResponse:
     """Построить ссылку на pik.ru по свободному тексту."""
 
@@ -50,7 +57,7 @@ async def build_url(
 
     ai_meta = AIMeta()  # ai_used=False, cache_hit=False, explanation=None по умолчанию
     if criteria.poi_requirements or criteria.center_requested:
-        enrichment = await enrich(text, criteria, warnings)
+        enrichment = await enrich(text, criteria, warnings, pool=pool)
         criteria = merge_enrichment(criteria, enrichment)
         ai_meta = enrichment.meta
 

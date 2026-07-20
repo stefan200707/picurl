@@ -1,5 +1,6 @@
 import logging
 
+import asyncpg
 from pydantic import BaseModel
 
 from app.ai.client import call_model
@@ -126,17 +127,28 @@ def sanitize_against_shortlist(
     return answer
 
 
-async def persist(answer: AIEnrichmentAnswer, signature: str, raw_question: str):
+async def persist(
+    answer: AIEnrichmentAnswer, signature: str, raw_question: str, pool: asyncpg.Pool | None
+):
+    if pool is None:
+        return
     # Persist structured facts
     for cid in answer.center_district_ids:
         # Simplistic approach for district centering
         await store_structured_fact(
-            "district", cid, "is_center", {"is_center": True}, "ai_inference", answer.confidence
+            pool,
+            "district",
+            cid,
+            "is_center",
+            {"is_center": True},
+            "ai_inference",
+            answer.confidence,
         )
 
     for cid, findings in answer.poi_findings.items():
         for poi_category, is_present in findings.items():
             await store_structured_fact(
+                pool,
                 "complex",
                 cid,
                 f"poi_{poi_category}",
@@ -152,10 +164,12 @@ async def persist(answer: AIEnrichmentAnswer, signature: str, raw_question: str)
         "center_district_ids": answer.center_district_ids,
         "poi_findings": answer.poi_findings,
     }
-    await store_semantic(signature, embedding, raw_question, answer_dict)
+    await store_semantic(pool, signature, embedding, raw_question, answer_dict)
 
 
-async def enrich(text: str, criteria: Criteria, warnings: list[str]) -> EnrichmentResult:
+async def enrich(
+    text: str, criteria: Criteria, warnings: list[str], pool: asyncpg.Pool | None = None
+) -> EnrichmentResult:
     if not criteria.poi_requirements and not criteria.center_requested:
         return EnrichmentResult.noop()
 
@@ -165,22 +179,25 @@ async def enrich(text: str, criteria: Criteria, warnings: list[str]) -> Enrichme
     if fully_resolved(known, criteria):
         return EnrichmentResult.from_deterministic(known)
 
+    settings = get_settings()
+    if not settings.AI_ENRICHMENT_ENABLED or not settings.ANTHROPIC_API_KEY:
+        warnings.append("ИИ-обогащение выключено — часть запроса не обработана")
+        return EnrichmentResult.disabled()
+
     signature = build_query_signature(text, criteria)
     embedding = embed(signature)
 
     try:
-        cached = await lookup_semantic(signature, embedding)
+        if pool is not None:
+            cached = await lookup_semantic(pool, signature, embedding)
+        else:
+            cached = None
     except Exception as e:
         logger.warning(f"Failed to lookup semantic cache: {e}")
         cached = None
 
     if cached is not None:
         return EnrichmentResult.from_cache(cached)
-
-    settings = get_settings()
-    if not settings.AI_ENRICHMENT_ENABLED or not settings.ANTHROPIC_API_KEY:
-        warnings.append("ИИ-обогащение выключено — часть запроса не обработана")
-        return EnrichmentResult.disabled()
 
     try:
         context = build_context(text, criteria, candidates, known)
@@ -198,7 +215,7 @@ async def enrich(text: str, criteria: Criteria, warnings: list[str]) -> Enrichme
     answer = sanitize_against_shortlist(answer, candidates)
 
     try:
-        await persist(answer, signature, text)
+        await persist(answer, signature, text, pool)
     except Exception as e:
         logger.warning(f"Failed to persist AI results to DB: {e}")
 
