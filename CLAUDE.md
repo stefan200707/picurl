@@ -190,17 +190,20 @@ regex скомпилированы один раз на уровне модул�
 Выполнен промпт 08: валидатор выдачи `validate(criteria, client)` в `app/pik/validator.py`. Это единственный сетевой вызов рантайма (запрос к backend-API `api.pik.ru/v2/filter`), best-effort (не роняет сервис при ошибке сети), мокируется в тестах.
 Выполнен промпт 09: Эндпоинт `POST /build-url` в `app/main.py`. Связывает парсер, билдер и валидатор в единый пайплайн, возвращает готовый URL и warnings.
 Выполнен промпт 10: Интеграционные тесты end-to-end с замоканным API pik.ru. Лежат в `tests/integration/test_build_url_e2e.py`. Проект полностью собран, Milestone 5 достигнут.
+Выполнен промпт 17: Карта памяти и хранилище для Базы Знаний на базе PostgreSQL 15+ с расширением pgvector в `app/ai/memory.py`.
 
 ### Стек
 
 Python 3.12 · FastAPI · pydantic v2 · httpx · rapidfuzz · pytest · uv · ruff.
-Для v2 (ИИ-обогащение) добавлены: Anthropic SDK, Postgres (с pgvector) и pydantic-settings.
+Для v2 (ИИ-обогащение) добавлены: Anthropic SDK, PostgreSQL 15+ (с pgvector), sentence-transformers, asyncpg, и pydantic-settings.
 Entrypoint FastAPI объявлен в `pyproject.toml` (`[tool.fastapi] entrypoint = "app.main:app"`).
 
 ### Команды
 
 - Установка: `uv sync`
 - Запуск dev-сервера: `uv run fastapi dev` (или `uv run uvicorn app.main:app --reload`)
+- Запуск БД ИИ (pgvector): `docker compose up -d postgres`
+- Накатывание миграций: `psql $DATABASE_URL -f app/ai/migrations/01_memory_tables.sql`
 - Тесты: `uv run pytest`
 - Линт: `uv run ruff check`; формат: `uv run ruff format` (проверка: `--check`)
 
@@ -220,6 +223,7 @@ app/
   reference/         # *.json — справочники; loader.py — загрузка/кэш; refresh.py — обновление
   pik/               # url_builder.py — генератор URL; validator.py — проверка URL
   geo/               # distance.py — гео-эвристики; poi.py — получение POI из OSM; refresh_poi.py — обновление кэша POI (команда: python -m app.geo.refresh_poi)
+  ai/                # embeddings.py — эмбеддинги; memory.py — работа с pgvector; migrations/ — миграции БД
   knowledge_base/    # база знаний ИИ (кеширование семантики и гео-привязок)
 tests/               # pytest; integration/ — E2E тесты; test_health.py — smoke; parsing/ — Criteria/API + rules; reference/ — loader+refresh
 docs/                # pik-url-schema.md — спецификация URL-схемы; ai_architecture_proposal.md — предложение по внедрению ИИ
