@@ -77,8 +77,20 @@ async def build_url(
     description="Загружает свежие справочники из API и сбрасывает кэш приложения.",
     tags=["internal"],
 )
-async def refresh_dicts():
+async def refresh_dicts(request: Request):
     """Скрытый эндпоинт для обновления справочников и инвалидации кэша."""
+    from app.config import get_settings
+
+    settings = get_settings()
+    if not settings.INTERNAL_REFRESH_TOKEN:
+        raise HTTPException(
+            status_code=503, detail="Токен для обновления справочников не настроен."
+        )
+
+    token = request.headers.get("X-Internal-Token")
+    if token != settings.INTERNAL_REFRESH_TOKEN:
+        raise HTTPException(status_code=403, detail="Неверный токен.")
+
     try:
         await run_refresh()
         clear_cache()

@@ -62,3 +62,11 @@ def test_entity_match_multi():
     names = {m.entity.name for m in matches}
     assert "Волжский парк" in names
     assert "Бусиновский парк" in names
+
+
+def test_entity_match_stopwords_not_ignoring_toponyms():
+    text = "квартиру в Раменках или у метро Люберцы"
+    matches, _warnings = match_entities(text)
+    names = {m.entity.name for m in matches}
+    assert "Раменки" in names
+    assert any("Люберцы" in name for name in names)

@@ -18,7 +18,8 @@ def build_url(criteria: Criteria) -> str:
     - Если `price_max` задан, а `price_min` нет, то добавляется `priceFrom=0`
       для точного соответствия примеру из ТЗ.
     - Неполные сущности (без id/slug в зависимости от назначения) молча пропускаются
-      (ожидается, что validation/warnings слой отработает это ранее или параллельно).
+      (фасад `parse` в `app/parsing/parser.py` проверяет их отсутствие и выдает warnings
+      до вызова `build_url`, поэтому здесь дополнительной проверки нет).
     """
     path_segments = []
     query_params = {}
@@ -104,9 +105,6 @@ def build_url(criteria: Criteria) -> str:
         base_url = f"{base_url}/{'/'.join(path_segments)}"
 
     if query_params:
-        # Для фиксированного детерминированного порядка параметров в URL
-        # (pydantic и dict сохраняют порядок, но лучше отсортировать или задать явный порядок,
-        # однако dict с 3.7+ сохраняет порядок вставки, что уже детерминировано)
         return f"{base_url}?{urlencode(query_params, safe=',')}"
 
     return base_url

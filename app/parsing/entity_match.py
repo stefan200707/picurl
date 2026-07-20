@@ -1,7 +1,4 @@
-"""Sliding-window + rapidfuzz matching of entities against reference data.
-
-TODO(prompt 05): implement fuzzy entity matching.
-"""
+"""Sliding-window + rapidfuzz matching of entities against reference data."""
 
 import re
 from functools import cache
@@ -166,17 +163,8 @@ def _adjust_score(
     return new_score
 
 
-def match_entities(text: str) -> tuple[list[EntityMatch], list[str]]:
-    choices = build_choices()
-
-    tokens_info = []
-    for m in re.finditer(r"[A-Za-zА-Яа-яЁё0-9]+(?:-[A-Za-zА-Яа-яЁё0-9]+)*", text):
-        tokens_info.append((m.group(), m.start(), m.end()))
-
-    candidates = []
-
+def _build_window_specs(tokens_info, text):
     window_specs = []
-
     for n in range(1, 6):
         for i in range(len(tokens_info) - n + 1):
             window_tokens = tokens_info[i : i + n]
@@ -196,156 +184,141 @@ def match_entities(text: str) -> tuple[list[EntityMatch], list[str]]:
                     s_start = w2[1]
                     s_end = w2[2]
                     t_before = text[: mod_tokens[0][1]]
-                    # is_synthetic=True: слова склеены из разных мест текста
-                    # (не встречаются рядом буквально), поэтому проверяются строже.
                     window_specs.append((synthetic_tokens, t_before, s_start, s_end, True))
+    return window_specs
 
-    for window_tokens, text_before, start_idx, end_idx, is_synthetic in window_specs:
-        window_strings = [t[0] for t in window_tokens]
 
-        if _is_stop_word_window(window_strings):
+def _score_window(window_tokens, text_before, start_idx, end_idx, is_synthetic, text, choices):
+    window_strings = [t[0] for t in window_tokens]
+
+    if _is_stop_word_window(window_strings):
+        return None
+
+    original_chunk = text[start_idx:end_idx]
+    if "," in original_chunk or ";" in original_chunk:
+        return None
+
+    clean_window = " ".join(w for w in window_strings if w.lower() not in STOP_WORDS).lower()
+    if clean_window in ["округ", "жк", "район", "районе", "метро", "м"]:
+        return None
+
+    bounds_stopwords = STOP_WORDS - LOCATION_MARKERS
+    first_w = window_strings[0].lower()
+    last_w = window_strings[-1].lower()
+    if first_w in bounds_stopwords or last_w in bounds_stopwords:
+        return None
+
+    window_text = " ".join(window_strings)
+    trigger_type, trigger_start = get_trigger_type(text_before)
+
+    triggered_types = set()
+    if trigger_type:
+        triggered_types.add(trigger_type)
+
+    kw_partial = ["вид", "сануз", "пол", "балкон", "лоджи"]
+    window_lower = window_text.lower()
+    window_words_lower = [w.lower() for w in window_strings]
+
+    if any(kw in window_words_lower for kw in ["округ", "округе"]):
+        triggered_types.add("county")
+    if "жк" in window_words_lower:
+        triggered_types.add("complex")
+    if any(kw in window_words_lower for kw in ["район", "районе"]):
+        triggered_types.add("district")
+    if any(kw in window_words_lower for kw in ["метро", "м"]):
+        triggered_types.add("metro")
+    if any(kw in window_lower for kw in kw_partial) or any(
+        kw in text_before[-30:].lower() for kw in kw_partial
+    ):
+        triggered_types.add("options")
+        triggered_types.add("option_groups")
+
+    query_norm = normalize(window_text)
+    valid_choices = choices
+    choice_strings = [c[0] for c in valid_choices]
+    if not choice_strings:
+        return None
+
+    res = process.extract(query_norm, choice_strings, scorer=fuzz.WRatio, limit=100)
+
+    good_res = []
+    for r in res:
+        matched_str = choice_strings[r[2]]
+        _, etype, entry = valid_choices[r[2]]
+        is_triggered = etype in triggered_types
+
+        item_threshold = TRIGGERED_SCORE_THRESHOLD if is_triggered else SCORE_THRESHOLD
+        if r[1] < item_threshold:
             continue
 
-        original_chunk = text[start_idx:end_idx]
-        if "," in original_chunk or ";" in original_chunk:
-            continue
-
-        clean_window = " ".join(w for w in window_strings if w.lower() not in STOP_WORDS).lower()
-        if clean_window in ["округ", "жк", "район", "районе", "метро", "м"]:
-            continue
-
-        # Отсекаем окна, которые начинаются или заканчиваются на висячий союз/предлог
-        # (если они часть устойчивого названия, они останутся внутри окна)
-        bounds_stopwords = STOP_WORDS - LOCATION_MARKERS
-        first_w = window_strings[0].lower()
-        last_w = window_strings[-1].lower()
-        if first_w in bounds_stopwords or last_w in bounds_stopwords:
-            continue
-
-        # Формируем текст окна из очищенных токенов, чтобы знаки препинания не прилипали
-        window_text = " ".join(window_strings)
-
-        trigger_type, trigger_start = get_trigger_type(text_before)
-
-        triggered_types = set()
-        if trigger_type:
-            triggered_types.add(trigger_type)
-
-        kw_partial = ["вид", "сануз", "пол", "балкон", "лоджи"]
-        window_lower = window_text.lower()
-        window_words_lower = [w.lower() for w in window_strings]
-
-        if any(kw in window_words_lower for kw in ["округ", "округе"]):
-            triggered_types.add("county")
-        if "жк" in window_words_lower:
-            triggered_types.add("complex")
-        if any(kw in window_words_lower for kw in ["район", "районе"]):
-            triggered_types.add("district")
-        if any(kw in window_words_lower for kw in ["метро", "м"]):
-            triggered_types.add("metro")
-        if any(kw in window_lower for kw in kw_partial) or any(
-            kw in text_before[-30:].lower() for kw in kw_partial
-        ):
-            triggered_types.add("options")
-            triggered_types.add("option_groups")
-
-        query_norm = normalize(window_text)
-
-        valid_choices = choices
-
-        choice_strings = [c[0] for c in valid_choices]
-        if not choice_strings:
-            continue
-
-        res = process.extract(query_norm, choice_strings, scorer=fuzz.WRatio, limit=100)
-
-        good_res = []
-        for r in res:
-            matched_str = choice_strings[r[2]]
-            _, etype, entry = valid_choices[r[2]]
-
-            is_triggered = etype in triggered_types
-
-            item_threshold = TRIGGERED_SCORE_THRESHOLD if is_triggered else SCORE_THRESHOLD
-            if r[1] < item_threshold:
+        if is_triggered:
+            clean_wratio = fuzz.WRatio(clean_window, matched_str)
+            if clean_wratio < TRIGGERED_SCORE_THRESHOLD:
                 continue
 
-            if is_triggered:
-                clean_wratio = fuzz.WRatio(clean_window, matched_str)
-                if clean_wratio < TRIGGERED_SCORE_THRESHOLD:
-                    continue
+        if (is_synthetic or not is_triggered) and fuzz.QRatio(
+            query_norm, matched_str
+        ) < STRICT_QRATIO_THRESHOLD:
+            continue
 
-            # Строгая проверка QRatio для окон без релевантного триггера и для «синтетических» окон
-            if (is_synthetic or not is_triggered) and fuzz.QRatio(
-                query_norm, matched_str
-            ) < STRICT_QRATIO_THRESHOLD:
-                continue
+        good_res.append(r)
 
-            good_res.append(r)
+    if not good_res:
+        return None
 
-        if good_res:
-            best_score = good_res[0][1]
-            top_matches = [r for r in good_res if best_score - r[1] < 5.0]
+    best_score = good_res[0][1]
+    top_matches = [r for r in good_res if best_score - r[1] < 5.0]
 
-            matched_entities_info = []
-            for matched_str, score, idx in top_matches:
-                # Use QRatio as a tie-breaker when WRatio scores are similar (e.g. partial matches)
-                q_ratio = fuzz.QRatio(query_norm, matched_str)
-                adjusted_base_score = score + (q_ratio / 1000.0)
-                _, etype, entry = valid_choices[idx]
-                matched_entities_info.append((adjusted_base_score, etype, entry))
+    matched_entities_info = []
+    for matched_str, score, idx in top_matches:
+        q_ratio = fuzz.QRatio(query_norm, matched_str)
+        adjusted_base_score = score + (q_ratio / 1000.0)
+        _, etype, entry = valid_choices[idx]
+        matched_entities_info.append((adjusted_base_score, etype, entry))
 
-            seen = set()
-            unique_entities = []
-            for score, etype, entry in matched_entities_info:
-                if (etype, entry.name) not in seen:
-                    seen.add((etype, entry.name))
-                    adj_score = _adjust_score(score, etype, window_text, text_before, entry)
-                    unique_entities.append((adj_score, score, etype, entry))
+    seen = set()
+    unique_entities = []
+    for score, etype, entry in matched_entities_info:
+        if (etype, entry.name) not in seen:
+            seen.add((etype, entry.name))
+            adj_score = _adjust_score(score, etype, window_text, text_before, entry)
+            unique_entities.append((adj_score, score, etype, entry))
 
-            if not unique_entities:
-                continue
+    if not unique_entities:
+        return None
 
-            unique_entities.sort(key=lambda x: x[0], reverse=True)
-            best_adj_score = unique_entities[0][0]
+    unique_entities.sort(key=lambda x: x[0], reverse=True)
+    best_adj_score = unique_entities[0][0]
+    best_entry_name = unique_entities[0][3].name
 
-            best_entry_name = unique_entities[0][3].name
-            # Filter out entries whose adjusted score is much lower than the best one,
-            # unless they have the exact same name as the best entry.
-            unique_entities = [
-                x
-                for x in unique_entities
-                if best_adj_score - x[0] < 5.0 or x[3].name == best_entry_name
-            ]
+    unique_entities = [
+        x for x in unique_entities if best_adj_score - x[0] < 5.0 or x[3].name == best_entry_name
+    ]
 
-            # Map back to original structure for candidates
-            final_unique = [
-                (orig_score, etyp, ent) for adj, orig_score, etyp, ent in unique_entities
-            ]
+    final_unique = [(orig_score, etyp, ent) for adj, orig_score, etyp, ent in unique_entities]
 
-            actual_start_idx = start_idx
-            if trigger_type and trigger_start is not None:
-                actual_start_idx = trigger_start
+    actual_start_idx = start_idx
+    if trigger_type and trigger_start is not None:
+        actual_start_idx = trigger_start
 
-            candidates.append(
-                {
-                    "span": (actual_start_idx, end_idx),
-                    "text": window_text,
-                    "matches": final_unique,
-                    "best_score": best_adj_score,
-                    "window_size": len(window_tokens),
-                }
-            )
+    return {
+        "span": (actual_start_idx, end_idx),
+        "text": window_text,
+        "matches": final_unique,
+        "best_score": best_adj_score,
+        "window_size": len(window_tokens),
+    }
 
+
+def _resolve_candidates(candidates):
     def _is_overlap(span1: Span, span2: Span) -> bool:
         return max(span1[0], span2[0]) < min(span1[1], span2[1])
 
     candidates.sort(key=lambda c: (c["best_score"], c["window_size"]), reverse=True)
-
     final_matches: list[EntityMatch] = []
     warnings: list[str] = []
-
     used_spans_with_type = []
+
     for c in candidates:
         best_matches = c["matches"]
         top_match = best_matches[0]
@@ -363,7 +336,6 @@ def match_entities(text: str) -> tuple[list[EntityMatch], list[str]]:
                 continue
 
             used_spans_with_type.append((c["span"], etype))
-
             final_matches.append(
                 EntityMatch(
                     type=etype,
@@ -396,3 +368,23 @@ def match_entities(text: str) -> tuple[list[EntityMatch], list[str]]:
                 )
 
     return final_matches, warnings
+
+
+def match_entities(text: str) -> tuple[list[EntityMatch], list[str]]:
+    choices = build_choices()
+
+    tokens_info = []
+    for m in re.finditer(r"[A-Za-zА-Яа-яЁё0-9]+(?:-[A-Za-zА-Яа-яЁё0-9]+)*", text):
+        tokens_info.append((m.group(), m.start(), m.end()))
+
+    window_specs = _build_window_specs(tokens_info, text)
+
+    candidates = []
+    for window_tokens, text_before, start_idx, end_idx, is_synthetic in window_specs:
+        candidate = _score_window(
+            window_tokens, text_before, start_idx, end_idx, is_synthetic, text, choices
+        )
+        if candidate:
+            candidates.append(candidate)
+
+    return _resolve_candidates(candidates)

@@ -336,6 +336,8 @@ def test_extract_floor(text: str, expected: FloorFacts) -> None:
         ("без ремонта", [0]),
         ("черновая", [0]),
         ("черновая отделка", [0]),
+        ("какая отделка есть в вариантах", []),
+        ("ремонт делать сами не хотим", []),
         ("у метро", []),
         ("", []),
     ],
@@ -478,7 +480,7 @@ def test_extract_housing_type(text: str, expected: HousingType | None) -> None:
         ("не забронированные", True),
         ("только свободные", True),
         ("только доступные", True),
-        ("доступные варианты", True),
+        ("квартира по доступной цене", False),
         ("двушка у метро", False),
         ("", False),
     ],
@@ -591,3 +593,9 @@ def test_extract_required_tags():
     tags, spans = extract_required_tags("хочу готовые квартиры и специальная цена до 15.07")
     assert tags == ["zos", "crossed"]
     assert len(spans) == 2
+
+    tags, spans = extract_required_tags("выгода до -20%")
+    assert tags == ["outlet"]
+
+    tags, spans = extract_required_tags("спецпредложение до 01.09")
+    assert tags == ["crossed"]
