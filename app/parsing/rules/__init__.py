@@ -19,12 +19,12 @@ from .misc import (
     extract_sort,
     extract_unsupported,
 )
+from .poi import extract_poi_requirements as extract_poi_requirements
 from .price import PriceFacts as PriceFacts
 from .price import extract_price as extract_price
 from .rooms import extract_rooms as extract_rooms
 from .time import TimeFacts as TimeFacts
 from .time import extract_time_to_metro as extract_time_to_metro
-from .poi import extract_poi_requirements as extract_poi_requirements
 
 
 class RulesOutcome(NamedTuple):

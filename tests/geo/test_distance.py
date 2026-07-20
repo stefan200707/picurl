@@ -1,5 +1,5 @@
-import math
 from app.geo.distance import haversine, is_center
+
 
 def test_haversine():
     # Москва - Питер примерно 630 км
@@ -8,6 +8,7 @@ def test_haversine():
 
     # Одинаковые точки
     assert haversine(55.7558, 37.6173, 55.7558, 37.6173) == 0.0
+
 
 def test_is_center():
     # Кремль

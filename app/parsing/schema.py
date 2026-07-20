@@ -35,6 +35,7 @@ from enum import IntEnum, StrEnum
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
+
 from app.geo.poi import POICategory
 
 
@@ -123,9 +124,11 @@ class HousingType(StrEnum):
 
 class POIRequirement(BaseModel):
     """Требование к окружению (школа, парк и т.д.), извлечённое из текста."""
+
     category: POICategory
     raw_phrase: str
     max_distance_m: int | None = None
+
 
 class MatchedEntity(BaseModel):
     """Сущность справочника (метро/округ/район/ЖК), найденная матчером.
