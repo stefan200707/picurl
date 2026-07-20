@@ -9,7 +9,9 @@ class Settings(BaseSettings):
 
     # Settings for AI
     AI_ENRICHMENT_ENABLED: bool = False
+    AI_PROVIDER: str = "claude"
     ANTHROPIC_API_KEY: str | None = None
+    GEMINI_API_KEY: str | None = None
     AI_MODEL_NAME: str = "claude-3-haiku-20240307"
     DATABASE_URL: str | None = None
 
