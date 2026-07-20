@@ -34,27 +34,11 @@ class CachedAnswer(BaseModel):
     last_used_at: datetime
 
 
-_pool: asyncpg.Pool | None = None
-
-
-async def get_pool() -> asyncpg.Pool:
-    global _pool
-    if _pool is None:
-        _pool = await asyncpg.create_pool(DATABASE_URL)
-    return _pool
-
-
-async def close_pool() -> None:
-    global _pool
-    if _pool is not None:
-        await _pool.close()
-        _pool = None
 
 
 async def lookup_structured_fact(
-    subject_type: str, subject_id: str, fact_type: str
+    pool: asyncpg.Pool, subject_type: str, subject_id: str, fact_type: str
 ) -> StructuredFact | None:
-    pool = await get_pool()
     query = """
         SELECT id, subject_type, subject_id, fact_type, fact_value, source, confidence,
                observed_count, first_seen_at, last_confirmed_at
@@ -82,6 +66,7 @@ logger = logging.getLogger(__name__)
 
 
 async def store_structured_fact(
+    pool: asyncpg.Pool,
     subject_type: str,
     subject_id: str,
     fact_type: str,
@@ -90,7 +75,7 @@ async def store_structured_fact(
     confidence: float,
 ) -> None:
     # Check for conflicts and log them in Python
-    existing = await lookup_structured_fact(subject_type, subject_id, fact_type)
+    existing = await lookup_structured_fact(pool, subject_type, subject_id, fact_type)
     if existing and existing.fact_value != value:
         logger.warning(
             "Conflict in structured fact '%s' for %s:%s. Old: %s, New: %s. "
@@ -102,7 +87,7 @@ async def store_structured_fact(
             value,
         )
 
-    pool = await get_pool()
+
     query = """
         INSERT INTO ai_structured_facts (
             subject_type, subject_id, fact_type, fact_value, source, confidence
@@ -126,9 +111,8 @@ async def store_structured_fact(
 
 
 async def lookup_semantic(
-    query_signature: str, embedding: list[float], threshold: float = 0.15, ef_search: int = 40
+    pool: asyncpg.Pool, query_signature: str, embedding: list[float], threshold: float = 0.15, ef_search: int = 40
 ) -> CachedAnswer | None:
-    pool = await get_pool()
     # pgvector cosine distance
     query = """
         SELECT id, query_signature, raw_question, answer, hit_count, created_at,
@@ -163,9 +147,8 @@ async def lookup_semantic(
 
 
 async def store_semantic(
-    query_signature: str, embedding: list[float], raw_question: str, answer: dict[str, Any]
+    pool: asyncpg.Pool, query_signature: str, embedding: list[float], raw_question: str, answer: dict[str, Any]
 ) -> None:
-    pool = await get_pool()
     query = """
         INSERT INTO ai_semantic_cache (query_signature, embedding, raw_question, answer)
         VALUES ($1, $2::halfvec(384), $3, $4)
