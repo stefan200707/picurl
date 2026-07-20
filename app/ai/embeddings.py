@@ -4,7 +4,9 @@ import functools
 @functools.cache
 def get_model():
     from sentence_transformers import SentenceTransformer
+
     return SentenceTransformer("all-MiniLM-L6-v2")
+
 
 def embed(text: str) -> list[float]:
     """

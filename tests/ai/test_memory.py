@@ -15,7 +15,10 @@ from app.ai.memory import (
     store_structured_fact,
 )
 
-os.environ["DATABASE_URL"] = os.getenv("TEST_DATABASE_URL", "postgresql://postgres:password@localhost:5432/picurl_ai")
+os.environ["DATABASE_URL"] = os.getenv(
+    "TEST_DATABASE_URL", "postgresql://postgres:password@localhost:5432/picurl_ai"
+)
+
 
 def is_db_available():
     async def _check():
@@ -25,12 +28,15 @@ def is_db_available():
             return True
         except Exception:
             return False
+
     try:
         return asyncio.run(_check())
     except Exception:
         return False
 
+
 pytestmark = pytest.mark.skipif(not is_db_available(), reason="Database not available")
+
 
 @pytest.fixture(scope="session", autouse=True)
 def setup_db_schema():
@@ -50,6 +56,7 @@ def setup_db_schema():
 
     asyncio.run(_setup())
 
+
 @pytest.fixture(autouse=True)
 async def db_transaction():
     """Отчистка перед каждым тестом"""
@@ -57,6 +64,7 @@ async def db_transaction():
     await pool.execute("TRUNCATE TABLE ai_structured_facts, ai_semantic_cache RESTART IDENTITY")
     yield
     await close_pool()
+
 
 @pytest.mark.asyncio
 async def test_structured_fact_lifecycle():
@@ -72,6 +80,7 @@ async def test_structured_fact_lifecycle():
     fact2 = await lookup_structured_fact("complex", "c1", "is_center")
     assert fact2.observed_count == 2
     assert fact2.confidence == 0.95
+
 
 @pytest.mark.asyncio
 async def test_semantic_cache_lifecycle():

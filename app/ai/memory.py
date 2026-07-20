@@ -9,6 +9,7 @@ from pydantic import BaseModel
 # Для настройки подключения можно использовать переменные окружения.
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:password@localhost:5432/picurl_ai")
 
+
 class StructuredFact(BaseModel):
     id: int
     subject_type: str
@@ -21,6 +22,7 @@ class StructuredFact(BaseModel):
     first_seen_at: datetime
     last_confirmed_at: datetime
 
+
 class CachedAnswer(BaseModel):
     id: int
     query_signature: str
@@ -30,7 +32,9 @@ class CachedAnswer(BaseModel):
     created_at: datetime
     last_used_at: datetime
 
+
 _pool: asyncpg.Pool | None = None
+
 
 async def get_pool() -> asyncpg.Pool:
     global _pool
@@ -38,11 +42,13 @@ async def get_pool() -> asyncpg.Pool:
         _pool = await asyncpg.create_pool(DATABASE_URL)
     return _pool
 
+
 async def close_pool() -> None:
     global _pool
     if _pool is not None:
         await _pool.close()
         _pool = None
+
 
 async def lookup_structured_fact(
     subject_type: str, subject_id: str, fact_type: str
@@ -57,18 +63,19 @@ async def lookup_structured_fact(
     row = await pool.fetchrow(query, subject_type, subject_id, fact_type)
     if row:
         return StructuredFact(
-            id=row['id'],
-            subject_type=row['subject_type'],
-            subject_id=row['subject_id'],
-            fact_type=row['fact_type'],
-            fact_value=json.loads(row['fact_value']),
-            source=row['source'],
-            confidence=row['confidence'],
-            observed_count=row['observed_count'],
-            first_seen_at=row['first_seen_at'],
-            last_confirmed_at=row['last_confirmed_at']
+            id=row["id"],
+            subject_type=row["subject_type"],
+            subject_id=row["subject_id"],
+            fact_type=row["fact_type"],
+            fact_value=json.loads(row["fact_value"]),
+            source=row["source"],
+            confidence=row["confidence"],
+            observed_count=row["observed_count"],
+            first_seen_at=row["first_seen_at"],
+            last_confirmed_at=row["last_confirmed_at"],
         )
     return None
+
 
 async def store_structured_fact(
     subject_type: str,
@@ -76,7 +83,7 @@ async def store_structured_fact(
     fact_type: str,
     value: dict[str, Any],
     source: str,
-    confidence: float
+    confidence: float,
 ) -> None:
     pool = await get_pool()
     query = """
@@ -102,6 +109,7 @@ async def store_structured_fact(
         query, subject_type, subject_id, fact_type, json.dumps(value), source, confidence
     )
 
+
 async def lookup_semantic(
     query_signature: str, embedding: list[float], threshold: float = 0.15
 ) -> CachedAnswer | None:
@@ -117,24 +125,25 @@ async def lookup_semantic(
     embedding_str = "[" + ",".join(map(str, embedding)) + "]"
 
     row = await pool.fetchrow(query, embedding_str)
-    if row and row['dist'] <= threshold:
+    if row and row["dist"] <= threshold:
         update_query = """
             UPDATE ai_semantic_cache
             SET hit_count = hit_count + 1, last_used_at = now()
             WHERE id = $1
         """
-        await pool.execute(update_query, row['id'])
+        await pool.execute(update_query, row["id"])
 
         return CachedAnswer(
-            id=row['id'],
-            query_signature=row['query_signature'],
-            raw_question=row['raw_question'],
-            answer=json.loads(row['answer']),
-            hit_count=row['hit_count'] + 1,
-            created_at=row['created_at'],
-            last_used_at=datetime.now()
+            id=row["id"],
+            query_signature=row["query_signature"],
+            raw_question=row["raw_question"],
+            answer=json.loads(row["answer"]),
+            hit_count=row["hit_count"] + 1,
+            created_at=row["created_at"],
+            last_used_at=datetime.now(),
         )
     return None
+
 
 async def store_semantic(
     query_signature: str, embedding: list[float], raw_question: str, answer: dict[str, Any]
