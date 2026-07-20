@@ -197,7 +197,10 @@ async def enrich(
         return EnrichmentResult.from_deterministic(known)
 
     settings = get_settings()
-    if not settings.AI_ENRICHMENT_ENABLED or not settings.ANTHROPIC_API_KEY:
+    is_claude_missing = settings.AI_PROVIDER == "claude" and not settings.ANTHROPIC_API_KEY
+    is_gemini_missing = settings.AI_PROVIDER == "antigravity" and not settings.GEMINI_API_KEY
+
+    if not settings.AI_ENRICHMENT_ENABLED or is_claude_missing or is_gemini_missing:
         warnings.append("ИИ-обогащение выключено — часть запроса не обработана")
         return EnrichmentResult.disabled()
 
