@@ -27,14 +27,12 @@ async def call_model(system_prompt: str, user_payload: dict) -> AIEnrichmentAnsw
 
 
 async def call_antigravity(system_prompt: str, user_payload: dict, settings) -> AIEnrichmentAnswer:
-    if not settings.GEMINI_API_KEY:
-        raise ValueError("AI enrichment is disabled or GEMINI_API_KEY is missing")
-
     config = LocalAgentConfig(
         system_instructions=system_prompt,
         response_schema=AIEnrichmentAnswer,
-        api_key=settings.GEMINI_API_KEY,
     )
+    if settings.GEMINI_API_KEY:
+        config.api_key = settings.GEMINI_API_KEY
     user_message = json.dumps(user_payload, ensure_ascii=False)
 
     try:
