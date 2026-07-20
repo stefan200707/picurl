@@ -53,14 +53,15 @@ API pik.ru; нераспознанное всегда уходит в `warnings`
   опираются парсинг (промпты 04–06) и `url_builder` (07). «Пустой» `Criteria()`
   валиден: скаляры — `None`, списки — пустые. Ключевые решения — в докстринге
   модуля: `rooms` — всегда список (single vs multi решает url_builder по длине);
-  `finish` — `bool | None` (URL выражает `True` — слаг `finish`, и `False` — слаг `bez-otdelki`); `sort` — строковый ключ
+  `finish` — список `Finish` (`list[Finish]`); `sort` — строковый ключ
   `price_asc|price_desc|area_asc|area_desc` с properties `field`/`order`
-  для `sortBy`/`orderBy`.
+  для `sortBy`/`orderBy`. Для подготовки к ИИ (промпт 16) добавлены поля
+  `poi_requirements` (список POI, извлеченных из текста) и `center_requested` (булево).
 - **Модели API** `BuildUrlRequest`/`BuildUrlResponse` живут в `app/main.py`
   (это контракт HTTP-слоя, не парсинга). Ответ: `{url, criteria, result_count,
   warnings}`; человекочитаемое представление критериев для поля `criteria` даёт
   `Criteria.to_public_dict()` (пример: `{"rooms": "2", "price_max": 15000000,
-  "metro": ["Аэропорт Внуково"], "finish": true, "sort": "price_asc"}`).
+  "metro": ["Аэропорт Внуково"], "finish": "готовая", "sort": "price_asc"}`).
   Поле `text` запроса имеет `examples` — Swagger-форма открывается
   предзаполненной. Тесты контракта — `tests/parsing/test_schema.py`.
 
@@ -90,7 +91,9 @@ API pik.ru; нераспознанное всегда уходит в `warnings`
   (кроме валидатора) место с сетевым доступом; тянет открытый backend
   `api.pik.ru/v2/block` и перезаписывает `complexes/counties/metro/districts`.
   Мёрж не затирает ручную докурацию (кураторские `slug`/`id`/`aliases`
-  сохраняются), сортировка стабильная — диффы читаемы.
+  сохраняются), сортировка стабильная — диффы читаемы. Эндпоинт `/internal/refresh-dicts`
+  защищён секретным токеном через заголовок `X-Internal-Token`, который сверяется с
+  переменной окружения `INTERNAL_REFRESH_TOKEN`.
 - **Ограничение**: GUID-ы станций (`metroStations`) и числовые id округов
   (`districtCounties`) отдаёт только front-API `www.pik.ru` (закрыт бот-защитой
   Qrator) — эти поля докуриваются **вручную**; `benefits/option_groups/options`
@@ -159,15 +162,19 @@ regex скомпилированы один раз на уровне модул�
    ```json
    {
      "url": "https://www.pik.ru/search/...",
-     "criteria": { "rooms": "2", "price_max": 15000000, ... },
+     "criteria": { "rooms": "2", "price_max": 15000000, "complexes": ["Какой-то ЖК"] },
      "result_count": 47,
-     "warnings": []
+     "warnings": [],
+     "ai_used": true,
+     "ai_cache_hit": false,
+     "ai_explanation": "ЖК 'Какой-то ЖК' имеет школу поблизости."
    }
    ```
 
 **Поток обработки:**
 1. Принимается запрос `BuildUrlRequest` со строкой `text`.
 2. `parse(text)` извлекает `Criteria` и список предупреждений `warnings`.
+2.5. **ИИ-обогащение (опционально)**: если в `criteria` есть `poi_requirements` или `center_requested`, вызывается ИИ для сужения `complexes`. Обратная совместимость сохранена — при выключенном ИИ или ошибке процесс продолжается с исходными `criteria`.
 3. `build_url(criteria)` строит ссылку `url` на основе собранных критериев.
 4. `validate(criteria)` делает проверочный HTTP-запрос к API pik.ru. Если результатов 0, в `warnings` добавляется: `"под критерии ничего не найдено"`.
 
@@ -187,16 +194,20 @@ regex скомпилированы один раз на уровне модул�
 Выполнен промпт 08: валидатор выдачи `validate(criteria, client)` в `app/pik/validator.py`. Это единственный сетевой вызов рантайма (запрос к backend-API `api.pik.ru/v2/filter`), best-effort (не роняет сервис при ошибке сети), мокируется в тестах.
 Выполнен промпт 09: Эндпоинт `POST /build-url` в `app/main.py`. Связывает парсер, билдер и валидатор в единый пайплайн, возвращает готовый URL и warnings.
 Выполнен промпт 10: Интеграционные тесты end-to-end с замоканным API pik.ru. Лежат в `tests/integration/test_build_url_e2e.py`. Проект полностью собран, Milestone 5 достигнут.
+Выполнен промпт 17: Карта памяти и хранилище для Базы Знаний на базе PostgreSQL 15+ с расширением pgvector в `app/ai/memory.py`.
 
 ### Стек
 
 Python 3.12 · FastAPI · pydantic v2 · httpx · rapidfuzz · pytest · uv · ruff.
+Для v2 (ИИ-обогащение) добавлены: Anthropic SDK, PostgreSQL 15+ (с pgvector), sentence-transformers, asyncpg, и pydantic-settings.
 Entrypoint FastAPI объявлен в `pyproject.toml` (`[tool.fastapi] entrypoint = "app.main:app"`).
 
 ### Команды
 
 - Установка: `uv sync`
 - Запуск dev-сервера: `uv run fastapi dev` (или `uv run uvicorn app.main:app --reload`)
+- Запуск БД ИИ (pgvector): `docker compose up -d postgres`
+- Накатывание миграций: `psql $DATABASE_URL -f app/ai/migrations/01_memory_tables.sql`
 - Тесты: `uv run pytest`
 - Линт: `uv run ruff check`; формат: `uv run ruff format` (проверка: `--check`)
 
@@ -215,8 +226,11 @@ app/
   parsing/           # schema.py — Criteria; rules/ — пакет regex-правил; parser.py — фасад; entity_match.py — матчинг; stopwords.py — стопслова
   reference/         # *.json — справочники; loader.py — загрузка/кэш; refresh.py — обновление
   pik/               # url_builder.py — генератор URL; validator.py — проверка URL
+  geo/               # distance.py — гео-эвристики; poi.py — получение POI из OSM; refresh_poi.py — обновление кэша POI (команда: python -m app.geo.refresh_poi)
+  ai/                # embeddings.py — эмбеддинги; memory.py — работа с pgvector; migrations/ — миграции БД
+  knowledge_base/    # база знаний ИИ (кеширование семантики и гео-привязок)
 tests/               # pytest; integration/ — E2E тесты; test_health.py — smoke; parsing/ — Criteria/API + rules; reference/ — loader+refresh
-docs/                # pik-url-schema.md — спецификация URL-схемы pik.ru (источник правды)
+docs/                # pik-url-schema.md — спецификация URL-схемы; ai_architecture_proposal.md — предложение по внедрению ИИ
 prompts/             # декомпозиция задачи
 ```
 
@@ -254,6 +268,7 @@ prompts/             # декомпозиция задачи
   «нераспознанном» тексте. Также исправлено разбиение нераспознанных кусков
   по точке — оно резало и точку внутри дробных чисел («1.5» → «1» + «5м»).
   Добавлен триггер «район X» без предлога «в» (по аналогии с «округ X»/«жк X»).
+- **Критичные баги парсинга (аудит)**: убраны реальные топонимы («люберцы», «раменки») из стоп-слов, чтобы не ломать матчинг локаций. Исправлен избыточно широкий regex для `only_available` (раньше голый корень «доступн-» ошибочно добавлял параметр) и `finish` (голые слова «отделка»/«ремонт» теперь не засчитываются как `finish=READY` без явного контекста).
 
 **Известные ограничения (не исправлялись, задокументированы, не баги кода):**
 справочники метро/районов/округов сильно неполны по GUID/id (обновляются
@@ -264,6 +279,21 @@ prompts/             # декомпозиция задачи
 «…с 5 по 10» без повторного «этаж») требуют NLU за пределами regex-парсера —
 корректно уходят в warnings, а не додумываются.
 
+---
+
+## Архитектура ИИ и Базы Знаний (Предложение и v2)
+
+Сформировано архитектурное решение по внедрению ИИ для разбора сложных контекстных и пространственных запросов ("квартира с детским садом неподалеку").
+ИИ-обогащение работает как ограниченный fallback: оно вызывается только когда после детерминированного парсинга остаётся нераспознанный семантический остаток запроса.
+Каждый ответ ИИ сохраняется в карту памяти. Основной пайплайн полностью самодостаточен.
+Подробное описание архитектуры, потока запроса и интеграции с текущим кодом находится в `docs/ai-enrichment-architecture.md`.
+
+Создана директория `app/knowledge_base/` для будущего локального векторного хранилища и кэшированных весов.
+Также созданы директории `app/ai/` и `app/geo/` для работы ИИ-агента и гео-слоя.
+Выполнен промпт 18: Клиент Claude и пайплайн обогащения в `app/ai/enrichment.py`. Реализована обёртка над Anthropic API с ограничением по бюджету вызовов, санированием ответа через шорт-лист кандидатов и кэшированием результатов.
+Выполнен промпт 19: Подключение ИИ-обогащения к эндпоинту `POST /build-url` с использованием пула соединений БД и DI.
+Выполнен промпт 20: Самообучение и промоушен фактов из БД в детерминированные JSON-справочники (`app/ai/promotion.py`). ИИ-факты, достигшие порога (наблюдаемость ≥ 3, уверенность ≥ 0.8) автоматически записываются в `counties.json`, `districts.json` и `poi_cache.json`. Тесты проверены, `resolve_known_facts` работает детерминированно из JSON-справочников минуя БД. Отчет по промоушену и логам ИИ выводится в stdout при запуске скрипта: `python -m app.ai.promotion`.
+Выполнен промпт 21: Интеграционные тесты полного цикла ИИ-обогащения (`tests/integration/test_ai_learning_loop.py`). Тесты покрывают 6 сценариев (от cold-start до деградации и защиты от галлюцинаций), доказывая, что система после накопления знаний способна отвечать на сложные запросы детерминированно, без сетевых вызовов LLM. Финализирована архитектура ИИ в `docs/ai-enrichment-architecture.md` с фиксацией порогов и моделей.
 ---
 
 При каждом изменении проекта — изменять и дополнять CLAUDE.md.

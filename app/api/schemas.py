@@ -30,7 +30,7 @@ class BuildUrlResponse(BaseModel):
                 "rooms": "2",
                 "price_max": 15000000,
                 "metro": ["Аэропорт Внуково"],
-                "finish": True,
+                "finish": ["готовая"],
                 "sort": "price_asc",
             }
         ],
@@ -45,4 +45,15 @@ class BuildUrlResponse(BaseModel):
     warnings: list[str] = Field(
         default_factory=list,
         description="Нераспознанные куски текста и ослабленные критерии.",
+    )
+    ai_used: bool = Field(
+        default=False,
+        description="Привлекался ли ИИ для обогащения (например, при поиске по гео или POI).",
+    )
+    ai_cache_hit: bool = Field(
+        default=False,
+        description="Взят ли результат ИИ-обогащения из локального семантического кэша.",
+    )
+    ai_explanation: str | None = Field(
+        default=None, description="Объяснение решения ИИ (почему выбраны именно эти ЖК)."
     )

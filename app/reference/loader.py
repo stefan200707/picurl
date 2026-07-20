@@ -50,6 +50,9 @@ class RefEntry(BaseModel):
     slug: str | None = None
     id: str | None = None
     aliases: tuple[str, ...] = ()
+    lat: float | None = None
+    lon: float | None = None
+    is_center: bool | None = None
 
 
 class ReferenceData(BaseModel):

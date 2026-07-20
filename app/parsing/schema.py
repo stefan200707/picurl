@@ -15,7 +15,7 @@
 - **rooms** — всегда список (в т.ч. из одного элемента): выбор «single-путь vs
   multi-query» — задача `url_builder`, он решает по длине списка. Дубликаты
   схлопываются валидатором с сохранением порядка.
-- **finish** — ``bool | None`` (трёхзначный enum не нужен): URL-схема pik.ru
+- **finish** — ``list[Finish]`` (список состояний отделки): URL-схема pik.ru
   поддерживает только слаг ``finish`` («готовая отделка»), т.е. ``True``.
   «Без отделки» (``False``) в URL не выражается — `url_builder` обязан отправить
   это в ``warnings`` (инвариант «ничего не отбрасывается молча»).
@@ -35,6 +35,8 @@ from enum import IntEnum, StrEnum
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+from app.geo.poi import POICategory
 
 
 class Rooms(StrEnum):
@@ -120,6 +122,14 @@ class HousingType(StrEnum):
     ANY = "any"
 
 
+class POIRequirement(BaseModel):
+    """Требование к окружению (школа, парк и т.д.), извлечённое из текста."""
+
+    category: POICategory
+    raw_phrase: str
+    max_distance_m: int | None = None
+
+
 class MatchedEntity(BaseModel):
     """Сущность справочника (метро/округ/район/ЖК), найденная матчером.
 
@@ -189,6 +199,10 @@ class Criteria(BaseModel):
     housing_type: HousingType | None = None
     only_available: bool = False
 
+    # --- ИИ / Гео (промпт 16) --------------------------------------------------
+    poi_requirements: list[POIRequirement] = Field(default_factory=list)
+    center_requested: bool = False
+
     # --- Расширяемость: слаги «как есть» (см. docs/pik-url-schema.md) --------
     current_benefit: str | None = None
     option_groups: list[str] = Field(default_factory=list)
@@ -215,7 +229,7 @@ class Criteria(BaseModel):
         метками/именами, а не внутренними enum/объектами. Пример (из ТЗ)::
 
             {"rooms": "2", "price_max": 15000000,
-             "metro": ["Аэропорт Внуково"], "finish": true, "sort": "price_asc"}
+             "metro": ["Аэропорт Внуково"], "finish": "готовая", "sort": "price_asc"}
         """
         public: dict[str, Any] = self.model_dump(exclude_none=True, exclude_unset=True)
 
@@ -253,6 +267,14 @@ class Criteria(BaseModel):
                 public.pop(lst_f, None)
             else:
                 public[lst_f] = list(val)
+
+        if self.poi_requirements:
+            public["poi_requirements"] = [
+                req.model_dump(exclude_none=True, mode="json") for req in self.poi_requirements
+            ]
+
+        if not self.center_requested:
+            public.pop("center_requested", None)
 
         return public
 

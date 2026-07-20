@@ -11,6 +11,13 @@ dependencies = [
     "rapidfuzz>=3",
     "uvicorn>=0.30",
     "setuptools<70",
+    "pydantic-settings>=2.14.2",
+    "anthropic>=0.117.0",
+    "psycopg[binary]>=3.3.4",
+    "pgvector>=0.5.0",
+    "torch>=2.12.1",
+    "sentence-transformers>=5.6.0",
+    "asyncpg>=0.31.0",
 ]
 
 [dependency-groups]
@@ -19,6 +26,15 @@ dev = [
     "pytest-asyncio>=0.24",
     "ruff>=0.8",
 ]
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[tool.uv.sources]
+torch = { index = "pytorch-cpu" }
+
 
 [tool.fastapi]
 entrypoint = "app.main:app"

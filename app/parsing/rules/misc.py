@@ -101,9 +101,15 @@ def extract_sort(text: str) -> tuple[Sort | None, list[Span]]:
 
 _REQUIRED_TAGS_PATTERNS: list[tuple[re.Pattern[str], str]] = [
     (re.compile(r"\bготов\w+\s+квартир\w+"), "zos"),
-    (re.compile(r"\bипотек\w+\s+по\s+формуле\s+0[.,]?1%?"), "cashback"),
-    (re.compile(r"\bспециальн\w+\s+цен\w*(?:\s+до\s+15\.07)?"), "crossed"),
-    (re.compile(r"\bвыгода\s+до\s+-?15%(?:\s+до\s+15\.07)?"), "outlet"),
+    (re.compile(r"\bипотек\w+\s+по\s+формуле\s+\d[.,]?\d*%?"), "cashback"),
+    (
+        re.compile(
+            r"\b(?:специальн\w+\s+цен\w*|спецпредложени\w*)"
+            r"(?:\s+до\s+\d{1,2}\.\d{2}(?:\.\d{2,4})?)?"
+        ),
+        "crossed",
+    ),
+    (re.compile(r"\bвыгода\s+до\s+-?\d{1,2}%(?:\s+до\s+\d{1,2}\.\d{2}(?:\.\d{2,4})?)?"), "outlet"),
 ]
 
 
@@ -136,7 +142,7 @@ def extract_housing_type(text: str) -> tuple[HousingType | None, list[Span]]:
 
 _ONLY_AVAILABLE = re.compile(
     r"\bне\s+бронь\b|\bбез\s+брони\b|\bне\s+забронированн\w+"
-    r"|\bтолько\s+свободн\w+|\bтолько\s+доступн\w+|\bдоступн\w+"
+    r"|\bтолько\s+свободн\w+|\bтолько\s+доступн\w+"
     r"|\bне\s+показывать\s+забронирован\w+"
 )
 
