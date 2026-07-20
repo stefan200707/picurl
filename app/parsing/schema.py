@@ -272,7 +272,7 @@ class Criteria(BaseModel):
             public["poi_requirements"] = [
                 req.model_dump(exclude_none=True, mode="json") for req in self.poi_requirements
             ]
-        
+
         if not self.center_requested:
             public.pop("center_requested", None)
 
