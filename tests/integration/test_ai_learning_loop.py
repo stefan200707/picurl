@@ -186,10 +186,12 @@ def mock_anthropic_client(monkeypatch):
 def e2e_client(mock_validator_client, memory_db, temp_data_dir, monkeypatch):
     """Test client with AI fully enabled by default."""
     monkeypatch.setenv("AI_ENRICHMENT_ENABLED", "true")
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key-123")
     monkeypatch.setenv("GEMINI_API_KEY", "test-key-123")
 
     settings = get_settings()
     settings.AI_ENRICHMENT_ENABLED = True
+    settings.ANTHROPIC_API_KEY = "test-key-123"
     settings.GEMINI_API_KEY = "test-key-123"
 
     app.dependency_overrides[get_http_client] = lambda: mock_validator_client

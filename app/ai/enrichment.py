@@ -197,7 +197,10 @@ async def enrich(
         return EnrichmentResult.from_deterministic(known)
 
     settings = get_settings()
-    if not settings.AI_ENRICHMENT_ENABLED or not settings.GEMINI_API_KEY:
+    is_claude_missing = settings.AI_PROVIDER == "claude" and not settings.ANTHROPIC_API_KEY
+    is_gemini_missing = settings.AI_PROVIDER == "antigravity" and not settings.GEMINI_API_KEY
+    
+    if not settings.AI_ENRICHMENT_ENABLED or is_claude_missing or is_gemini_missing:
         warnings.append("ИИ-обогащение выключено — часть запроса не обработана")
         return EnrichmentResult.disabled()
 
@@ -219,10 +222,15 @@ async def enrich(
     try:
         context = build_context(text, criteria, candidates, known)
         answer = await call_model(SYSTEM_PROMPT, context)
-    except Exception as e:
-        logger.error(f"AI enrichment failed: {e}", exc_info=True)
-        warnings.append("не удалось обработать ИИ-обогащение (ошибка сервиса)")
-        return EnrichmentResult.failed()
+    except (ValueError, Exception) as e:
+        from anthropic import APIStatusError, APITimeoutError
+        from pydantic import ValidationError
+
+        if isinstance(e, (APIStatusError, APITimeoutError, ValueError, ValidationError)):
+            logger.error(f"AI enrichment failed: {e}", exc_info=True)
+            warnings.append("не удалось обработать ИИ-обогащение (ошибка сервиса)")
+            return EnrichmentResult.failed()
+        raise e
 
     answer = sanitize_against_shortlist(answer, candidates)
 

@@ -9,8 +9,10 @@ class Settings(BaseSettings):
 
     # Settings for AI
     AI_ENRICHMENT_ENABLED: bool = False
+    AI_PROVIDER: str = "claude"
+    ANTHROPIC_API_KEY: str | None = None
     GEMINI_API_KEY: str | None = None
-    AI_MODEL_NAME: str = "gemini-2.5-flash"
+    AI_MODEL_NAME: str = "claude-3-haiku-20240307"
     DATABASE_URL: str | None = None
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")

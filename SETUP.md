@@ -23,7 +23,7 @@ uv sync
 
 *   `DATABASE_URL` — строка подключения к базе данных PostgreSQL для асинхронного драйвера.
     По умолчанию (для локального Docker) используйте: `postgresql+asyncpg://postgres:password@localhost:5432/picurl_ai`
-*   `GEMINI_API_KEY` — ключ API для работы с моделями Gemini (требуется для ИИ-обогащения запросов через локальную модель).
+*   `ANTHROPIC_API_KEY` — ключ API для работы с моделями Anthropic (требуется для ИИ-обогащения запросов).
 *   `INTERNAL_REFRESH_TOKEN` — секретный токен для защиты эндпоинта обновления справочников.
 
 ## 4. Настройка Базы Данных (ИИ и pgvector)
