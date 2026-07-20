@@ -20,28 +20,8 @@ os.environ["DATABASE_URL"] = os.getenv(
 )
 
 
-def is_db_available():
-    async def _check():
-        try:
-            conn = await asyncpg.connect(os.environ["DATABASE_URL"], timeout=1.0)
-            await conn.close()
-            return True
-        except Exception:
-            return False
-
-    try:
-        return asyncio.run(_check())
-    except Exception:
-        return False
-
-
-pytestmark = pytest.mark.skipif(not is_db_available(), reason="Database not available")
-
-
 @pytest.fixture(scope="session", autouse=True)
 def setup_db_schema():
-    if not is_db_available():
-        return
 
     async def _setup():
         pool = await asyncpg.create_pool(os.environ["DATABASE_URL"])
