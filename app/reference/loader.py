@@ -52,6 +52,7 @@ class RefEntry(BaseModel):
     aliases: tuple[str, ...] = ()
     lat: float | None = None
     lon: float | None = None
+    is_center: bool | None = None
 
 
 class ReferenceData(BaseModel):
