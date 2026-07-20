@@ -1,4 +1,5 @@
 import json
+import logging
 import os
 from datetime import datetime
 from typing import Any
@@ -77,6 +78,9 @@ async def lookup_structured_fact(
     return None
 
 
+logger = logging.getLogger(__name__)
+
+
 async def store_structured_fact(
     subject_type: str,
     subject_id: str,
@@ -85,6 +89,19 @@ async def store_structured_fact(
     source: str,
     confidence: float,
 ) -> None:
+    # Check for conflicts and log them in Python
+    existing = await lookup_structured_fact(subject_type, subject_id, fact_type)
+    if existing and existing.fact_value != value:
+        logger.warning(
+            "Conflict in structured fact '%s' for %s:%s. Old: %s, New: %s. "
+            "Overwriting with new value.",
+            fact_type,
+            subject_type,
+            subject_id,
+            existing.fact_value,
+            value,
+        )
+
     pool = await get_pool()
     query = """
         INSERT INTO ai_structured_facts (
@@ -98,12 +115,10 @@ async def store_structured_fact(
             confidence = CASE
                 WHEN ai_structured_facts.fact_value = $4::jsonb
                 THEN GREATEST(ai_structured_facts.confidence, $6)
-                ELSE ai_structured_facts.confidence
+                ELSE $6
             END,
-            fact_value = CASE
-                WHEN ai_structured_facts.fact_value = $4::jsonb THEN ai_structured_facts.fact_value
-                ELSE $4::jsonb
-            END
+            fact_value = $4::jsonb,
+            source = $5
     """
     await pool.execute(
         query, subject_type, subject_id, fact_type, json.dumps(value), source, confidence
@@ -111,7 +126,7 @@ async def store_structured_fact(
 
 
 async def lookup_semantic(
-    query_signature: str, embedding: list[float], threshold: float = 0.15
+    query_signature: str, embedding: list[float], threshold: float = 0.15, ef_search: int = 40
 ) -> CachedAnswer | None:
     pool = await get_pool()
     # pgvector cosine distance
@@ -124,24 +139,26 @@ async def lookup_semantic(
     """
     embedding_str = "[" + ",".join(map(str, embedding)) + "]"
 
-    row = await pool.fetchrow(query, embedding_str)
-    if row and row["dist"] <= threshold:
-        update_query = """
-            UPDATE ai_semantic_cache
-            SET hit_count = hit_count + 1, last_used_at = now()
-            WHERE id = $1
-        """
-        await pool.execute(update_query, row["id"])
+    async with pool.acquire() as conn, conn.transaction():
+        await conn.execute(f"SET LOCAL hnsw.ef_search = {ef_search}")
+        row = await conn.fetchrow(query, embedding_str)
+        if row and row["dist"] <= threshold:
+            update_query = """
+                    UPDATE ai_semantic_cache
+                    SET hit_count = hit_count + 1, last_used_at = now()
+                    WHERE id = $1
+                """
+            await conn.execute(update_query, row["id"])
 
-        return CachedAnswer(
-            id=row["id"],
-            query_signature=row["query_signature"],
-            raw_question=row["raw_question"],
-            answer=json.loads(row["answer"]),
-            hit_count=row["hit_count"] + 1,
-            created_at=row["created_at"],
-            last_used_at=datetime.now(),
-        )
+            return CachedAnswer(
+                id=row["id"],
+                query_signature=row["query_signature"],
+                raw_question=row["raw_question"],
+                answer=json.loads(row["answer"]),
+                hit_count=row["hit_count"] + 1,
+                created_at=row["created_at"],
+                last_used_at=datetime.now(),
+            )
     return None
 
 
