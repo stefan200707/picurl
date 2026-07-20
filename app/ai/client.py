@@ -17,7 +17,7 @@ async def call_model(system_prompt: str, user_payload: dict) -> AIEnrichmentAnsw
         raise ValueError("AI enrichment is disabled")
 
     provider = settings.AI_PROVIDER.lower()
-    
+
     if provider == "antigravity":
         return await call_antigravity(system_prompt, user_payload, settings)
     elif provider == "claude":
@@ -36,14 +36,14 @@ async def call_antigravity(system_prompt: str, user_payload: dict, settings) -> 
         api_key=settings.GEMINI_API_KEY,
     )
     user_message = json.dumps(user_payload, ensure_ascii=False)
-    
+
     try:
         async with Agent(config) as agent:
             response = await agent.chat(user_message)
             text_chunks = []
             async for token in response:
                 text_chunks.append(token)
-            
+
             full_response = "".join(text_chunks)
             return AIEnrichmentAnswer.model_validate_json(full_response)
     except Exception as e:
