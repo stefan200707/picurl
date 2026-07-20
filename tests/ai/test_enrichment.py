@@ -36,9 +36,20 @@ async def test_enrich_guard_no_poi_requirements():
 
 @pytest.mark.asyncio
 @patch("app.ai.enrichment.lookup_semantic", return_value=None)
-@patch("app.ai.enrichment.build_candidate_shortlist", return_value=[
-    ComplexCandidate(id="1", name="ЖК", district=None, county=None, metro=[], is_center=None, known_poi={})
-])
+@patch(
+    "app.ai.enrichment.build_candidate_shortlist",
+    return_value=[
+        ComplexCandidate(
+            id="1",
+            name="ЖК",
+            district=None,
+            county=None,
+            metro=[],
+            is_center=None,
+            known_poi={},
+        )
+    ],
+)
 async def test_enrich_disabled(mock_build, mock_lookup, mock_settings):
     mock_settings.AI_ENRICHMENT_ENABLED = False
 

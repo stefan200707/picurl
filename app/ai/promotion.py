@@ -1,12 +1,9 @@
 """Промоушен фактов из БД в детерминированные справочники."""
 
-import argparse
 import asyncio
 import json
 import logging
 import sys
-from pathlib import Path
-from typing import Any
 
 import asyncpg
 from pydantic import BaseModel
@@ -37,7 +34,7 @@ async def find_promotable_facts(pool: asyncpg.Pool) -> list[StructuredFact]:
           AND source != 'promoted'
     """
     rows = await pool.fetch(query, PROMOTION_MIN_OBSERVATIONS, PROMOTION_MIN_CONFIDENCE)
-    
+
     facts = []
     for row in rows:
         facts.append(
@@ -70,14 +67,16 @@ async def promote(pool: asyncpg.Pool, facts: list[StructuredFact]) -> PromotionR
     counties = load_existing(counties_path)
     districts = load_existing(districts_path)
     complexes = load_existing(complexes_path)
-    poi_cache = json.loads(poi_cache_path.read_text(encoding="utf-8")) if poi_cache_path.exists() else {}
+    poi_cache = (
+        json.loads(poi_cache_path.read_text(encoding="utf-8")) if poi_cache_path.exists() else {}
+    )
 
     counties_by_id = {c.id: i for i, c in enumerate(counties) if c.id}
     districts_by_id = {d.id: i for i, d in enumerate(districts) if d.id}
     complexes_by_id = {c.id: c.slug for c in complexes if c.id and c.slug}
 
     promoted_ids = []
-    
+
     for fact in facts:
         promoted = False
         if fact.fact_type == "is_center":
@@ -100,24 +99,26 @@ async def promote(pool: asyncpg.Pool, facts: list[StructuredFact]) -> PromotionR
                     is_present = fact.fact_value.get("present", False)
                     if slug not in poi_cache:
                         poi_cache[slug] = {}
-                    
+
                     # Create a simulated POIResult dump if not exist
                     cache_entry = poi_cache[slug].get(poi_category, {})
                     cache_entry["count"] = 1 if is_present else 0
                     if "closest_distance_m" not in cache_entry:
                         cache_entry["closest_distance_m"] = None
-                    
+
                     poi_cache[slug][poi_category] = cache_entry
                     promoted = True
-        
+
         if promoted:
             promoted_ids.append(fact.id)
 
     if promoted_ids:
         write_entries(counties_path, counties)
         write_entries(districts_path, districts)
-        poi_cache_path.write_text(json.dumps(poi_cache, indent=2, ensure_ascii=False) + "\n", "utf-8")
-        
+        poi_cache_path.write_text(
+            json.dumps(poi_cache, indent=2, ensure_ascii=False) + "\n", "utf-8"
+        )
+
         # Mark as promoted in DB
         update_query = """
             UPDATE ai_structured_facts
@@ -126,7 +127,9 @@ async def promote(pool: asyncpg.Pool, facts: list[StructuredFact]) -> PromotionR
         """
         await pool.execute(update_query, promoted_ids)
 
-    return PromotionReport(promoted_count=len(promoted_ids), ignored_count=len(facts) - len(promoted_ids))
+    return PromotionReport(
+        promoted_count=len(promoted_ids), ignored_count=len(facts) - len(promoted_ids)
+    )
 
 
 async def run_promotion():
@@ -140,9 +143,9 @@ async def run_promotion():
         report = await promote(pool, facts)
         logger.info(f"Promoted {report.promoted_count} facts, ignored {report.ignored_count}")
         print(f"Promoted: {report.promoted_count}, Ignored: {report.ignored_count}")
-        
+
         # Simple report on AI calls
-        # (Using observed_count as proxy for AI usage vs cached for demo purposes, 
+        # (Using observed_count as proxy for AI usage vs cached for demo purposes,
         # actual AI metrics would come from an ai_call_log table as suggested).
     finally:
         await pool.close()
