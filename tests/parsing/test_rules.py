@@ -599,3 +599,20 @@ def test_extract_required_tags():
 
     tags, spans = extract_required_tags("спецпредложение до 01.09")
     assert tags == ["crossed"]
+
+def test_extract_poi_requirements():
+    from app.parsing.rules.poi import extract_poi_requirements
+    from app.geo.poi import POICategory
+    
+    poi_reqs, center_req, spans = extract_poi_requirements("ищу квартиру в центре рядом со школой и садиком, нужен лес")
+    assert center_req is True
+    assert len(poi_reqs) == 3
+    assert poi_reqs[0].category == POICategory.SCHOOL
+    assert poi_reqs[1].category == POICategory.KINDERGARTEN
+    assert poi_reqs[2].category == POICategory.PARK_FOREST
+    
+    poi_reqs, center_req, spans = extract_poi_requirements("где-то около парковки и магазина")
+    assert center_req is False
+    assert len(poi_reqs) == 2
+    assert poi_reqs[0].category == POICategory.SHOP
+    assert poi_reqs[1].category == POICategory.PARKING

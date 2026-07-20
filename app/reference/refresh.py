@@ -64,6 +64,8 @@ class BlockPayload(BaseModel):
     locations: Locations | None = None
     metro: str | None = None
     district: str | None = None
+    latitude: float | None = None
+    longitude: float | None = None
 
 
 class BlocksResponse(RootModel[list[BlockPayload]]):
@@ -91,7 +93,7 @@ async def fetch_blocks_async(client: httpx.AsyncClient) -> list[BlockPayload]:
 
 
 def complexes_from_blocks(blocks: list[BlockPayload]) -> list[RefEntry]:
-    """ЖК: имя, слаг (``url`` без ведущего ``/``) и числовой id для ``blocks``."""
+    """ЖК: имя, слаг (``url`` без ведущего ``/``), id для ``blocks`` и координаты."""
     entries: list[RefEntry] = []
     for block in blocks:
         if not block.name:
@@ -99,7 +101,13 @@ def complexes_from_blocks(blocks: list[BlockPayload]) -> list[RefEntry]:
         url = block.url or ""
         slug = url.strip("/") or None
         entries.append(
-            RefEntry(name=block.name, slug=slug, id=str(block.id) if block.id is not None else None)
+            RefEntry(
+                name=block.name,
+                slug=slug,
+                id=str(block.id) if block.id is not None else None,
+                lat=block.latitude,
+                lon=block.longitude,
+            )
         )
     return _dedupe(entries)
 
@@ -177,6 +185,8 @@ def merge_entries(
                 "name": entry.name if slug_index is not None else current.name,
                 "slug": entry.slug or current.slug,
                 "id": entry.id or current.id,
+                "lat": entry.lat or current.lat,
+                "lon": entry.lon or current.lon,
             }
         )
 

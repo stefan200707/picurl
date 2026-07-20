@@ -24,6 +24,7 @@ from .price import extract_price as extract_price
 from .rooms import extract_rooms as extract_rooms
 from .time import TimeFacts as TimeFacts
 from .time import extract_time_to_metro as extract_time_to_metro
+from .poi import extract_poi_requirements as extract_poi_requirements
 
 
 class RulesOutcome(NamedTuple):
@@ -122,6 +123,13 @@ def apply_rules(text: str) -> RulesOutcome:
         consumed.extend(spans)
 
     unsupported, spans = extract_unsupported(norm)
+    consumed.extend(spans)
+
+    poi_reqs, center_req, spans = extract_poi_requirements(norm)
+    if poi_reqs:
+        criteria.poi_requirements.extend(poi_reqs)
+    if center_req:
+        criteria.center_requested = True
     consumed.extend(spans)
 
     fm_names, spans = extract_fallback_metro(norm)

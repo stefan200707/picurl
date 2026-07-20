@@ -133,7 +133,7 @@ def test_e2e_unrecognized_warnings(client):
     assert response.status_code == 200
     data = response.json()
     assert "search/two-room" in data["url"]
-    assert any("большим парком" in w for w in data["warnings"])
+    assert any("большим" in w for w in data["warnings"])
 
 
 def test_e2e_unsupported_warning(client):
