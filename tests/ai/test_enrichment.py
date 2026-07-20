@@ -13,12 +13,12 @@ from app.parsing.schema import Criteria, POIRequirement
 def mock_settings():
     settings = get_settings()
     original_enabled = settings.AI_ENRICHMENT_ENABLED
-    original_key = settings.ANTHROPIC_API_KEY
+    original_key = settings.GEMINI_API_KEY
     settings.AI_ENRICHMENT_ENABLED = True
-    settings.ANTHROPIC_API_KEY = "sk-test"
+    settings.GEMINI_API_KEY = "test"
     yield settings
     settings.AI_ENRICHMENT_ENABLED = original_enabled
-    settings.ANTHROPIC_API_KEY = original_key
+    settings.GEMINI_API_KEY = original_key
 
 
 @pytest.mark.asyncio
@@ -52,6 +52,7 @@ async def test_enrich_guard_no_poi_requirements():
 )
 async def test_enrich_disabled(mock_build, mock_lookup, mock_settings):
     mock_settings.AI_ENRICHMENT_ENABLED = False
+    mock_settings.GEMINI_API_KEY = "test"
 
     criteria = Criteria(
         poi_requirements=[POIRequirement(category=POICategory.SCHOOL, raw_phrase="школа")]

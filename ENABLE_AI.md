@@ -9,7 +9,7 @@
 AI_ENRICHMENT_ENABLED=true
 
 # Ключ от API Anthropic, необходимый для работы модели (Claude)
-ANTHROPIC_API_KEY=your_anthropic_api_key_here
+GEMINI_API_KEY=your_gemini_api_key_here
 
 # (Опционально) URL подключения к базе данных PostgreSQL с pgvector для работы карты памяти ИИ
 # Пример: postgresql://postgres:postgres@localhost:5432/picurl
