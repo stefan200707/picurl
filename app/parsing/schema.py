@@ -268,6 +268,14 @@ class Criteria(BaseModel):
             else:
                 public[lst_f] = list(val)
 
+        if self.poi_requirements:
+            public["poi_requirements"] = [
+                req.model_dump(exclude_none=True, mode="json") for req in self.poi_requirements
+            ]
+        
+        if not self.center_requested:
+            public.pop("center_requested", None)
+
         return public
 
     def to_query_dict(self) -> dict[str, str]:
