@@ -46,3 +46,15 @@ class BuildUrlResponse(BaseModel):
         default_factory=list,
         description="Нераспознанные куски текста и ослабленные критерии.",
     )
+    ai_used: bool = Field(
+        default=False,
+        description="Привлекался ли ИИ для обогащения (например, при поиске по гео или POI)."
+    )
+    ai_cache_hit: bool = Field(
+        default=False,
+        description="Взят ли результат ИИ-обогащения из локального семантического кэша."
+    )
+    ai_explanation: str | None = Field(
+        default=None,
+        description="Объяснение решения ИИ (почему выбраны именно эти ЖК)."
+    )
