@@ -593,3 +593,9 @@ def test_extract_required_tags():
     tags, spans = extract_required_tags("хочу готовые квартиры и специальная цена до 15.07")
     assert tags == ["zos", "crossed"]
     assert len(spans) == 2
+
+    tags, spans = extract_required_tags("выгода до -20%")
+    assert tags == ["outlet"]
+
+    tags, spans = extract_required_tags("спецпредложение до 01.09")
+    assert tags == ["crossed"]

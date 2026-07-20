@@ -30,7 +30,7 @@ class BuildUrlResponse(BaseModel):
                 "rooms": "2",
                 "price_max": 15000000,
                 "metro": ["Аэропорт Внуково"],
-                "finish": True,
+                "finish": ["готовая"],
                 "sort": "price_asc",
             }
         ],

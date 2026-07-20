@@ -101,9 +101,15 @@ def extract_sort(text: str) -> tuple[Sort | None, list[Span]]:
 
 _REQUIRED_TAGS_PATTERNS: list[tuple[re.Pattern[str], str]] = [
     (re.compile(r"\bготов\w+\s+квартир\w+"), "zos"),
-    (re.compile(r"\bипотек\w+\s+по\s+формуле\s+0[.,]?1%?"), "cashback"),
-    (re.compile(r"\bспециальн\w+\s+цен\w*(?:\s+до\s+15\.07)?"), "crossed"),
-    (re.compile(r"\bвыгода\s+до\s+-?15%(?:\s+до\s+15\.07)?"), "outlet"),
+    (re.compile(r"\bипотек\w+\s+по\s+формуле\s+\d[.,]?\d*%?"), "cashback"),
+    (
+        re.compile(
+            r"\b(?:специальн\w+\s+цен\w*|спецпредложени\w*)"
+            r"(?:\s+до\s+\d{1,2}\.\d{2}(?:\.\d{2,4})?)?"
+        ),
+        "crossed",
+    ),
+    (re.compile(r"\bвыгода\s+до\s+-?\d{1,2}%(?:\s+до\s+\d{1,2}\.\d{2}(?:\.\d{2,4})?)?"), "outlet"),
 ]
 
 

@@ -15,7 +15,7 @@
 - **rooms** — всегда список (в т.ч. из одного элемента): выбор «single-путь vs
   multi-query» — задача `url_builder`, он решает по длине списка. Дубликаты
   схлопываются валидатором с сохранением порядка.
-- **finish** — ``bool | None`` (трёхзначный enum не нужен): URL-схема pik.ru
+- **finish** — ``list[Finish]`` (список состояний отделки): URL-схема pik.ru
   поддерживает только слаг ``finish`` («готовая отделка»), т.е. ``True``.
   «Без отделки» (``False``) в URL не выражается — `url_builder` обязан отправить
   это в ``warnings`` (инвариант «ничего не отбрасывается молча»).
@@ -215,7 +215,7 @@ class Criteria(BaseModel):
         метками/именами, а не внутренними enum/объектами. Пример (из ТЗ)::
 
             {"rooms": "2", "price_max": 15000000,
-             "metro": ["Аэропорт Внуково"], "finish": true, "sort": "price_asc"}
+             "metro": ["Аэропорт Внуково"], "finish": "готовая", "sort": "price_asc"}
         """
         public: dict[str, Any] = self.model_dump(exclude_none=True, exclude_unset=True)
 
