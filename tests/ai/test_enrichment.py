@@ -14,14 +14,14 @@ def mock_settings():
     settings = get_settings()
     original_enabled = settings.AI_ENRICHMENT_ENABLED
     original_key_claude = settings.ANTHROPIC_API_KEY
-    original_key_gemini = settings.GEMINI_API_KEY
+    original_cli_path = settings.ANTIGRAVITY_CLI_PATH
     settings.AI_ENRICHMENT_ENABLED = True
     settings.ANTHROPIC_API_KEY = "sk-test"
-    settings.GEMINI_API_KEY = "sk-test"
+    settings.ANTIGRAVITY_CLI_PATH = "agy"
     yield settings
     settings.AI_ENRICHMENT_ENABLED = original_enabled
     settings.ANTHROPIC_API_KEY = original_key_claude
-    settings.GEMINI_API_KEY = original_key_gemini
+    settings.ANTIGRAVITY_CLI_PATH = original_cli_path
 
 
 @pytest.mark.asyncio
