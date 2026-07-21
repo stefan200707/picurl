@@ -3,7 +3,6 @@ import logging
 
 import httpx
 from anthropic import APIStatusError, APITimeoutError, AsyncAnthropic
-from google.antigravity import Agent, LocalAgentConfig
 
 from app.ai.schema import AIEnrichmentAnswer
 from app.config import get_settings
@@ -27,23 +26,47 @@ async def call_model(system_prompt: str, user_payload: dict) -> AIEnrichmentAnsw
 
 
 async def call_antigravity(system_prompt: str, user_payload: dict, settings) -> AIEnrichmentAnswer:
-    config = LocalAgentConfig(
-        system_instructions=system_prompt,
-        response_schema=AIEnrichmentAnswer,
-    )
-    if settings.GEMINI_API_KEY:
-        config.api_key = settings.GEMINI_API_KEY
+    import asyncio
+
+    cli_path = settings.ANTIGRAVITY_CLI_PATH or "agy"
+    model = settings.ANTIGRAVITY_MODEL
+
     user_message = json.dumps(user_payload, ensure_ascii=False)
 
-    try:
-        async with Agent(config) as agent:
-            response = await agent.chat(user_message)
-            text_chunks = []
-            async for token in response:
-                text_chunks.append(token)
+    schema = AIEnrichmentAnswer.model_json_schema()
+    full_prompt = (
+        f"{system_prompt}\n\n"
+        "IMPORTANT: You must respond ONLY with valid JSON matching this schema: "
+        f"{json.dumps(schema)}\n\n"
+        f"Input: {user_message}"
+    )
 
-            full_response = "".join(text_chunks)
-            return AIEnrichmentAnswer.model_validate_json(full_response)
+    cmd = [cli_path, "--print", full_prompt]
+    if model:
+        cmd.extend(["--model", model])
+
+    try:
+        process = await asyncio.create_subprocess_exec(
+            *cmd,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        stdout, stderr = await process.communicate()
+
+        if process.returncode != 0:
+            raise RuntimeError(f"agy CLI failed (exit {process.returncode}): {stderr.decode()}")
+
+        full_response = stdout.decode().strip()
+
+        if full_response.startswith("```json"):
+            full_response = full_response[7:]
+        if full_response.startswith("```"):
+            full_response = full_response[3:]
+        if full_response.endswith("```"):
+            full_response = full_response[:-3]
+
+        full_response = full_response.strip()
+        return AIEnrichmentAnswer.model_validate_json(full_response)
     except Exception as e:
         logger.error(f"Antigravity Agent error: {e}", exc_info=True)
         raise e

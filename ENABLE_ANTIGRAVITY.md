@@ -16,11 +16,15 @@
 # 1. Включение самого механизма ИИ-обогащения
 AI_ENRICHMENT_ENABLED=true
 
-# 2. Переключение провайдера на Antigravity (Google Gemini)
+# 2. Переключение провайдера на Antigravity
 AI_PROVIDER=antigravity
 
-# 3. Ключ API от Gemini (замените на ваш реальный ключ)
-GEMINI_API_KEY=your_gemini_api_key_here
+# 3. Настройки Antigravity (v1, single shared login)
+# Per-user подключения НЕТ: оператор один раз руками логинится в agy на этой машине.
+# пусто = искать agy на PATH
+ANTIGRAVITY_CLI_PATH=
+# опционально, модель для agy
+ANTIGRAVITY_MODEL=
 
 # 4. Подключение к базе данных PostgreSQL (для семантического кэша и фактов)
 # (Данные соответствуют настройкам из docker-compose.yml проекта)
@@ -106,7 +110,7 @@ uv run python -m app.ai.promotion
 1. **Пишет "ИИ-обогащение выключено — часть запроса не обработана"**
    - Проверьте, что в `.env` точно прописано `AI_ENRICHMENT_ENABLED=true`.
    - Убедитесь, что вы перезапустили сервер (`uv run fastapi dev`) после изменения `.env`.
-   - Убедитесь, что установлен `AI_PROVIDER=antigravity` и есть `GEMINI_API_KEY`. (Если провайдер случайно остался `claude`, но нет ключа `ANTHROPIC_API_KEY`, система принудительно отключит ИИ).
+   - Убедитесь, что установлен `AI_PROVIDER=antigravity` и вы авторизованы в `agy` (или правильно указали `ANTIGRAVITY_CLI_PATH`). (Если провайдер случайно остался `claude`, но нет ключа `ANTHROPIC_API_KEY`, система принудительно отключит ИИ).
 
 2. **Ошибки подключения к PostgreSQL / таймауты ИИ**
    - Проверьте статус контейнера: `docker ps`.
