@@ -53,6 +53,13 @@ class RefEntry(BaseModel):
     lat: float | None = None
     lon: float | None = None
     is_center: bool | None = None
+    # Привязка ЖК к локации (заполняется только для записей complexes.json из
+    # ответа api.pik.ru: block.district / block.metro / locations.child.name).
+    # Для остальных справочников остаётся None. Нужна ИИ-слою, чтобы кандидаты
+    # уходили в модель с реальным гео-контекстом, а не пустыми полями.
+    district: str | None = None
+    county: str | None = None
+    metro: str | None = None
 
 
 class ReferenceData(BaseModel):

@@ -193,7 +193,7 @@ async def enrich(
     candidates = build_candidate_shortlist(criteria)
     known = resolve_known_facts(candidates, criteria)
 
-    if fully_resolved(known, criteria):
+    if fully_resolved(known, criteria, candidates):
         return EnrichmentResult.from_deterministic(known)
 
     settings = get_settings()

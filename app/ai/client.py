@@ -1,3 +1,4 @@
+import functools
 import json
 import logging
 
@@ -8,6 +9,22 @@ from app.ai.schema import AIEnrichmentAnswer
 from app.config import get_settings
 
 logger = logging.getLogger(__name__)
+
+
+@functools.cache
+def _get_claude_client(api_key: str) -> AsyncAnthropic:
+    """Переиспользуемый Anthropic-клиент (кэш по ключу) — не создаём httpx-пул
+    на каждый запрос."""
+    return AsyncAnthropic(api_key=api_key, timeout=httpx.Timeout(15.0))
+
+
+def _is_transient(exc: Exception) -> bool:
+    """Стоит ли повторять запрос: только таймаут и 429/5xx (не 4xx-ошибки клиента)."""
+    if isinstance(exc, APITimeoutError):
+        return True
+    if isinstance(exc, APIStatusError):
+        return exc.status_code == 429 or exc.status_code >= 500
+    return False
 
 
 async def call_model(system_prompt: str, user_payload: dict) -> AIEnrichmentAnswer:
@@ -76,7 +93,7 @@ async def call_claude(system_prompt: str, user_payload: dict, settings) -> AIEnr
     if not settings.ANTHROPIC_API_KEY:
         raise ValueError("AI enrichment is disabled or API key is missing")
 
-    client = AsyncAnthropic(api_key=settings.ANTHROPIC_API_KEY, timeout=httpx.Timeout(15.0))
+    client = _get_claude_client(settings.ANTHROPIC_API_KEY)
 
     user_message = json.dumps(user_payload, ensure_ascii=False)
 
@@ -86,25 +103,25 @@ async def call_claude(system_prompt: str, user_payload: dict, settings) -> AIEnr
         "input_schema": AIEnrichmentAnswer.model_json_schema(),
     }
 
+    async def _create():
+        return await client.messages.create(
+            model=settings.AI_MODEL_NAME,
+            max_tokens=1024,
+            system=system_prompt,
+            messages=[{"role": "user", "content": user_message}],
+            tools=[tool],
+            tool_choice={"type": "tool", "name": "provide_enrichment_answer"},
+        )
+
     try:
-        response = await client.messages.create(
-            model=settings.AI_MODEL_NAME,
-            max_tokens=1024,
-            system=system_prompt,
-            messages=[{"role": "user", "content": user_message}],
-            tools=[tool],
-            tool_choice={"type": "tool", "name": "provide_enrichment_answer"},
-        )
-    except (APIStatusError, APITimeoutError) as e:
+        response = await _create()
+    except Exception as e:
+        # Повторяем только временные сбои (таймаут, 429/5xx); 4xx (неверный
+        # запрос/ключ) не ретраим — это лишь удвоит ошибку и задержку.
+        if not _is_transient(e):
+            raise
         logger.warning(f"Anthropic API transient error, retrying: {e}")
-        response = await client.messages.create(
-            model=settings.AI_MODEL_NAME,
-            max_tokens=1024,
-            system=system_prompt,
-            messages=[{"role": "user", "content": user_message}],
-            tools=[tool],
-            tool_choice={"type": "tool", "name": "provide_enrichment_answer"},
-        )
+        response = await _create()
 
     for block in response.content:
         if block.type == "tool_use" and block.name == "provide_enrichment_answer":

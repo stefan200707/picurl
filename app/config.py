@@ -16,6 +16,14 @@ class Settings(BaseSettings):
     AI_MODEL_NAME: str = "claude-3-haiku-20240307"
     DATABASE_URL: str | None = None
 
+    # Пороги промоушена ИИ-фактов в детерминированные справочники
+    # (см. app/ai/promotion.py). Вынесены в конфиг, чтобы оператор мог ужесточить
+    # вентиль без правки кода. Число независимых наблюдений — главная защита от
+    # единичной уверенной галлюцинации модели (одна confidence=0.9 сама по себе
+    # промоушен не даёт: нужно ≥ AI_PROMOTION_MIN_OBSERVATIONS разных запросов).
+    AI_PROMOTION_MIN_OBSERVATIONS: int = 5
+    AI_PROMOTION_MIN_CONFIDENCE: float = 0.8
+
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
 
