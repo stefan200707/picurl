@@ -5,8 +5,8 @@ from app.parsing.schema import Criteria
 from app.reference.loader import DATA_DIR, load_all, normalize
 
 #: Максимум ЖК-кандидатов, уходящих в ИИ (шорт-лист держим коротким, чтобы
-#: контекст модели оставался фокусным и дешёвым).
-SHORTLIST_LIMIT = 20
+#: контекст модели оставался фокусным и дешёвым, но при fallback давал выбор).
+SHORTLIST_LIMIT = 50
 
 
 def _location_filter(criteria: Criteria) -> set[str] | None:
@@ -35,40 +35,49 @@ def build_candidate_shortlist(criteria: Criteria) -> list[ComplexCandidate]:
         normalize(d.name): d.is_center for d in ref_data.districts if d.is_center is not None
     }
 
-    candidates = []
     allowed_ids = {c.id for c in criteria.complexes if c.id}
     location_names = None if allowed_ids else _location_filter(criteria)
 
-    for c in ref_data.complexes:
-        # Если пользователь назвал конкретные ЖК — берём только их.
-        if allowed_ids and c.id not in allowed_ids:
-            continue
-
-        # Иначе, если запрос сужен локацией — оставляем только совпадающие ЖК.
-        if location_names is not None:
-            c_locations = {normalize(v) for v in (c.district, c.county, c.metro) if v}
-            if location_names.isdisjoint(c_locations):
+    def _get_candidates(loc_names: set[str] | None) -> list[ComplexCandidate]:
+        result = []
+        for c in ref_data.complexes:
+            # Если пользователь назвал конкретные ЖК — берём только их.
+            if allowed_ids and c.id not in allowed_ids:
                 continue
 
-        known_poi = {}
-        if c.slug and c.slug in poi_cache:
-            for cat, data in poi_cache[c.slug].items():
-                known_poi[cat] = data.get("count", 0) > 0
+            # Иначе, если запрос сужен локацией — оставляем только совпадающие ЖК.
+            if loc_names is not None:
+                c_locations = {normalize(v) for v in (c.district, c.county, c.metro) if v}
+                if loc_names.isdisjoint(c_locations):
+                    continue
 
-        candidates.append(
-            ComplexCandidate(
-                id=c.id or "",
-                name=c.name,
-                district=c.district,
-                county=c.county,
-                metro=[c.metro] if c.metro else [],
-                is_center=center_by_district.get(normalize(c.district)) if c.district else None,
-                known_poi=known_poi,
+            known_poi = {}
+            if c.slug and c.slug in poi_cache:
+                for cat, data in poi_cache[c.slug].items():
+                    known_poi[cat] = data.get("count", 0) > 0
+
+            result.append(
+                ComplexCandidate(
+                    id=c.id or "",
+                    name=c.name,
+                    district=c.district,
+                    county=c.county,
+                    metro=[c.metro] if c.metro else [],
+                    is_center=center_by_district.get(normalize(c.district)) if c.district else None,
+                    known_poi=known_poi,
+                )
             )
-        )
 
-        if len(candidates) >= SHORTLIST_LIMIT:
-            break
+            if len(result) >= SHORTLIST_LIMIT:
+                break
+        return result
+
+    candidates = _get_candidates(location_names)
+
+    # Fallback: если жесткий гео-фильтр отсёк всех кандидатов (например, ложное
+    # срабатывание fuzzy-поиска метро), пробуем без него.
+    if not candidates and location_names is not None and not allowed_ids:
+        candidates = _get_candidates(None)
 
     return candidates
 
