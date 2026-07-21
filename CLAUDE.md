@@ -207,7 +207,7 @@ Entrypoint FastAPI объявлен в `pyproject.toml` (`[tool.fastapi] entrypo
 - Установка: `uv sync`
 - Запуск dev-сервера: `uv run fastapi dev` (или `uv run uvicorn app.main:app --reload`)
 - Запуск БД ИИ (pgvector): `docker compose up -d postgres`
-- Накатывание миграций: `psql $DATABASE_URL -f app/ai/migrations/01_memory_tables.sql`
+- Накатывание миграций: `docker exec -i picurl-postgres psql -U postgres -d picurl_ai < app/ai/migrations/01_memory_tables.sql` (или `psql $DATABASE_URL -f app/ai/migrations/01_memory_tables.sql`)
 - Тесты: `uv run pytest`
 - Линт: `uv run ruff check`; формат: `uv run ruff format` (проверка: `--check`)
 
