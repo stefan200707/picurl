@@ -361,7 +361,7 @@ prompts/             # декомпозиция задачи
 ### Стек (v2, обновление)
 
 Модель эмбеддингов — `paraphrase-multilingual-MiniLM-L12-v2` (multilingual,
-размерность 384). Дефолтная модель Claude для обогащения — `claude-haiku-4-5`
+размерность 384). Дефолтная модель для обогащения — `gemini-3.5-flash`
 (переопределяется через `AI_MODEL_NAME`). Пороги промоушена настраиваются через
 `AI_PROMOTION_MIN_OBSERVATIONS` / `AI_PROMOTION_MIN_CONFIDENCE`.
 ---
