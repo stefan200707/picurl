@@ -11,11 +11,9 @@ class Settings(BaseSettings):
     AI_ENRICHMENT_ENABLED: bool = False
     AI_PROVIDER: str = "claude"
     ANTHROPIC_API_KEY: str | None = None
-    GEMINI_API_KEY: str | None = None
-    # Дешёвая быстрая модель для семантического отбора ЖК по короткому шорт-листу
-    # (высокочастотный рантайм-путь). Haiku 4.5 — актуальная замена устаревшей
-    # claude-3-haiku-20240307.
-    AI_MODEL_NAME: str = "claude-haiku-4-5"
+    ANTIGRAVITY_CLI_PATH: str | None = None
+    ANTIGRAVITY_MODEL: str | None = None
+    AI_MODEL_NAME: str = "gemini-3.5-flash"
     DATABASE_URL: str | None = None
 
     # Пороги промоушена ИИ-фактов в детерминированные справочники

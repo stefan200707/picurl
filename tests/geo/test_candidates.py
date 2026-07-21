@@ -24,8 +24,13 @@ def ref_dir(tmp_path, monkeypatch):
         json.dumps(
             [
                 {"name": "Центральный", "slug": "c1", "id": "1", "district": "Арбат"},
-                {"name": "Восточный", "slug": "c2", "id": "2", "district": "Гольяново",
-                 "metro": "Щёлковская"},
+                {
+                    "name": "Восточный",
+                    "slug": "c2",
+                    "id": "2",
+                    "district": "Гольяново",
+                    "metro": "Щёлковская",
+                },
                 {"name": "Западный", "slug": "c3", "id": "3", "county": "ЗАО"},
             ],
             ensure_ascii=False,
