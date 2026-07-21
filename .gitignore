@@ -17,4 +17,7 @@ venv/
 htmlcov/
 
 # Environment
-.env
+#.env
+
+# Custom documentation
+docs_untracked/

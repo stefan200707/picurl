@@ -8,7 +8,7 @@ class Settings(BaseSettings):
     INTERNAL_REFRESH_TOKEN: str | None = None
 
     # Settings for AI
-    AI_ENRICHMENT_ENABLED: bool = False
+    AI_ENRICHMENT_ENABLED: bool = True
     AI_PROVIDER: str = "claude"
     ANTHROPIC_API_KEY: str | None = None
     ANTIGRAVITY_CLI_PATH: str | None = None
