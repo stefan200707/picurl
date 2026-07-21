@@ -191,6 +191,10 @@ async def enrich(
     #     return EnrichmentResult.noop()
 
     candidates = build_candidate_shortlist(criteria)
+    if not candidates:
+        warnings.append("Список кандидатов пуст")
+        return EnrichmentResult.failed()
+
     known = resolve_known_facts(candidates, criteria)
 
     # Пока что полностью все запросы идут через нейронку (полное обогащение)
