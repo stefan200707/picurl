@@ -109,6 +109,20 @@ class TestExtractors:
         assert None not in names
         assert len(names) == 4
 
+    def test_complexes_carry_location_binding(self) -> None:
+        """ЖК сохраняет привязку к району/метро/округу (нужна ИИ-слою)."""
+        entries = complexes_from_blocks([BlockPayload.model_validate(b) for b in BLOCKS_PAYLOAD])
+
+        mpark = next(e for e in entries if e.name == "Мичуринский парк")
+        assert mpark.district == "Очаково-Матвеевское"
+        assert mpark.metro == "Озёрная"
+        assert mpark.county == "ЗАО"  # округ только для Москвы
+
+        # Не Москва — округ не проставляется, но район/метро (если есть) сохраняются.
+        bosfor = next(e for e in entries if e.name == "Босфорский парк")
+        assert bosfor.county is None
+        assert bosfor.district == "Первомайский"
+
     def test_counties_only_moscow_and_deduped(self) -> None:
         entries = counties_from_blocks([BlockPayload.model_validate(b) for b in BLOCKS_PAYLOAD])
 

@@ -93,13 +93,27 @@ async def fetch_blocks_async(client: httpx.AsyncClient) -> list[BlockPayload]:
 
 
 def complexes_from_blocks(blocks: list[BlockPayload]) -> list[RefEntry]:
-    """ЖК: имя, слаг (``url`` без ведущего ``/``), id для ``blocks`` и координаты."""
+    """ЖК: имя, слаг (``url`` без ведущего ``/``), id, координаты и гео-привязка.
+
+    Привязку к району (``block.district``), метро (``block.metro``) и округу
+    Москвы (``locations.child.name``) сохраняем прямо на записи ЖК — она нужна
+    ИИ-слою для формирования кандидатов с реальным гео-контекстом. Округ берём
+    только для Москвы (как и :func:`counties_from_blocks`).
+    """
     entries: list[RefEntry] = []
     for block in blocks:
         if not block.name:
             continue
         url = block.url or ""
         slug = url.strip("/") or None
+        county = None
+        if (
+            block.locations
+            and block.locations.parent
+            and block.locations.parent.name == "Москва"
+            and block.locations.child
+        ):
+            county = block.locations.child.name
         entries.append(
             RefEntry(
                 name=block.name,
@@ -107,6 +121,9 @@ def complexes_from_blocks(blocks: list[BlockPayload]) -> list[RefEntry]:
                 id=str(block.id) if block.id is not None else None,
                 lat=block.latitude,
                 lon=block.longitude,
+                district=block.district,
+                county=county,
+                metro=block.metro,
             )
         )
     return _dedupe(entries)
@@ -187,6 +204,9 @@ def merge_entries(
                 "id": entry.id or current.id,
                 "lat": entry.lat or current.lat,
                 "lon": entry.lon or current.lon,
+                "district": entry.district or current.district,
+                "county": entry.county or current.county,
+                "metro": entry.metro or current.metro,
             }
         )
 

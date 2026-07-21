@@ -14,9 +14,6 @@ from app.reference.refresh import load_existing, write_entries
 
 logger = logging.getLogger(__name__)
 
-PROMOTION_MIN_OBSERVATIONS = 3
-PROMOTION_MIN_CONFIDENCE = 0.8
-
 
 class PromotionReport(BaseModel):
     promoted_count: int
@@ -24,7 +21,15 @@ class PromotionReport(BaseModel):
 
 
 async def find_promotable_facts(pool: asyncpg.Pool) -> list[StructuredFact]:
-    """Найти факты, которые прошли порог уверенности и числа наблюдений."""
+    """Найти факты, которые прошли порог уверенности и числа наблюдений.
+
+    Пороги берутся из конфига (:mod:`app.config`). Требование к числу
+    независимых наблюдений — главный вентиль против отравления справочников
+    самооценкой модели: одна уверенная галлюцинация факт не промоутит.
+    """
+    from app.config import get_settings
+
+    settings = get_settings()
     query = """
         SELECT id, subject_type, subject_id, fact_type, fact_value, source, confidence,
                observed_count, first_seen_at, last_confirmed_at
@@ -33,7 +38,9 @@ async def find_promotable_facts(pool: asyncpg.Pool) -> list[StructuredFact]:
           AND confidence >= $2
           AND source != 'promoted'
     """
-    rows = await pool.fetch(query, PROMOTION_MIN_OBSERVATIONS, PROMOTION_MIN_CONFIDENCE)
+    rows = await pool.fetch(
+        query, settings.AI_PROMOTION_MIN_OBSERVATIONS, settings.AI_PROMOTION_MIN_CONFIDENCE
+    )
 
     facts = []
     for row in rows:

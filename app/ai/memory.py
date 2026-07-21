@@ -111,9 +111,13 @@ async def lookup_semantic(
     pool: asyncpg.Pool,
     query_signature: str,
     embedding: list[float],
-    threshold: float = 0.15,
+    threshold: float = 0.2,
     ef_search: int = 40,
 ) -> CachedAnswer | None:
+    # threshold — косинусное расстояние (меньше = ближе). 0.15 был слишком
+    # строгим: перефразировки почти никогда не попадали в кэш. 0.2 — компромисс;
+    # значение стоит откалибровать на реальных запросах (слишком мягкий порог
+    # вернёт ответ на семантически другой запрос).
     # pgvector cosine distance
     query = """
         SELECT id, query_signature, raw_question, answer, hit_count, created_at,

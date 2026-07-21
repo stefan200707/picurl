@@ -20,9 +20,12 @@ SYSTEM_PROMPT = """Тебе даны кандидаты ЖК с известны
 def build_context(
     text: str, criteria: Criteria, candidates: list[ComplexCandidate], known_facts: dict
 ) -> dict:
+    # Модели отдаём только объективные факты (POI кандидатов), но не готовое
+    # решение (matched_complex_ids / center_district_ids) — иначе она склонна
+    # слепо копировать «подсказку» вместо самостоятельного отбора.
     return {
         "user_query": text,
         "criteria": criteria.to_public_dict(),
         "candidates": [c.model_dump() for c in candidates],
-        "known_facts": known_facts,
+        "known_poi": known_facts.get("poi_findings", {}),
     }
