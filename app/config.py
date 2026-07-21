@@ -13,7 +13,7 @@ class Settings(BaseSettings):
     ANTHROPIC_API_KEY: str | None = None
     ANTIGRAVITY_CLI_PATH: str | None = None
     ANTIGRAVITY_MODEL: str | None = None
-    AI_MODEL_NAME: str = "claude-3-haiku-20240307"
+    AI_MODEL_NAME: str = "gemini-3.5-flash"
     DATABASE_URL: str | None = None
 
     # Пороги промоушена ИИ-фактов в детерминированные справочники
