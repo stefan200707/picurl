@@ -23,8 +23,18 @@ OVERPASS_URL = "https://overpass-api.de/api/interpreter"
 
 def get_overpass_query(lat: float, lon: float, category: POICategory, radius_m: int) -> str:
     tags = {
-        POICategory.SCHOOL: ['"amenity"="school"', '"construction:amenity"="school"', '"planned:amenity"="school"', '"proposed:amenity"="school"'],
-        POICategory.KINDERGARTEN: ['"amenity"="kindergarten"', '"construction:amenity"="kindergarten"', '"planned:amenity"="kindergarten"', '"proposed:amenity"="kindergarten"'],
+        POICategory.SCHOOL: [
+            '"amenity"="school"',
+            '"construction:amenity"="school"',
+            '"planned:amenity"="school"',
+            '"proposed:amenity"="school"',
+        ],
+        POICategory.KINDERGARTEN: [
+            '"amenity"="kindergarten"',
+            '"construction:amenity"="kindergarten"',
+            '"planned:amenity"="kindergarten"',
+            '"proposed:amenity"="kindergarten"',
+        ],
         POICategory.SHOP: ['"shop"~"supermarket|convenience"'],
         POICategory.PARKING: ['"amenity"="parking"'],
     }
@@ -36,7 +46,8 @@ def get_overpass_query(lat: float, lon: float, category: POICategory, radius_m: 
             f'nwr["landuse"="forest"](around:{radius_m},{lat},{lon});'
         )
     elif category in tags:
-        tag_query = "\n".join([f'nwr[{tag}](around:{radius_m},{lat},{lon});' for tag in tags[category]])
+        queries = [f"nwr[{tag}](around:{radius_m},{lat},{lon});" for tag in tags[category]]
+        tag_query = "\n".join(queries)
     else:
         return ""
 

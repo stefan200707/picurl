@@ -1,7 +1,7 @@
 import json
 
 path = "app/reference/poi_cache.json"
-with open(path, "r", encoding="utf-8") as f:
+with open(path, encoding="utf-8") as f:
     cache = json.load(f)
 
 for slug in ["2ngt", "kvb51", "ytnv"]:

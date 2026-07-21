@@ -8,10 +8,22 @@ PREFIX = r"(?:(?:с|со)\s+)?(?:\bнов\w+\s+)?"
 SUFFIX = r"(?:\s+(?:поблизости|неподалеку|неподалёку|рядом\s+с\s+ним|близко))?"
 
 _POI_PATTERNS: list[tuple[re.Pattern[str], POICategory]] = [
-    (re.compile(PREFIX + r"(?<!вид на )(?<!видом на )\bшкол\w+" + SUFFIX), POICategory.SCHOOL),
-    (re.compile(PREFIX + r"(?:\bсадик\w*|\bдетск\w+\s+сад\w*|\bдетсад\w*)" + SUFFIX), POICategory.KINDERGARTEN),
-    (re.compile(PREFIX + r"(?:\bмагазин\w*|\bпродукт\w+|\bсупермаркет\w*)" + SUFFIX), POICategory.SHOP),
-    (re.compile(PREFIX + r"(?:\bпарковк\w*|\bпаркинг\w*)" + SUFFIX), POICategory.PARKING),
+    (
+        re.compile(PREFIX + r"(?<!вид на )(?<!видом на )\bшкол\w+" + SUFFIX),
+        POICategory.SCHOOL,
+    ),
+    (
+        re.compile(PREFIX + r"(?:\bсадик\w*|\bдетск\w+\s+сад\w*|\bдетсад\w*)" + SUFFIX),
+        POICategory.KINDERGARTEN,
+    ),
+    (
+        re.compile(PREFIX + r"(?:\bмагазин\w*|\bпродукт\w+|\bсупермаркет\w*)" + SUFFIX),
+        POICategory.SHOP,
+    ),
+    (
+        re.compile(PREFIX + r"(?:\bпарковк\w*|\bпаркинг\w*)" + SUFFIX),
+        POICategory.PARKING,
+    ),
     (
         re.compile(PREFIX + r"(?<!вид на )(?<!видом на )\b(?:лес\w*|парк\w*|зелен\w+)" + SUFFIX),
         POICategory.PARK_FOREST,

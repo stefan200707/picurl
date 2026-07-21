@@ -1,4 +1,5 @@
 import asyncio
+
 import httpx
 
 OVERPASS_URL = "https://overpass-api.de/api/interpreter"
@@ -9,6 +10,7 @@ query = """[out:json][timeout:25];
 );
 out center;"""
 
+
 async def test():
     async with httpx.AsyncClient(timeout=30) as client:
         try:
@@ -17,5 +19,6 @@ async def test():
             print("OK", len(response.json()["elements"]))
         except Exception as e:
             print("ERROR", repr(e))
+
 
 asyncio.run(test())
