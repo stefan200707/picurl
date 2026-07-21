@@ -74,7 +74,7 @@ def build_candidate_shortlist(criteria: Criteria) -> list[ComplexCandidate]:
 
     candidates = _get_candidates(location_names)
 
-    # Fallback: если жесткий гео-фильтр отсёк всех кандидатов (например, ложное 
+    # Fallback: если жесткий гео-фильтр отсёк всех кандидатов (например, ложное
     # срабатывание fuzzy-поиска метро), пробуем без него.
     if not candidates and location_names is not None and not allowed_ids:
         candidates = _get_candidates(None)
