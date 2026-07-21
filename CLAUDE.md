@@ -2,12 +2,53 @@
 
 Проект: picurl (GitHub: stefan200707/picurl).
 
-## Цель проекта
+## Описание проекта
+**picurl** — микросервис для преобразования текстовых запросов на русском языке (например, «хочу двушку у метро до 15 млн») в готовые рабочие ссылки с примененными фильтрами на сайт недвижимости pik.ru. 
+Сервис принимает свободный текст о желаемой квартире и возвращает рабочую ссылку на pik.ru с уже применёнными фильтрами и сортировкой — чтобы не тыкать вручную по чекбоксам на сайте.
+Логика основана на детерминированном парсинге: используются регулярные выражения и нечеткий поиск по локальным JSON-справочникам. ИИ-обогащение работает как опциональный ограниченный fallback для сложных контекстных и пространственных запросов, при этом основной пайплайн полностью самодостаточен и не требует обращения к LLM в рантайме. Интерактивная работа осуществляется через Swagger UI (по умолчанию на `http://127.0.0.1:8000/docs`).
 
-pik-url-builder
-Сервис принимает свободный текст на русском языке о желаемой квартире ("хочу двушку у метро, до 15 млн, с отделкой") и возвращает рабочую ссылку на pik.ru с уже применёнными фильтрами и сортировкой — чтобы не тыкать вручную по чекбоксам на сайте.
+## Технологический стек
+- **Язык**: Python 3.12+
+- **Веб-фреймворк**: FastAPI, Uvicorn
+- **Менеджер пакетов**: `uv`
+- **Ключевые библиотеки**: `pydantic` v2, `rapidfuzz`, `httpx`
+- **Тестирование**: `pytest`, `pytest-asyncio`
+- **Линтер/Форматтер**: `ruff`
+- **Стек ИИ-обогащения (v2)**: Anthropic SDK, Google Antigravity, PostgreSQL 15+ (с pgvector), `sentence-transformers`, `asyncpg`, `pydantic-settings`
 
----
+## Конвенции кода
+- Строгая типизация и валидация данных через Pydantic.
+- Максимальная длина строки — 100 символов (настроено в Ruff).
+- Включенные проверки Ruff: `E`, `W`, `F`, `I`, `UP`, `B`, `SIM`, `C4`, `RUF`.
+- Проект намеренно использует русский текст в строках, докстрингах и комментариях, поэтому проверки амбигуити кириллицы отключены (`RUF001`, `RUF002`, `RUF003`).
+- Асинхронные тесты выполняются через `pytest-asyncio` в режиме `auto`.
+
+## Основные команды
+Используется пакетный менеджер `uv`:
+- **Установка зависимостей**: `uv sync`
+- **Запуск dev-сервера**: `uv run fastapi dev` (или `uv run uvicorn app.main:app --reload`)
+- **Запуск БД ИИ (pgvector)**: `docker compose up -d postgres`
+- **Накатывание миграций**: `psql $DATABASE_URL -f app/ai/migrations/01_memory_tables.sql`
+- **Обновление JSON-справочников**: `uv run python -m app.reference.refresh`
+- **Запуск тестов**: `uv run pytest`
+- **Проверка линтером**: `uv run ruff check`
+- **Автоформатирование кода**: `uv run ruff format` (проверка: `--check`)
+
+## Структура каталогов
+```text
+app/
+  main.py            # FastAPI-app, health, POST /build-url
+  api/               # эндпоинты (endpoints.py) и pydantic-модели API (schemas.py)
+  parsing/           # schema.py — Criteria; rules/ — пакет regex-правил; parser.py — фасад; entity_match.py — матчинг; stopwords.py — стопслова
+  reference/         # *.json — справочники; loader.py — загрузка/кэш; refresh.py — обновление
+  pik/               # url_builder.py — генератор URL; validator.py — проверка URL
+  geo/               # distance.py — гео-эвристики; poi.py — получение POI из OSM; refresh_poi.py — обновление кэша POI (команда: python -m app.geo.refresh_poi)
+  ai/                # embeddings.py — эмбеддинги; memory.py — работа с pgvector; migrations/ — миграции БД; enrichment.py — клиент ИИ
+  knowledge_base/    # база знаний ИИ (кеширование семантики и гео-привязок)
+tests/               # pytest; integration/ — E2E тесты; test_health.py — smoke; parsing/ — Criteria/API + rules; reference/ — loader+refresh
+docs/                # pik-url-schema.md — спецификация URL-схемы; ai-enrichment-architecture.md — архитектура ИИ
+prompts/             # декомпозиция задачи
+```
 
 ## Декомпозиция и промпты для сборки
 
@@ -21,10 +62,7 @@ pik-url-builder
 → 07 (url_builder) → 08 (валидатор) → 09 (POST /build-url) → 10 (интеграционные
 тесты). Применять последовательно; после каждого шага гонять линт + тесты.
 
-Ключевые инварианты (детали в `prompts/_conventions.md`): никаких LLM/внешних API
-в рантайме; единственный сетевой вызов на запрос — валидация выдачи через backend
-API pik.ru; нераспознанное всегда уходит в `warnings`, ничего не отбрасывается
-молча; справочники — отдельный локальный JSON-слой, обновляемый скриптом.
+Ключевые инварианты (детали в `prompts/_conventions.md`): базовый пайплайн не использует LLM/внешние API в рантайме (ИИ-обогащение — опциональный слой); единственный обязательный сетевой вызов на запрос — валидация выдачи через backend API pik.ru; нераспознанное всегда уходит в `warnings`, ничего не отбрасывается молча; справочники — отдельный локальный JSON-слой, обновляемый скриптом.
 
 ---
 
@@ -147,8 +185,6 @@ regex скомпилированы один раз на уровне модул�
 
 ---
 
----
-
 ## API
 
 **Интерфейс пользователя — это Swagger-форма на `/docs`** (своего фронтенда нет). 
@@ -186,8 +222,7 @@ regex скомпилированы один раз на уровне модул�
 Выполнен промпт 01: спецификация URL-схемы зафиксирована в `docs/pik-url-schema.md`.
 Выполнен промпт 02: контракт `Criteria` и модели API (см. раздел выше).
 Выполнен промпт 03: справочники + loader + refresh-скрипт (см. раздел выше).
-Выполнен промпт 04: regex-правила структурных фактов в `app/parsing/rules.py`
-(см. раздел выше). Для извлечения времени до метро используется NLP-парсер Yargy для поддержки гибких грамматических правил.
+Выполнен промпт 04: regex-правила структурных фактов в `app/parsing/rules.py` (см. раздел выше).
 Выполнен промпт 05: матчинг сущностей (скользящее окно + rapidfuzz) в `app/parsing/entity_match.py`.
 Выполнен промпт 06: фасад парсера `parse(text)` в `app/parsing/parser.py`. Это единая точка входа парсинга, которая агрегирует структурные факты (правила) и сущности (rapidfuzz). Центральная фича: политика warnings — любые нераспознанные значимые фрагменты текста или неподдерживаемые фильтры (например, "вторичка") добавляются в список `warnings`, гарантируя, что ничего не отбрасывается молча.
 Выполнен промпт 07: URL-builder `build_url(criteria)` в `app/pik/url_builder.py`. Ядро сервиса: превращает Criteria в URL pik.ru/search. Реализует правило single-путь/multi-query с детерминированным порядком сегментов и параметров.
@@ -195,44 +230,6 @@ regex скомпилированы один раз на уровне модул�
 Выполнен промпт 09: Эндпоинт `POST /build-url` в `app/main.py`. Связывает парсер, билдер и валидатор в единый пайплайн, возвращает готовый URL и warnings.
 Выполнен промпт 10: Интеграционные тесты end-to-end с замоканным API pik.ru. Лежат в `tests/integration/test_build_url_e2e.py`. Проект полностью собран, Milestone 5 достигнут.
 Выполнен промпт 17: Карта памяти и хранилище для Базы Знаний на базе PostgreSQL 15+ с расширением pgvector в `app/ai/memory.py`.
-
-### Стек
-
-Python 3.12 · FastAPI · pydantic v2 · httpx · rapidfuzz · pytest · uv · ruff.
-Для v2 (ИИ-обогащение) добавлены: Anthropic SDK, PostgreSQL 15+ (с pgvector), sentence-transformers, asyncpg, и pydantic-settings.
-Entrypoint FastAPI объявлен в `pyproject.toml` (`[tool.fastapi] entrypoint = "app.main:app"`).
-
-### Команды
-
-- Установка: `uv sync`
-- Запуск dev-сервера: `uv run fastapi dev` (или `uv run uvicorn app.main:app --reload`)
-- Запуск БД ИИ (pgvector): `docker compose up -d postgres`
-- Накатывание миграций: `psql $DATABASE_URL -f app/ai/migrations/01_memory_tables.sql`
-- Тесты: `uv run pytest`
-- Линт: `uv run ruff check`; формат: `uv run ruff format` (проверка: `--check`)
-
-Пользовательский интерфейс — Swagger-форма на `http://127.0.0.1:8000/docs`
-(своего фронтенда нет).
-
-В ruff отключены RUF001–RUF003 (ambiguous unicode): проект намеренно использует
-русский текст в строках, докстрингах и комментариях.
-
-### Карта директорий
-
-```
-app/
-  main.py            # FastAPI-app, health
-  api/               # эндпоинты (endpoints.py) и pydantic-модели API (schemas.py)
-  parsing/           # schema.py — Criteria; rules/ — пакет regex-правил; parser.py — фасад; entity_match.py — матчинг; stopwords.py — стопслова
-  reference/         # *.json — справочники; loader.py — загрузка/кэш; refresh.py — обновление
-  pik/               # url_builder.py — генератор URL; validator.py — проверка URL
-  geo/               # distance.py — гео-эвристики; poi.py — получение POI из OSM; refresh_poi.py — обновление кэша POI (команда: python -m app.geo.refresh_poi)
-  ai/                # embeddings.py — эмбеддинги; memory.py — работа с pgvector; migrations/ — миграции БД
-  knowledge_base/    # база знаний ИИ (кеширование семантики и гео-привязок)
-tests/               # pytest; integration/ — E2E тесты; test_health.py — smoke; parsing/ — Criteria/API + rules; reference/ — loader+refresh
-docs/                # pik-url-schema.md — спецификация URL-схемы; ai_architecture_proposal.md — предложение по внедрению ИИ
-prompts/             # декомпозиция задачи
-```
 
 ---
 
@@ -358,12 +355,6 @@ prompts/             # декомпозиция задачи
   (`matched_complex_ids`/`center_district_ids`) — иначе модель склонна копировать
   «подсказку» вместо самостоятельного отбора.
 
-### Стек (v2, обновление)
-
-Модель эмбеддингов — `paraphrase-multilingual-MiniLM-L12-v2` (multilingual,
-размерность 384). Дефолтная модель для обогащения — `gemini-3.5-flash`
-(переопределяется через `AI_MODEL_NAME`). Пороги промоушена настраиваются через
-`AI_PROMOTION_MIN_OBSERVATIONS` / `AI_PROMOTION_MIN_CONFIDENCE`.
 ---
 
 При каждом изменении проекта — изменять и дополнять CLAUDE.md.
