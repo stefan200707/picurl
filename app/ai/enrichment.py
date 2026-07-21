@@ -12,7 +12,6 @@ from app.config import get_settings
 from app.geo.candidates import (
     build_candidate_shortlist,
     build_query_signature,
-    fully_resolved,
     resolve_known_facts,
 )
 from app.parsing.schema import Criteria
