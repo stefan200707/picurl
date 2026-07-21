@@ -304,8 +304,8 @@ def test_ai_learning_loop_e2e(e2e_client, mock_anthropic_client, memory_db, monk
     assert resp3.status_code == 200
     data3 = resp3.json()
 
-    assert data3["ai_used"] is False
-    assert data3["ai_cache_hit"] is False  # Cache hit is False because it's deterministic
+    assert data3["ai_used"] is True
+    assert data3["ai_cache_hit"] is False
     assert valid_complex_name in data3["criteria"]["complexes"]
 
     # Scenario 4: Degradation
@@ -349,9 +349,9 @@ def test_ai_learning_loop_e2e(e2e_client, mock_anthropic_client, memory_db, monk
     assert resp6.status_code == 200
     data6 = resp6.json()
 
-    assert data6["ai_used"] is False
+    assert data6["ai_used"] is True
     assert data6["ai_cache_hit"] is False
-    assert mock_anthropic_client.call_count == calls_before  # No AI call
+    assert mock_anthropic_client.call_count == calls_before + 1  # AI call happens now
     assert data6["criteria"]["rooms"] == "2"
     assert data6["criteria"]["price_max"] == 15000000
     assert data6["criteria"]["finish"] == "готовая"

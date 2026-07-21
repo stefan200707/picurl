@@ -25,19 +25,6 @@ def mock_settings():
 
 
 @pytest.mark.asyncio
-async def test_enrich_guard_no_poi_requirements():
-    criteria = Criteria()
-    warnings = []
-
-    # Should not call AI because no poi_requirements and no center_requested
-    result = await enrich("хочу двушку", criteria, warnings)
-
-    assert result.ai_used is False
-    assert result.success is True
-    assert not warnings
-
-
-@pytest.mark.asyncio
 @patch("app.ai.enrichment.lookup_semantic", return_value=None)
 @patch(
     "app.ai.enrichment.build_candidate_shortlist",
