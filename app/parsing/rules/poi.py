@@ -15,7 +15,7 @@ _POI_PATTERNS: list[tuple[re.Pattern[str], POICategory]] = [
     ),
 ]
 
-_CENTER_PATTERN = re.compile(r"\bв\s+центре(?:\s+москв\w*)?\b")
+_CENTER_PATTERN = re.compile(r"\b(?:в\s+центре|к\s+центру|близко\s+к\s+центру|ближе\s+к\s+центру|вблизи\s+центра|около\s+центра)(?:\s+москв\w*)?\b")
 
 
 def extract_poi_requirements(text: str) -> tuple[list[POIRequirement], bool, list[Span]]:
