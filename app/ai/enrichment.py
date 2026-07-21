@@ -12,7 +12,6 @@ from app.config import get_settings
 from app.geo.candidates import (
     build_candidate_shortlist,
     build_query_signature,
-    fully_resolved,
     resolve_known_facts,
 )
 from app.parsing.schema import Criteria
@@ -187,20 +186,23 @@ async def persist(
 async def enrich(
     text: str, criteria: Criteria, warnings: list[str], pool: asyncpg.Pool | None = None
 ) -> EnrichmentResult:
-    if not criteria.poi_requirements and not criteria.center_requested:
-        return EnrichmentResult.noop()
+    # Пока что все запросы идут в нейронку
+    # if not criteria.poi_requirements and not criteria.center_requested:
+    #     return EnrichmentResult.noop()
 
     candidates = build_candidate_shortlist(criteria)
     known = resolve_known_facts(candidates, criteria)
 
-    if fully_resolved(known, criteria, candidates):
-        return EnrichmentResult.from_deterministic(known)
+    # Пока что полностью все запросы идут через нейронку (полное обогащение)
+    # if fully_resolved(known, criteria, candidates):
+    #     return EnrichmentResult.from_deterministic(known)
 
     settings = get_settings()
     is_claude_missing = settings.AI_PROVIDER == "claude" and not settings.ANTHROPIC_API_KEY
 
     if not settings.AI_ENRICHMENT_ENABLED or is_claude_missing:
-        warnings.append("ИИ-обогащение выключено — часть запроса не обработана")
+        if criteria.poi_requirements or criteria.center_requested:
+            warnings.append("ИИ-обогащение выключено — часть запроса не обработана")
         return EnrichmentResult.disabled()
 
     signature = build_query_signature(text, criteria)

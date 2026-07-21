@@ -52,14 +52,13 @@ async def build_url(
     criteria = parse_result.criteria
     warnings = parse_result.warnings.copy()
 
-    # 1.5. ИИ-обогащение (опционально)
+    # 1.5. ИИ-обогащение (теперь для всех запросов)
     from app.ai.enrichment import AIMeta, enrich, merge_enrichment
 
     ai_meta = AIMeta()  # ai_used=False, cache_hit=False, explanation=None по умолчанию
-    if criteria.poi_requirements or criteria.center_requested:
-        enrichment = await enrich(text, criteria, warnings, pool=pool)
-        criteria = merge_enrichment(criteria, enrichment)
-        ai_meta = enrichment.meta
+    enrichment = await enrich(text, criteria, warnings, pool=pool)
+    criteria = merge_enrichment(criteria, enrichment)
+    ai_meta = enrichment.meta
 
     # 2. Построение URL
     url = pik_build_url(criteria)
