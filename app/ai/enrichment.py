@@ -3,11 +3,11 @@ import logging
 import asyncpg
 from pydantic import BaseModel
 
-from app.ai.client import call_model
+from app.ai.client import call_model, call_option_resolver
 from app.ai.embeddings import embed
 from app.ai.memory import lookup_semantic, store_semantic, store_structured_fact
-from app.ai.prompts import SYSTEM_PROMPT, build_context
-from app.ai.schema import AIEnrichmentAnswer, ComplexCandidate
+from app.ai.prompts import OPTION_SYSTEM_PROMPT, SYSTEM_PROMPT, build_context, build_option_context
+from app.ai.schema import AIEnrichmentAnswer, ComplexCandidate, OptionResolutionAnswer
 from app.config import get_settings
 from app.geo.candidates import (
     build_candidate_shortlist,
@@ -15,6 +15,12 @@ from app.geo.candidates import (
     resolve_known_facts,
 )
 from app.parsing.schema import Criteria
+from app.reference.loader import load_option_groups, load_options, normalize
+
+#: fact_type для логирования сопоставлений «фраза → slug фильтра» в
+#: ai_structured_facts (переиспользуем карту памяти промпта 17). Промоушен этих
+#: наблюдений в aliases справочников делает app/ai/promotion.py.
+OPTION_ALIAS_FACT_TYPE = "option_alias"
 
 logger = logging.getLogger(__name__)
 
@@ -86,8 +92,11 @@ class EnrichmentResult(BaseModel):
 
 
 def merge_enrichment(criteria: Criteria, enrichment: EnrichmentResult) -> Criteria:
+    # Импорт поднят один раз в начало функции (AUDIT_REPORT 2.6): раньше
+    # MatchedEntity импортировался дважды в двух разных if-ветках.
+    from app.parsing.schema import MatchedEntity
+
     if enrichment.matched_complex_ids:
-        from app.parsing.schema import MatchedEntity
         from app.reference.loader import load_complexes
 
         complexes_data = load_complexes()
@@ -103,7 +112,6 @@ def merge_enrichment(criteria: Criteria, enrichment: EnrichmentResult) -> Criter
         criteria.complexes = new_complexes
 
     if enrichment.center_district_ids:
-        from app.parsing.schema import MatchedEntity
         from app.reference.loader import load_districts
 
         districts_data = load_districts()
@@ -183,9 +191,117 @@ async def persist(
     await store_semantic(pool, signature, embedding, raw_question, answer_dict)
 
 
+def sanitize_option_resolution(
+    answer: OptionResolutionAnswer,
+) -> list[tuple[str, str, str, float]]:
+    """Валидировать ответ модели против реального списка slug'ов справочника.
+
+    Аналог :func:`sanitize_against_shortlist` для опций: строке из ответа модели
+    не доверяем слепо. Возвращает список ``(phrase, slug, subject_type,
+    confidence)`` только для slug'ов, реально существующих в
+    ``options.json``/``option_groups.json``; выдуманные slug и ``null`` отсекаются.
+    ``subject_type`` — ``"option"`` или ``"option_group"`` (определяется по тому,
+    в каком справочнике найден slug).
+    """
+    option_slugs = {e.slug for e in load_options() if e.slug}
+    group_slugs = {e.slug for e in load_option_groups() if e.slug}
+
+    resolved: list[tuple[str, str, str, float]] = []
+    seen: set[tuple[str, str]] = set()
+    for match in answer.matches:
+        if not match.slug:
+            continue
+        if match.slug in group_slugs:
+            subject_type = "option_group"
+        elif match.slug in option_slugs:
+            subject_type = "option"
+        else:
+            # Галлюцинация: slug вне справочника — не доверяем.
+            continue
+        key = (normalize(match.phrase), match.slug)
+        if key in seen:
+            continue
+        seen.add(key)
+        resolved.append((match.phrase, match.slug, subject_type, match.confidence))
+    return resolved
+
+
+async def resolve_options(
+    criteria: Criteria,
+    option_candidates: list[str],
+    warnings: list[str],
+    pool: asyncpg.Pool | None,
+) -> None:
+    """ИИ-резолвинг нераспознанных фраз под опции/группы опций.
+
+    Новая способность (Milestone AI-10): rapidfuzz матчит фильтры по строковому
+    сходству, поэтому фразы-синонимы («отдельный санузел» ≈ «Два и более
+    санузла») до сих пор молча уходили в warnings. Здесь короткие нераспознанные
+    фрагменты (собранные фасадом parse) уходят в модель вместе с полным списком
+    опций; подтверждённые (и провалидированные против справочника) slug'и
+    применяются к ``criteria`` так же, как если бы их сматчил rapidfuzz, и
+    убираются из warnings. Каждое сопоставление логируется в карту памяти для
+    последующего промоушена в aliases (см. app/ai/promotion.py).
+    """
+    if not option_candidates:
+        return
+
+    settings = get_settings()
+    is_claude_missing = settings.AI_PROVIDER == "claude" and not settings.ANTHROPIC_API_KEY
+    if not settings.AI_ENRICHMENT_ENABLED or is_claude_missing:
+        # ИИ выключен — фрагменты остаются в warnings как есть, ничего не теряем.
+        return
+
+    context = build_option_context(option_candidates, load_options(), load_option_groups())
+    try:
+        answer = await call_option_resolver(OPTION_SYSTEM_PROMPT, context)
+    except Exception as e:
+        # Модель могла упасть (сеть/валидация) — деградируем мягко: фрагменты
+        # остаются в warnings, ничего не выдумываем.
+        logger.error(f"AI option resolution failed: {e}", exc_info=True)
+        return
+
+    for phrase, slug, subject_type, confidence in sanitize_option_resolution(answer):
+        if subject_type == "option_group":
+            if slug not in criteria.option_groups:
+                criteria.option_groups.append(slug)
+        else:
+            if slug not in criteria.options:
+                criteria.options.append(slug)
+
+        # Фраза распознана — убираем её из «не удалось распознать».
+        stale = f"«{phrase}»: не удалось распознать, не попало в ссылку"
+        if stale in warnings:
+            warnings.remove(stale)
+
+        # Логируем сопоставление «нормализованная фраза → slug» для промоушена.
+        if pool is not None:
+            try:
+                await store_structured_fact(
+                    pool,
+                    subject_type,
+                    slug,
+                    OPTION_ALIAS_FACT_TYPE,
+                    {"phrase": normalize(phrase)},
+                    "ai_inference",
+                    confidence,
+                )
+            except Exception as e:
+                logger.warning(f"Failed to persist option alias: {e}")
+
+
 async def enrich(
-    text: str, criteria: Criteria, warnings: list[str], pool: asyncpg.Pool | None = None
+    text: str,
+    criteria: Criteria,
+    warnings: list[str],
+    pool: asyncpg.Pool | None = None,
+    option_candidates: list[str] | None = None,
 ) -> EnrichmentResult:
+    # Ветка резолвинга опций независима от шорт-листа ЖК: фразы-синонимы
+    # фильтров надо добить, даже если гео-кандидатов нет. Мутирует criteria и
+    # warnings на месте.
+    await resolve_options(criteria, option_candidates or [], warnings, pool)
+
     # Пока что все запросы идут в нейронку
     # if not criteria.poi_requirements and not criteria.center_requested:
     #     return EnrichmentResult.noop()

@@ -24,6 +24,15 @@ class Settings(BaseSettings):
     AI_PROMOTION_MIN_OBSERVATIONS: int = 5
     AI_PROMOTION_MIN_CONFIDENCE: float = 0.8
 
+    # Доля наблюдений фразы-алиаса, которая должна указывать на один и тот же slug,
+    # чтобы алиас можно было промоутить (см. app/ai/promotion.py, ветка
+    # option_alias). 1.0 = требуется единогласие: любое расхождение фразы между
+    # разными slug трактуется как конфликт (промпт 17) и НИКОГДА не промоутится
+    # автоматически — фраза уходит в отчёт «неоднозначные, требуют ручного
+    # решения». Оператор может ослабить до «подавляющего большинства», понизив
+    # порог, но делать это осознанно.
+    AI_ALIAS_PROMOTION_MIN_CONSISTENCY: float = 1.0
+
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
 

@@ -23,3 +23,24 @@ class AIEnrichmentAnswer(BaseModel):
     poi_findings: dict[str, dict[str, bool]] = {}
     explanation: str
     confidence: float
+
+
+class OptionMatch(BaseModel):
+    """Сопоставление нераспознанной фразы с slug'ом опции/группы опций.
+
+    ``slug`` — ``None``, если модель не нашла соответствия (фраза остаётся в
+    ``warnings`` как есть, ничего не выдумываем). Значение slug обязательно
+    валидируется против реального справочника
+    (:func:`app.ai.enrichment.sanitize_option_resolution`) — как для кандидатов
+    ЖК, строке из ответа модели не доверяем слепо.
+    """
+
+    phrase: str
+    slug: str | None = None
+    confidence: float = 0.8
+
+
+class OptionResolutionAnswer(BaseModel):
+    """Ответ модели на резолвинг фраз-синонимов фильтров под опции."""
+
+    matches: list[OptionMatch] = []
