@@ -619,3 +619,43 @@ def test_extract_poi_requirements():
     assert len(poi_reqs) == 2
     assert poi_reqs[0].category == POICategory.SHOP
     assert poi_reqs[1].category == POICategory.PARKING
+
+
+def test_poi_only_new_flag():
+    """«нов-» перед POI → only_new=True (per-instance), иначе False."""
+    from app.geo.poi import POICategory
+    from app.parsing.rules.poi import extract_poi_requirements
+
+    poi_reqs, _center, _spans = extract_poi_requirements("новые детские сады рядом")
+    assert len(poi_reqs) == 1
+    assert poi_reqs[0].category == POICategory.KINDERGARTEN
+    assert poi_reqs[0].only_new is True
+
+    poi_reqs, _center, _spans = extract_poi_requirements("детские сады рядом")
+    assert len(poi_reqs) == 1
+    assert poi_reqs[0].only_new is False
+
+
+def test_poi_only_new_is_per_instance():
+    """Один текст: «новые сады» → only_new, «школы» → нет (флаг per-instance)."""
+    from app.geo.poi import POICategory
+    from app.parsing.rules.poi import extract_poi_requirements
+
+    poi_reqs, _center, _spans = extract_poi_requirements("новые детские сады и школы рядом")
+    by_cat = {req.category: req for req in poi_reqs}
+    assert by_cat[POICategory.KINDERGARTEN].only_new is True
+    assert by_cat[POICategory.SCHOOL].only_new is False
+
+
+def test_poi_max_distance_parsed():
+    """Дистанция рядом с POI пишется в max_distance_m (закрытие AUDIT 2.11)."""
+    from app.parsing.rules.poi import extract_poi_requirements
+
+    poi_reqs, _center, _spans = extract_poi_requirements("школа в 300 метрах")
+    assert poi_reqs[0].max_distance_m == 300
+
+    poi_reqs, _center, _spans = extract_poi_requirements("детский сад не дальше 500 м")
+    assert poi_reqs[0].max_distance_m == 500
+
+    poi_reqs, _center, _spans = extract_poi_requirements("школа рядом")
+    assert poi_reqs[0].max_distance_m is None
