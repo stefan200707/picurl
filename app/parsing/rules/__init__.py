@@ -10,6 +10,7 @@ from .core import Span, _normalize
 from .finish import extract_finish, extract_ready
 from .floor import FloorFacts as FloorFacts
 from .floor import extract_floor as extract_floor
+from .landmark import extract_landmark_requirements as extract_landmark_requirements
 from .misc import (
     extract_fallback_metro,
     extract_housing_type,
@@ -131,6 +132,11 @@ def apply_rules(text: str) -> RulesOutcome:
     if center_req:
         criteria.center_requested = True
     consumed.extend(spans)
+
+    landmark_reqs, spans = extract_landmark_requirements(norm)
+    if landmark_reqs:
+        criteria.landmark_requirements.extend(landmark_reqs)
+        consumed.extend(spans)
 
     fm_names, spans = extract_fallback_metro(norm)
     fallback_metro_tuples = list(zip(fm_names, spans, strict=False))

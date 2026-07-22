@@ -1,11 +1,15 @@
 import json
 
 from app.ai.schema import ComplexCandidate
-from app.parsing.schema import Criteria, POIRequirement
+from app.geo.distance import haversine
+from app.parsing.schema import Criteria, LandmarkRequirement, POIRequirement
 from app.reference.loader import DATA_DIR, load_all, normalize
 
 #: Максимум ЖК-кандидатов, уходящих в ИИ (шорт-лист держим коротким, чтобы
 #: контекст модели оставался фокусным и дешёвым, но при fallback давал выбор).
+#: Для запросов «рядом с ориентиром» короткий лимит безопасен и даже желателен:
+#: ранжирование по дистанции — детерминированное (app/geo/distance.haversine),
+#: поэтому в шорт-лист попадают именно ближайшие ЖК, а не «побольше на глаз».
 SHORTLIST_LIMIT = 50
 
 
@@ -38,6 +42,12 @@ def build_candidate_shortlist(criteria: Criteria) -> list[ComplexCandidate]:
     allowed_ids = {c.id for c in criteria.complexes if c.id}
     location_names = None if allowed_ids else _location_filter(criteria)
 
+    # Для запросов «рядом с ориентиром» усечение до SHORTLIST_LIMIT должно идти
+    # ПОСЛЕ сортировки по дистанции — иначе «первые N из справочника» отсекут
+    # реально ближайшие ЖК. Поэтому при наличии ориентира собираем всех
+    # подходящих кандидатов, а лимит применяем в конце.
+    rank_by_landmark = bool(criteria.landmark_requirements)
+
     def _get_candidates(loc_names: set[str] | None) -> list[ComplexCandidate]:
         result = []
         for c in ref_data.complexes:
@@ -65,10 +75,12 @@ def build_candidate_shortlist(criteria: Criteria) -> list[ComplexCandidate]:
                     metro=[c.metro] if c.metro else [],
                     is_center=center_by_district.get(normalize(c.district)) if c.district else None,
                     known_poi=known_poi,
+                    lat=c.lat,
+                    lon=c.lon,
                 )
             )
 
-            if len(result) >= SHORTLIST_LIMIT:
+            if not rank_by_landmark and len(result) >= SHORTLIST_LIMIT:
                 break
         return result
 
@@ -79,7 +91,47 @@ def build_candidate_shortlist(criteria: Criteria) -> list[ComplexCandidate]:
     if not candidates and location_names is not None and not allowed_ids:
         candidates = _get_candidates(None)
 
-    return candidates
+    if rank_by_landmark:
+        candidates = _rank_by_landmark(candidates, criteria.landmark_requirements)
+
+    return candidates[:SHORTLIST_LIMIT]
+
+
+def _rank_by_landmark(
+    candidates: list[ComplexCandidate], landmarks: list[LandmarkRequirement]
+) -> list[ComplexCandidate]:
+    """Отфильтровать и отсортировать ЖК по дистанции до ориентиров.
+
+    Чистая математика (:func:`app.geo.distance.haversine`), без обращения к ИИ:
+    для каждого кандидата берём минимальное расстояние до любого из заданных
+    ориентиров. Кандидаты без координат уходят в конец (их близость неизвестна,
+    молча отбрасывать нельзя — пусть достаются ИИ, если он вообще нужен). Если у
+    ориентира задан ``max_distance_m`` — применяем жёсткую отсечку.
+    """
+    max_distance = min(
+        (lm.max_distance_m for lm in landmarks if lm.max_distance_m is not None),
+        default=None,
+    )
+
+    scored: list[tuple[float, ComplexCandidate]] = []
+    unknown: list[ComplexCandidate] = []
+    for c in candidates:
+        if c.lat is None or c.lon is None:
+            unknown.append(c)
+            continue
+        dist = min(haversine(lm.lat, lm.lon, c.lat, c.lon) for lm in landmarks)
+        if max_distance is not None and dist > max_distance:
+            continue
+        scored.append((dist, c))
+
+    scored.sort(key=lambda pair: pair[0])
+    ranked = [c for _dist, c in scored]
+
+    # Кандидаты без координат добавляем только когда нет жёсткой отсечки по
+    # дистанции (иначе их нельзя гарантированно отнести к «в радиусе»).
+    if max_distance is None:
+        ranked.extend(unknown)
+    return ranked
 
 
 def resolve_known_facts(candidates: list[ComplexCandidate], criteria: Criteria) -> dict:
@@ -170,4 +222,7 @@ def build_query_signature(text: str, criteria: Criteria) -> str:
         parts.append("poi=" + ",".join(poi))
     if criteria.center_requested:
         parts.append("center=1")
+    if criteria.landmark_requirements:
+        landmarks = sorted(normalize(lm.name) for lm in criteria.landmark_requirements)
+        parts.append("landmark=" + ",".join(landmarks))
     return " | ".join(parts)
