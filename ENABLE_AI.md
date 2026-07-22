@@ -1,19 +1,40 @@
-Для того чтобы включить ИИ-обогащение (AI Enrichment) и избавиться от предупреждения "ИИ-обогащение выключено — часть запроса не обработана", вам необходимо задать соответствующие переменные окружения.
+# Настройка ИИ-обогащения (ENABLE_AI.md)
 
-Сервис использует `pydantic-settings` и читает файл `.env` из корневой директории проекта.
+Для включения ИИ-обогащения (AI Enrichment) и устранения предупреждения *«ИИ-обогащение выключено — часть запроса не обработана»* настройте переменные окружения в файле `.env`.
 
-Создайте файл `.env` (если его нет) в корневой папке проекта и добавьте следующие переменные:
+Сервис использует `pydantic-settings` и читает `.env` из корня проекта.
+
+## 1. Конфигурация `.env`
+
+Добавьте в `.env`:
 
 ```env
-# Включает ИИ-обогащение
+# Включение ИИ-обогащения
 AI_ENRICHMENT_ENABLED=true
 
-# Ключ от API Anthropic, необходимый для работы модели (Claude)
-ANTHROPIC_API_KEY=your_anthropic_api_key_here
+# Выбор провайдера: "antigravity" (Google Gemini) или "claude" (Anthropic)
+AI_PROVIDER=antigravity
 
-# (Опционально) URL подключения к базе данных PostgreSQL с pgvector для работы карты памяти ИИ
-# Пример: postgresql://postgres:postgres@localhost:5432/picurl
-DATABASE_URL=your_database_url_here
+# Имя модели (по умолчанию gemini-3.5-flash)
+AI_MODEL_NAME=gemini-3.5-flash
+
+# При использовании AI_PROVIDER=claude:
+# ANTHROPIC_API_KEY=your_anthropic_api_key_here
+
+# Подключение к PostgreSQL + pgvector (Карта памяти)
+DATABASE_URL=postgresql+asyncpg://postgres:password@localhost:5432/picurl_ai
 ```
 
-После добавления ключа и включения флага, перезапустите сервер (`uv run fastapi dev`), и ИИ-обогащение начнёт работать, обрабатывая контекстные и пространственные запросы (например, "с детсадами рядом" или "в центре").
+---
+
+## 2. Запуск PostgreSQL + pgvector
+
+Для работы карты памяти (семантический кэш и факты) поднимите базовый контейнер и накатите миграцию:
+
+```bash
+docker compose up -d postgres
+docker exec -i picurl-postgres psql -U postgres -d picurl_ai < app/ai/migrations/01_memory_tables.sql
+```
+
+Подробную инструкцию по работе с провайдером **Antigravity** вы найдёте в [ENABLE_ANTIGRAVITY.md](file:///Users/stefan/Desktop/picurl/ENABLE_ANTIGRAVITY.md), а полное руководство по развёртыванию — в [SETUP.md](file:///Users/stefan/Desktop/picurl/SETUP.md).
+
