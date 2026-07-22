@@ -210,6 +210,4 @@ def parse(text: str) -> ParseResult:
                     if _looks_like_option(cleaned_chunk):
                         option_candidates.append(cleaned_chunk)
 
-    return ParseResult(
-        criteria=criteria, warnings=warnings, option_candidates=option_candidates
-    )
+    return ParseResult(criteria=criteria, warnings=warnings, option_candidates=option_candidates)

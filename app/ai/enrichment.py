@@ -252,9 +252,7 @@ async def resolve_options(
         # ИИ выключен — фрагменты остаются в warnings как есть, ничего не теряем.
         return
 
-    context = build_option_context(
-        option_candidates, load_options(), load_option_groups()
-    )
+    context = build_option_context(option_candidates, load_options(), load_option_groups())
     try:
         answer = await call_option_resolver(OPTION_SYSTEM_PROMPT, context)
     except Exception as e:

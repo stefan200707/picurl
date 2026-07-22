@@ -235,9 +235,7 @@ def analyze_option_aliases(
     return promotable, ambiguous
 
 
-async def promote_aliases(
-    pool: asyncpg.Pool, facts: list[StructuredFact]
-) -> AliasPromotionReport:
+async def promote_aliases(pool: asyncpg.Pool, facts: list[StructuredFact]) -> AliasPromotionReport:
     """Промоутить согласованные алиасы в aliases справочников опций.
 
     Мёрж безопасный (как промпт 20): существующие кураторские алиасы не

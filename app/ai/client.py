@@ -55,9 +55,7 @@ async def call_model(system_prompt: str, user_payload: dict) -> AIEnrichmentAnsw
     return await call_typed(system_prompt, user_payload, AIEnrichmentAnswer)
 
 
-async def call_option_resolver(
-    system_prompt: str, user_payload: dict
-) -> OptionResolutionAnswer:
+async def call_option_resolver(system_prompt: str, user_payload: dict) -> OptionResolutionAnswer:
     """Вызов модели для резолвинга нераспознанных фраз под опции/группы опций."""
     return await call_typed(system_prompt, user_payload, OptionResolutionAnswer)
 
