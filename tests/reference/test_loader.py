@@ -17,7 +17,7 @@ from app.reference.loader import (
 
 class TestLoading:
     def test_each_reference_loads_and_is_nonempty(self) -> None:
-        """Все семь справочников читаются с диска и не пусты."""
+        """Все справочники читаются с диска и не пусты."""
         data = load_all()
 
         assert isinstance(data, ReferenceData)

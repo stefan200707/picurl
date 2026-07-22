@@ -105,6 +105,7 @@ async def test_resolve_known_facts_uses_cache(temp_data_dir):
         temp_data_dir.joinpath("benefits.json").write_text("[]")
         temp_data_dir.joinpath("option_groups.json").write_text("[]")
         temp_data_dir.joinpath("options.json").write_text("[]")
+        temp_data_dir.joinpath("landmarks.json").write_text("[]")
 
         criteria = Criteria(
             poi_requirements=[POIRequirement(category=POICategory.SCHOOL, raw_phrase="школа")]

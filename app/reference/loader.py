@@ -34,6 +34,7 @@ REFERENCE_FILES: dict[str, str] = {
     "benefits": "benefits.json",
     "option_groups": "option_groups.json",
     "options": "options.json",
+    "landmarks": "landmarks.json",
 }
 
 
@@ -53,6 +54,10 @@ class RefEntry(BaseModel):
     lat: float | None = None
     lon: float | None = None
     is_center: bool | None = None
+    # Тип именованного ориентира (university | employer | landmark), заполняется
+    # только для записей landmarks.json (справочник ориентиров, промпт 23).
+    # Для остальных справочников остаётся None.
+    category: str | None = None
     # Привязка ЖК к локации (заполняется только для записей complexes.json из
     # ответа api.pik.ru: block.district / block.metro / locations.child.name).
     # Для остальных справочников остаётся None. Нужна ИИ-слою, чтобы кандидаты
@@ -74,6 +79,7 @@ class ReferenceData(BaseModel):
     benefits: tuple[RefEntry, ...]
     option_groups: tuple[RefEntry, ...]
     options: tuple[RefEntry, ...]
+    landmarks: tuple[RefEntry, ...]
 
 
 def normalize(text: str) -> str:
@@ -123,6 +129,18 @@ def load_options() -> tuple[RefEntry, ...]:
     return _load(REFERENCE_FILES["options"])
 
 
+def load_landmarks() -> tuple[RefEntry, ...]:
+    """Именованные ориентиры (вузы/работодатели/достопримечательности).
+
+    Вручную курируемый справочник с обязательными ``lat``/``lon`` и полем
+    ``category``. Используется для запросов «рядом с МГУ», «у Кремля» —
+    ориентир матчится на фразу, а его координаты детерминированно сужают
+    список ЖК по дистанции (см. :mod:`app.geo.candidates`). У pik.ru нет
+    URL-фильтра «рядом с ориентиром», поэтому это не URL-сущность.
+    """
+    return _load(REFERENCE_FILES["landmarks"])
+
+
 def load_all() -> ReferenceData:
     """Загрузить все справочники разом (для матчера, промпт 05)."""
     return ReferenceData(
@@ -133,6 +151,7 @@ def load_all() -> ReferenceData:
         benefits=load_benefits(),
         option_groups=load_option_groups(),
         options=load_options(),
+        landmarks=load_landmarks(),
     )
 
 

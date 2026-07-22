@@ -659,3 +659,46 @@ def test_poi_max_distance_parsed():
 
     poi_reqs, _center, _spans = extract_poi_requirements("школа рядом")
     assert poi_reqs[0].max_distance_m is None
+
+
+def test_extract_landmark_near_mgu():
+    """«рядом с МГУ» → LandmarkRequirement с координатами ориентира."""
+    from app.parsing.rules.landmark import extract_landmark_requirements
+
+    reqs, spans = extract_landmark_requirements("трёшку самую ближайшую к МГУ")
+    assert len(reqs) == 1
+    assert reqs[0].name == "МГУ им. Ломоносова"
+    assert reqs[0].category == "university"
+    assert reqs[0].lat is not None and reqs[0].lon is not None
+    assert spans  # маркер+имя засчитаны «понятыми»
+
+
+def test_extract_landmark_markers_and_declension():
+    """Разные маркеры близости и склонения имени распознаются."""
+    from app.parsing.rules.landmark import extract_landmark_requirements
+
+    reqs, _ = extract_landmark_requirements("квартира у Кремля")
+    assert [r.name for r in reqs] == ["Московский Кремль"]
+
+    reqs, _ = extract_landmark_requirements("хочу жильё поближе к Сколково")
+    assert [r.name for r in reqs] == ["Инновационный центр Сколково"]
+
+    reqs, _ = extract_landmark_requirements("недалеко от ВДНХ")
+    assert [r.name for r in reqs] == ["ВДНХ"]
+
+
+def test_extract_landmark_no_false_positive():
+    """Маркер-предлог без ориентира не порождает ложное требование."""
+    from app.parsing.rules.landmark import extract_landmark_requirements
+
+    reqs, _ = extract_landmark_requirements("хочу двушку у метро до 15 млн")
+    assert reqs == []
+
+
+def test_landmark_flows_into_criteria():
+    """apply_rules прокидывает ориентир в Criteria.landmark_requirements."""
+    from app.parsing.rules import apply_rules
+
+    outcome = apply_rules("двушка рядом с МГУ")
+    assert len(outcome.criteria.landmark_requirements) == 1
+    assert outcome.criteria.landmark_requirements[0].name == "МГУ им. Ломоносова"

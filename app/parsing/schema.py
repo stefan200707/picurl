@@ -140,6 +140,30 @@ class POIRequirement(BaseModel):
     max_distance_m: int | None = None
 
 
+class LandmarkRequirement(BaseModel):
+    """Требование «рядом с ориентиром» (вуз/работодатель/достопримечательность).
+
+    У pik.ru нет URL-фильтра «рядом с МГУ» — такой запрос обслуживается сужением
+    списка ЖК по расстоянию до координат ориентира (см.
+    :func:`app.geo.candidates.build_candidate_shortlist`). Поэтому здесь хранятся
+    именно ``lat``/``lon`` ориентира: ранжирование ЖК по дистанции — чистая
+    математика (:func:`app.geo.distance.haversine`), без обращения к ИИ.
+
+    - ``max_distance_m`` — верхняя граница расстояния (по аналогии с
+      :class:`POIRequirement`); ``None`` = дистанция не указана, тогда кандидаты
+      только сортируются по близости, без жёсткой отсечки.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: str
+    lat: float
+    lon: float
+    category: str | None = None
+    raw_phrase: str = ""
+    max_distance_m: int | None = None
+
+
 class MatchedEntity(BaseModel):
     """Сущность справочника (метро/округ/район/ЖК), найденная матчером.
 
@@ -213,6 +237,11 @@ class Criteria(BaseModel):
     poi_requirements: list[POIRequirement] = Field(default_factory=list)
     center_requested: bool = False
 
+    # --- Именованные ориентиры (промпт 23) -------------------------------------
+    # «рядом с МГУ», «у Кремля» — сужают complexes по дистанции до координат
+    # ориентира детерминированно (см. app/geo/candidates.py), без похода в ИИ.
+    landmark_requirements: list[LandmarkRequirement] = Field(default_factory=list)
+
     # --- Расширяемость: слаги «как есть» (см. docs/pik-url-schema.md) --------
     current_benefit: str | None = None
     option_groups: list[str] = Field(default_factory=list)
@@ -282,6 +311,14 @@ class Criteria(BaseModel):
             public["poi_requirements"] = [
                 req.model_dump(exclude_none=True, mode="json") for req in self.poi_requirements
             ]
+
+        if self.landmark_requirements:
+            public["landmark_requirements"] = [
+                req.model_dump(exclude_none=True, mode="json")
+                for req in self.landmark_requirements
+            ]
+        else:
+            public.pop("landmark_requirements", None)
 
         if not self.center_requested:
             public.pop("center_requested", None)

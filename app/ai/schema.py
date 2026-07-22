@@ -9,6 +9,12 @@ class ComplexCandidate(BaseModel):
     metro: list[str]
     is_center: bool | None
     known_poi: dict[str, bool | None]
+    # Координаты ЖК — объективный факт из справочника (complexes.json). Нужны
+    # детерминированному слою (build_candidate_shortlist) для сужения/сортировки
+    # кандидатов по дистанции до ориентира. Модель их не «прикидывает» — расчёт
+    # расстояния делает app/geo/distance.haversine, а не LLM.
+    lat: float | None = None
+    lon: float | None = None
 
 
 class AIEnrichmentAnswer(BaseModel):

@@ -13,6 +13,7 @@ def mock_load_all():
         options=[],
         option_groups=[],
         benefits=[],
+        landmarks=[],
     )
 
 
