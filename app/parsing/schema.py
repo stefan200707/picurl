@@ -123,10 +123,20 @@ class HousingType(StrEnum):
 
 
 class POIRequirement(BaseModel):
-    """Требование к окружению (школа, парк и т.д.), извлечённое из текста."""
+    """Требование к окружению (школа, парк и т.д.), извлечённое из текста.
+
+    - ``only_new`` — пользователь попросил именно **новый** POI («новые сады»);
+      флаг per-instance: одна фраза может смешивать «новые сады»
+      (``only_new=True``) и просто «школы» (``only_new=False``).
+    - ``max_distance_m`` — верхняя граница расстояния до POI в метрах («школа
+      в 300 метрах», «садик не дальше 500 м»). ``None`` = дистанция не указана.
+      Парсинг реализован в :func:`app.parsing.rules.poi.extract_poi_requirements`
+      (закрывает находку AUDIT_REPORT 2.11 — поле больше не «висит» без записи).
+    """
 
     category: POICategory
     raw_phrase: str
+    only_new: bool = False
     max_distance_m: int | None = None
 
 

@@ -1,7 +1,7 @@
 import json
 
 from app.ai.schema import ComplexCandidate
-from app.parsing.schema import Criteria
+from app.parsing.schema import Criteria, POIRequirement
 from app.reference.loader import DATA_DIR, load_all, normalize
 
 #: Максимум ЖК-кандидатов, уходящих в ИИ (шорт-лист держим коротким, чтобы
@@ -142,14 +142,29 @@ def fully_resolved(
     return True
 
 
+def _poi_signature(req: POIRequirement) -> str:
+    """Стабильная строка-подпись POI-требования (категория + структурные факты).
+
+    Учитывает ``only_new`` и ``max_distance_m``, чтобы «сады» и «новые сады в
+    300 метрах» не схлопывались в один ключ семантического кэша.
+    """
+    parts = [req.category.value]
+    if req.only_new:
+        parts.append("new")
+    if req.max_distance_m is not None:
+        parts.append(f"d{req.max_distance_m}")
+    return ":".join(parts)
+
+
 def build_query_signature(text: str, criteria: Criteria) -> str:
     """Сигнатура запроса для семантического кэша.
 
     Кроме нормализованного текста включает управляющие ИИ-обогащением сигналы
-    (POI-категории и флаг центра), чтобы кэш различал запросы, совпадающие по
-    словам, но требующие разного обогащения.
+    (POI-категории, требование «нового» POI, дистанцию и флаг центра), чтобы кэш
+    различал запросы, совпадающие по словам, но требующие разного обогащения
+    (например, «сады» и «новые сады» — разные требования).
     """
-    poi = sorted(req.category.value for req in criteria.poi_requirements)
+    poi = sorted(_poi_signature(req) for req in criteria.poi_requirements)
     parts = [text.lower().strip()]
     if poi:
         parts.append("poi=" + ",".join(poi))
