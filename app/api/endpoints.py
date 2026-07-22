@@ -56,7 +56,13 @@ async def build_url(
     from app.ai.enrichment import AIMeta, enrich, merge_enrichment
 
     ai_meta = AIMeta()  # ai_used=False, cache_hit=False, explanation=None по умолчанию
-    enrichment = await enrich(text, criteria, warnings, pool=pool)
+    enrichment = await enrich(
+        text,
+        criteria,
+        warnings,
+        pool=pool,
+        option_candidates=parse_result.option_candidates,
+    )
     criteria = merge_enrichment(criteria, enrichment)
     ai_meta = enrichment.meta
 

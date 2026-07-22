@@ -1,19 +1,41 @@
 """Parse facade: parse(text) -> Criteria + warnings."""
 
 import re
-from typing import NamedTuple
+from collections.abc import Iterator
+from dataclasses import dataclass, field
 
 from app.parsing.entity_match import match_entities
 from app.parsing.rules import Span, apply_rules
 from app.parsing.schema import Criteria
 from app.parsing.stopwords import STOP_WORDS
 
+#: Максимум значимых слов в нераспознанном фрагменте, чтобы считать его
+#: кандидатом на «это может быть опция/группа опций, которую rapidfuzz не
+#: сматчил». Отсекает длинные куски-мусор (перечисления, свободный текст) —
+#: фразы-синонимы фильтров коротки («отдельный санузел», «своя ванная»).
+MAX_OPTION_CANDIDATE_WORDS = 4
 
-class ParseResult(NamedTuple):
-    """Результат работы фасада парсера."""
+
+@dataclass
+class ParseResult:
+    """Результат работы фасада парсера.
+
+    Помимо ``criteria`` и ``warnings`` несёт ``option_candidates`` — структурный
+    список коротких нераспознанных фрагментов, которые могут оказаться
+    опцией/группой опций (rapidfuzz их не сматчил по строковому сходству). Их
+    добивает ИИ-резолвинг (:func:`app.ai.enrichment.resolve_options`).
+
+    Для обратной совместимости с ``criteria, warnings = parse(text)`` итерация по
+    результату выдаёт ровно два элемента (criteria, warnings); фрагменты
+    достаются только по имени поля ``result.option_candidates``.
+    """
 
     criteria: Criteria
     warnings: list[str]
+    option_candidates: list[str] = field(default_factory=list)
+
+    def __iter__(self) -> Iterator:
+        return iter((self.criteria, self.warnings))
 
 
 def _merge_spans(spans: list[Span]) -> list[Span]:
@@ -41,6 +63,23 @@ def _is_significant(text_chunk: str) -> bool:
     # Если остались только стоп-слова, кусок незначимый
     significant_words = [w for w in words if w not in STOP_WORDS]
     return len(significant_words) > 0
+
+
+def _looks_like_option(text_chunk: str) -> bool:
+    """Похож ли нераспознанный фрагмент на опцию/группу опций (кандидат для ИИ).
+
+    Эвристика для отсечения совсем не относящегося шума: значимые слова (не
+    стоп-слова) не длиннее :data:`MAX_OPTION_CANDIDATE_WORDS` и есть хотя бы одно
+    буквенное слово (даты/голые числа отбрасываем — под фильтр-опцию они не
+    похожи). Заведомо неподдерживаемые pik.ru фразы (категория 24) сюда не
+    попадают: их спаны уже помечены «понятыми» в apply_rules.
+    """
+    words = re.findall(r"[а-яёa-z0-9]+(?:-[а-яёa-z0-9]+)*", text_chunk.lower())
+    significant = [w for w in words if w not in STOP_WORDS]
+    if not significant or len(significant) > MAX_OPTION_CANDIDATE_WORDS:
+        return False
+    # Нужна хотя бы одна буквенная (не чисто числовая) значимая лексема.
+    return any(re.search(r"[а-яёa-z]", w) for w in significant)
 
 
 def parse(text: str) -> ParseResult:
@@ -154,6 +193,7 @@ def parse(text: str) -> ParseResult:
     if current_pos < len(text):
         unconsumed_spans.append((current_pos, len(text)))
 
+    option_candidates: list[str] = []
     for start, end in unconsumed_spans:
         chunk = text[start:end]
         # Разбиваем нераспознанный текст по знакам препинания и союзам, чтобы
@@ -165,5 +205,11 @@ def parse(text: str) -> ParseResult:
                 cleaned_chunk = subchunk.strip(" ,.-:;!?")
                 if cleaned_chunk:
                     warnings.append(f"«{cleaned_chunk}»: не удалось распознать, не попало в ссылку")
+                    # Короткий нераспознанный фрагмент — кандидат на «это опция,
+                    # которую rapidfuzz не сматчил по буквам». Добивает ИИ.
+                    if _looks_like_option(cleaned_chunk):
+                        option_candidates.append(cleaned_chunk)
 
-    return ParseResult(criteria=criteria, warnings=warnings)
+    return ParseResult(
+        criteria=criteria, warnings=warnings, option_candidates=option_candidates
+    )
