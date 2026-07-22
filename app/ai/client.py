@@ -1,7 +1,6 @@
 import functools
 import json
 import logging
-from typing import TypeVar
 
 import httpx
 from anthropic import APIStatusError, APITimeoutError, AsyncAnthropic
@@ -11,8 +10,6 @@ from app.ai.schema import AIEnrichmentAnswer, OptionResolutionAnswer
 from app.config import get_settings
 
 logger = logging.getLogger(__name__)
-
-T = TypeVar("T", bound=BaseModel)
 
 
 @functools.cache
@@ -31,7 +28,7 @@ def _is_transient(exc: Exception) -> bool:
     return False
 
 
-async def call_typed(
+async def call_typed[T: BaseModel](
     system_prompt: str, user_payload: dict, answer_model: type[T]
 ) -> T:
     """Единая точка вызова модели, параметризованная схемой ответа.
@@ -65,7 +62,7 @@ async def call_option_resolver(
     return await call_typed(system_prompt, user_payload, OptionResolutionAnswer)
 
 
-async def call_antigravity(
+async def call_antigravity[T: BaseModel](
     system_prompt: str,
     user_payload: dict,
     settings,
@@ -117,7 +114,7 @@ async def call_antigravity(
         raise e
 
 
-async def call_claude(
+async def call_claude[T: BaseModel](
     system_prompt: str,
     user_payload: dict,
     settings,
