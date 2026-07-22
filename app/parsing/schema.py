@@ -314,8 +314,7 @@ class Criteria(BaseModel):
 
         if self.landmark_requirements:
             public["landmark_requirements"] = [
-                req.model_dump(exclude_none=True, mode="json")
-                for req in self.landmark_requirements
+                req.model_dump(exclude_none=True, mode="json") for req in self.landmark_requirements
             ]
         else:
             public.pop("landmark_requirements", None)
