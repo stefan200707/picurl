@@ -70,9 +70,11 @@ LOCATION_MARKERS` дополнительно исключает многосло
   (п. 2–3) и `tests/parsing/test_entity_match.py` (п. 1), воспроизводящий баг
   «было» → «стало».
 - Прогнать `uv run pytest` и `uv run ruff check` — всё зелёное.
-- Перепрогнать `run_stress_test.py` по `stress_test_queries.md`, сверить, что
-  вывод не деградировал (можно обновить `stress_test_output.txt`, если diff
-  осмысленный и ожидаемый).
+- Перепрогнать запросы из `stress_test_queries.md` через `POST /build-url`
+  (например, через Swagger UI), сверить, что вывод не деградировал. *(Пункт
+  выполнен ранее; вспомогательные скрипты `run_stress_test.py` и
+  `stress_test_output.txt` были одноразовыми dev-артефактами и удалены по
+  итогам `AUDIT_REPORT.md`, раздел «Кандидаты на удаление».)*
 
 ## Обнови CLAUDE.md
 
