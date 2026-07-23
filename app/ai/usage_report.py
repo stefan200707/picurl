@@ -118,17 +118,15 @@ def format_report(report: UsageReport, days: int | None) -> str:
     if report.total == 0:
         return f"Наблюдаемость ИИ ({period}): данных пока нет (ai_call_log пуст)."
 
+    resolved_pct = report.pct_fully_resolved_within_had
+    changed_pct = report.pct_criteria_changed_within_ai_called
+    without_pct = report.pct_changed_without_poi_or_center
+
     had = f"{report.had_poi_or_center} ({report.pct_had_poi_or_center}%)"
-    resolved = f"{report.fully_resolved_within_had} ({report.pct_fully_resolved_within_had}%)"
+    resolved = f"{report.fully_resolved_within_had} ({resolved_pct}%)"
     cache = f"{report.cache_hit} ({report.pct_cache_hit}%)"
-    changed = (
-        f"{report.criteria_changed_by_ai} "
-        f"({report.pct_criteria_changed_within_ai_called}% от вызовов ИИ)"
-    )
-    without = (
-        f"{report.changed_without_poi_or_center} "
-        f"({report.pct_changed_without_poi_or_center}%)"
-    )
+    changed = f"{report.criteria_changed_by_ai} ({changed_pct}% от вызовов ИИ)"
+    without = f"{report.changed_without_poi_or_center} ({without_pct}%)"
     lines = [
         f"Наблюдаемость вызовов ИИ ({period})",
         f"  всего запросов: {report.total}",
