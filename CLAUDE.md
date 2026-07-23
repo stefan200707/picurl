@@ -29,6 +29,8 @@
 - **Запуск dev-сервера**: `uv run fastapi dev` (или `uv run uvicorn app.main:app --reload`)
 - **Запуск БД ИИ (pgvector)**: `docker compose up -d postgres`
 - **Накатывание миграций**: `psql $DATABASE_URL -f app/ai/migrations/01_memory_tables.sql`
+  и `psql $DATABASE_URL -f app/ai/migrations/02_ai_call_log.sql` (наблюдаемость ИИ)
+- **Отчёт наблюдаемости вызовов ИИ**: `uv run python -m app.ai.usage_report` (`--days N`)
 - **Обновление JSON-справочников**: `uv run python -m app.reference.refresh`
 - **Запуск тестов**: `uv run pytest`
 - **Проверка линтером**: `uv run ruff check`
@@ -522,6 +524,38 @@ regex скомпилированы один раз на уровне модул�
   `criteria`, логирование, отбрасывание галлюцинаций), `tests/ai/test_promotion.py`
   (согласованные наблюдения → alias; расходящиеся → «неоднозначные», не
   промоутятся ни при каком числе наблюдений).
+
+### Наблюдаемость вызовов ИИ и возврат fallback-гейтов (Milestone AI-11, промпт 26)
+
+Полное описание — `docs/ai-enrichment-architecture.md`, раздел 8. Кратко:
+
+- **Таблица `ai_call_log`** (`app/ai/migrations/02_ai_call_log.sql`): при каждом
+  вызове `enrich()` (не только при успехе) пишется строка
+  (`app.ai.memory.log_ai_call`, best-effort — при `pool=None` пропуск). Поля:
+  `occurred_at`, `had_poi_or_center`, `fully_resolved_deterministically`
+  (вычисляется и логируется **всегда**, даже пока гейт 2 выключен — это
+  измерение «что было бы, если включить»), `cache_hit`, `ai_called`,
+  `criteria_changed_by_ai` (итог ИИ отличался от детерминированного слоя).
+- **Отчёт**: `python -m app.ai.usage_report` (или `--days N`) — всего запросов →
+  % `had_poi_or_center` → из них % `fully_resolved_deterministically` (кандидаты
+  на «гейт 2 спас бы вызов») → % `cache_hit` → % `criteria_changed_by_ai` среди
+  вызовов ИИ (реальная польза). Аггрегация — чистая `aggregate()`, тесты в
+  `tests/ai/test_usage_report.py`. (Отдельная команда, не путать с
+  `python -m app.ai.promotion --report` — та про неоднозначные алиасы.)
+- **Гейты в `enrich()` пока ВЫКЛЮЧЕНЫ** (закомментированы) — возврат последним
+  шагом серии 22–26, только когда численный критерий подтверждён на данных.
+  Критерий зафиксирован (числа, не «ощущение»): гейт 2 включаем при
+  `fully_resolved_deterministically ≥ 90%` среди `had_poi_or_center` над окном
+  `N ≥ 500`; гейт 1 (с обязательным расширением проверкой `option_candidates` под
+  промпт 25) — при доле `had_poi_or_center=false` среди `criteria_changed_by_ai`
+  ≤ 5%. Детали и обоснование — раздел 8.4 архитектурного документа.
+- **Безопасность `agy`**: `call_antigravity` запускает CLI строго `--print`
+  (неинтерактивно) и **никогда** не передаёт `--dangerously-skip-permissions` —
+  в промпт попадает сырой `user_query`, это поверхность prompt injection.
+- **Модель ИИ — одно поле** `AI_MODEL_NAME` (дефолт `gemini-3.5-flash`),
+  используется обоими провайдерами (в `agy --model` и в Anthropic API). Отдельное
+  `ANTIGRAVITY_MODEL` убрано (AUDIT_REPORT 1.4). Дефолтный провайдер —
+  `AI_PROVIDER=antigravity`.
 
 ---
 

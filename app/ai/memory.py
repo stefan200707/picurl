@@ -163,3 +163,40 @@ async def store_semantic(
     """
     embedding_str = "[" + ",".join(map(str, embedding)) + "]"
     await pool.execute(query, query_signature, embedding_str, raw_question, json.dumps(answer))
+
+
+async def log_ai_call(
+    pool: asyncpg.Pool | None,
+    *,
+    had_poi_or_center: bool,
+    fully_resolved_deterministically: bool,
+    cache_hit: bool,
+    ai_called: bool,
+    criteria_changed_by_ai: bool,
+) -> None:
+    """Записать строку наблюдаемости в ai_call_log (Milestone AI-11).
+
+    Пишется при КАЖДОМ вызове enrich() (не только при успехе): это измерение
+    «что было бы, если включить fallback-гейты». В частности
+    ``fully_resolved_deterministically`` логируется всегда, даже пока гейт 2
+    закомментирован и не влияет на реальный ответ. ``pool=None`` (БД не
+    настроена) — тихо пропускаем: наблюдаемость best-effort и не должна ломать
+    основной ответ.
+    """
+    if pool is None:
+        return
+    query = """
+        INSERT INTO ai_call_log (
+            had_poi_or_center, fully_resolved_deterministically,
+            cache_hit, ai_called, criteria_changed_by_ai
+        )
+        VALUES ($1, $2, $3, $4, $5)
+    """
+    await pool.execute(
+        query,
+        had_poi_or_center,
+        fully_resolved_deterministically,
+        cache_hit,
+        ai_called,
+        criteria_changed_by_ai,
+    )

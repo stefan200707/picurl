@@ -65,6 +65,126 @@ async def test_enrich_disabled(mock_build, mock_lookup, mock_settings):
     assert "ИИ-обогащение выключено — часть запроса не обработана" in warnings
 
 
+@pytest.mark.asyncio
+@patch("app.ai.enrichment.log_ai_call", new_callable=AsyncMock)
+@patch("app.ai.enrichment.call_model")
+@patch("app.ai.enrichment.lookup_semantic", return_value=None)
+@patch("app.ai.enrichment.build_candidate_shortlist")
+async def test_enrich_logs_ai_call_row(mock_build, mock_lookup, mock_call, mock_log, mock_settings):
+    """Вызов enrich() с реальным обращением к ИИ пишет строку ai_call_log."""
+    mock_build.return_value = [
+        ComplexCandidate(
+            id="1",
+            name="ЖК",
+            district=None,
+            county=None,
+            metro=[],
+            is_center=None,
+            known_poi={},
+        )
+    ]
+    mock_call.return_value = AIEnrichmentAnswer(
+        matched_complex_ids=["1"],
+        center_district_ids=[],
+        poi_findings={},
+        explanation="x",
+        confidence=0.9,
+    )
+    criteria = Criteria(
+        poi_requirements=[POIRequirement(category=POICategory.SCHOOL, raw_phrase="школа")]
+    )
+
+    await enrich("хочу со школой", criteria, [], pool=None)
+
+    mock_log.assert_awaited_once()
+    fields = mock_log.await_args.kwargs
+    assert fields["had_poi_or_center"] is True
+    assert fields["fully_resolved_deterministically"] is False
+    assert fields["cache_hit"] is False
+    assert fields["ai_called"] is True
+    # ИИ вернул matched_complex_ids, которых не даёт детерминированный слой.
+    assert fields["criteria_changed_by_ai"] is True
+
+
+@pytest.mark.asyncio
+@patch("app.ai.enrichment.log_ai_call", new_callable=AsyncMock)
+@patch(
+    "app.ai.enrichment.build_candidate_shortlist",
+    return_value=[
+        ComplexCandidate(
+            id="1", name="ЖК", district=None, county=None, metro=[], is_center=None, known_poi={}
+        )
+    ],
+)
+async def test_enrich_logs_when_disabled(mock_build, mock_log, mock_settings):
+    """Даже при выключенном ИИ пишется строка ai_call_log (ai_called=False)."""
+    mock_settings.AI_ENRICHMENT_ENABLED = False
+    criteria = Criteria(
+        poi_requirements=[POIRequirement(category=POICategory.SCHOOL, raw_phrase="школа")]
+    )
+
+    await enrich("хочу со школой", criteria, [], pool=None)
+
+    mock_log.assert_awaited_once()
+    fields = mock_log.await_args.kwargs
+    assert fields["had_poi_or_center"] is True
+    assert fields["ai_called"] is False
+    assert fields["cache_hit"] is False
+    assert fields["criteria_changed_by_ai"] is False
+
+
+@pytest.mark.asyncio
+@patch("app.ai.enrichment.log_ai_call", new_callable=AsyncMock)
+@patch("app.ai.enrichment.build_candidate_shortlist", return_value=[])
+async def test_enrich_logs_when_no_candidates(mock_build, mock_log, mock_settings):
+    """Пустой шорт-лист тоже логируется (одна строка на каждый вызов enrich)."""
+    criteria = Criteria()
+
+    await enrich("что-то невнятное", criteria, [], pool=None)
+
+    mock_log.assert_awaited_once()
+    fields = mock_log.await_args.kwargs
+    assert fields["had_poi_or_center"] is False
+    assert fields["ai_called"] is False
+
+
+@pytest.mark.asyncio
+async def test_log_ai_call_writes_row_to_pool():
+    """log_ai_call выполняет INSERT в ai_call_log с переданными полями (мок БД)."""
+    from app.ai.memory import log_ai_call
+
+    pool = AsyncMock()
+    await log_ai_call(
+        pool,
+        had_poi_or_center=True,
+        fully_resolved_deterministically=False,
+        cache_hit=False,
+        ai_called=True,
+        criteria_changed_by_ai=True,
+    )
+
+    pool.execute.assert_awaited_once()
+    args = pool.execute.await_args.args
+    assert "ai_call_log" in args[0]
+    # (query, had_poi_or_center, fully_resolved, cache_hit, ai_called, changed)
+    assert args[1:] == (True, False, False, True, True)
+
+
+@pytest.mark.asyncio
+async def test_log_ai_call_noop_without_pool():
+    """pool=None — наблюдаемость best-effort, ничего не пишем и не падаем."""
+    from app.ai.memory import log_ai_call
+
+    await log_ai_call(
+        None,
+        had_poi_or_center=True,
+        fully_resolved_deterministically=True,
+        cache_hit=False,
+        ai_called=False,
+        criteria_changed_by_ai=False,
+    )
+
+
 def test_sanitize_against_shortlist():
     candidates = [
         ComplexCandidate(

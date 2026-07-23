@@ -5,13 +5,19 @@ from pydantic import BaseModel
 
 from app.ai.client import call_model, call_option_resolver
 from app.ai.embeddings import embed
-from app.ai.memory import lookup_semantic, store_semantic, store_structured_fact
+from app.ai.memory import (
+    log_ai_call,
+    lookup_semantic,
+    store_semantic,
+    store_structured_fact,
+)
 from app.ai.prompts import OPTION_SYSTEM_PROMPT, SYSTEM_PROMPT, build_context, build_option_context
 from app.ai.schema import AIEnrichmentAnswer, ComplexCandidate, OptionResolutionAnswer
 from app.config import get_settings
 from app.geo.candidates import (
     build_candidate_shortlist,
     build_query_signature,
+    fully_resolved,
     resolve_known_facts,
 )
 from app.parsing.schema import Criteria
@@ -290,6 +296,18 @@ async def resolve_options(
                 logger.warning(f"Failed to persist option alias: {e}")
 
 
+def _differs_from_deterministic(result: EnrichmentResult, known: dict) -> bool:
+    """Отличается ли итог обогащения от того, что дал бы детерминированный слой.
+
+    Используется для колонки ``criteria_changed_by_ai`` в ai_call_log: это
+    реальная польза вызова (ИИ реально изменил бы ``criteria``), а не просто
+    факт, что вызов состоялся. Сравнение по множествам id — порядок не важен.
+    """
+    return set(result.matched_complex_ids) != set(known.get("matched_complex_ids", [])) or set(
+        result.center_district_ids
+    ) != set(known.get("center_district_ids", []))
+
+
 async def enrich(
     text: str,
     criteria: Criteria,
@@ -302,20 +320,46 @@ async def enrich(
     # warnings на месте.
     await resolve_options(criteria, option_candidates or [], warnings, pool)
 
-    # Пока что все запросы идут в нейронку
-    # if not criteria.poi_requirements and not criteria.center_requested:
-    #     return EnrichmentResult.noop()
+    # Наблюдаемость (Milestone AI-11): собираем поля для ai_call_log по мере
+    # прохождения пайплайна и пишем ОДНУ строку на каждый вызов enrich() —
+    # вне зависимости от исхода — через _log() ниже. had_poi_or_center = сработал
+    # бы старый гейт 1 (см. закомментированный if ниже).
+    log_fields = {
+        "had_poi_or_center": bool(criteria.poi_requirements or criteria.center_requested),
+        "fully_resolved_deterministically": False,
+        "cache_hit": False,
+        "ai_called": False,
+        "criteria_changed_by_ai": False,
+    }
+
+    async def _log(result: EnrichmentResult) -> EnrichmentResult:
+        try:
+            await log_ai_call(pool, **log_fields)
+        except Exception as e:
+            logger.warning(f"Failed to write ai_call_log: {e}")
+        return result
+
+    # Гейт 1 (пока выключен — см. docs/ai-enrichment-architecture.md, «Критерий
+    # возврата гейтов»). При включении расширить проверкой option_candidates,
+    # иначе резолвинг опций (промпт 25) сломается:
+    # if not criteria.poi_requirements and not criteria.center_requested \
+    #         and not (option_candidates or []):
+    #     return await _log(EnrichmentResult.noop())
 
     candidates = build_candidate_shortlist(criteria)
     if not candidates:
         warnings.append("Список кандидатов пуст")
-        return EnrichmentResult.failed()
+        return await _log(EnrichmentResult.failed())
 
     known = resolve_known_facts(candidates, criteria)
 
-    # Пока что полностью все запросы идут через нейронку (полное обогащение)
-    # if fully_resolved(known, criteria, candidates):
-    #     return EnrichmentResult.from_deterministic(known)
+    # fully_resolved() вычисляется ВСЕГДА (даже пока гейт 2 закомментирован) —
+    # это и есть измерение «что было бы, если включить гейт 2».
+    log_fields["fully_resolved_deterministically"] = fully_resolved(known, criteria, candidates)
+
+    # Гейт 2 (пока выключен — см. docs/ai-enrichment-architecture.md):
+    # if log_fields["fully_resolved_deterministically"]:
+    #     return await _log(EnrichmentResult.from_deterministic(known))
 
     settings = get_settings()
     is_claude_missing = settings.AI_PROVIDER == "claude" and not settings.ANTHROPIC_API_KEY
@@ -323,7 +367,7 @@ async def enrich(
     if not settings.AI_ENRICHMENT_ENABLED or is_claude_missing:
         if criteria.poi_requirements or criteria.center_requested:
             warnings.append("ИИ-обогащение выключено — часть запроса не обработана")
-        return EnrichmentResult.disabled()
+        return await _log(EnrichmentResult.disabled())
 
     signature = build_query_signature(text, criteria)
     embedding = embed(signature)
@@ -338,8 +382,12 @@ async def enrich(
         cached = None
 
     if cached is not None:
-        return EnrichmentResult.from_cache(cached)
+        result = EnrichmentResult.from_cache(cached)
+        log_fields["cache_hit"] = True
+        log_fields["criteria_changed_by_ai"] = _differs_from_deterministic(result, known)
+        return await _log(result)
 
+    log_fields["ai_called"] = True
     try:
         context = build_context(text, criteria, candidates, known)
         answer = await call_model(SYSTEM_PROMPT, context)
@@ -350,7 +398,7 @@ async def enrich(
         if isinstance(e, (APIStatusError, APITimeoutError, ValueError, ValidationError)):
             logger.error(f"AI enrichment failed: {e}", exc_info=True)
             warnings.append("не удалось обработать ИИ-обогащение (ошибка сервиса)")
-            return EnrichmentResult.failed()
+            return await _log(EnrichmentResult.failed())
         raise e
 
     answer = sanitize_against_shortlist(answer, candidates)
@@ -360,4 +408,6 @@ async def enrich(
     except Exception as e:
         logger.warning(f"Failed to persist AI results to DB: {e}")
 
-    return EnrichmentResult.from_ai(answer)
+    result = EnrichmentResult.from_ai(answer)
+    log_fields["criteria_changed_by_ai"] = _differs_from_deterministic(result, known)
+    return await _log(result)

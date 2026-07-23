@@ -9,10 +9,16 @@ class Settings(BaseSettings):
 
     # Settings for AI
     AI_ENRICHMENT_ENABLED: bool = True
-    AI_PROVIDER: str = "claude"
+    # Провайдер ИИ по умолчанию — Antigravity (CLI `agy`, дефолтная модель
+    # gemini-3.5-flash). Для Claude выставить AI_PROVIDER=claude + ANTHROPIC_API_KEY.
+    AI_PROVIDER: str = "antigravity"
     ANTHROPIC_API_KEY: str | None = None
     ANTIGRAVITY_CLI_PATH: str | None = None
-    ANTIGRAVITY_MODEL: str | None = None
+    # Единственное поле «какую модель звать» — используется обоими провайдерами
+    # (передаётся в `agy --model` для antigravity и в Anthropic API для claude).
+    # Раньше существовало отдельное ANTIGRAVITY_MODEL, из-за чего AI_MODEL_NAME по
+    # факту не использовался при провайдере antigravity (AUDIT_REPORT 1.4) —
+    # поле убрано, источник истины теперь один.
     AI_MODEL_NAME: str = "gemini-3.5-flash"
     # Единый источник строки подключения к БД ИИ (AUDIT_REPORT 2.8): раньше
     # app/ai/memory.py читал DATABASE_URL напрямую через os.getenv в обход
