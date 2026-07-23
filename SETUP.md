@@ -51,7 +51,7 @@ AI_MODEL_NAME=gemini-3.5-flash
 
 # Настройки Antigravity (требуются если AI_PROVIDER=antigravity)
 # ANTIGRAVITY_CLI_PATH=/path/to/agy
-# ANTIGRAVITY_MODEL=
+# Модель задаётся общим полем AI_MODEL_NAME выше (используется обоими провайдерами).
 
 # -----------------------------------------------------------------------------
 # 3. База данных PostgreSQL + pgvector (Карта памяти и векторный кэш)

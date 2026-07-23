@@ -67,6 +67,7 @@ uv run fastapi dev
   "result_count": 142,
   "warnings": [],
   "ai_used": true,
+  "ai_cache_hit": false,
   "ai_explanation": "Подобраны ЖК в центральных районах."
 }
 ```

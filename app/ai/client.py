@@ -69,7 +69,8 @@ async def call_antigravity[T: BaseModel](
     import asyncio
 
     cli_path = settings.ANTIGRAVITY_CLI_PATH or "agy"
-    model = settings.ANTIGRAVITY_MODEL
+    # Единый источник «какую модель звать» (см. app/config.Settings.AI_MODEL_NAME).
+    model = settings.AI_MODEL_NAME
 
     user_message = json.dumps(user_payload, ensure_ascii=False)
 
@@ -81,6 +82,13 @@ async def call_antigravity[T: BaseModel](
         f"Input: {user_message}"
     )
 
+    # Безопасность вызова agy (Milestone AI-11): agy — агентный CLI, а в
+    # full_prompt попадает полный текст пользователя (user_query) без
+    # санитизации — это поверхность prompt injection → действия агента.
+    # Поэтому НИКОГДА не передаём `--dangerously-skip-permissions` и запускаем
+    # строго в неинтерактивном режиме `--print` (только вывод текста, без
+    # разрешения агенту выполнять действия). Не добавляйте сюда флагов,
+    # снимающих ограничения на действия.
     cmd = [cli_path, "--print", full_prompt]
     if model:
         cmd.extend(["--model", model])
