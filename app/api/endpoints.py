@@ -89,6 +89,7 @@ async def build_url(
         result_count=result_count,
         warnings=warnings,
         ai_used=ai_meta.ai_used,
+        ai_failed=ai_meta.ai_failed,
         ai_cache_hit=ai_meta.cache_hit,
         ai_explanation=ai_meta.explanation,
     )

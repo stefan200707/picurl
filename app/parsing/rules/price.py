@@ -1,7 +1,7 @@
 import re
 from typing import NamedTuple
 
-from .core import _NUM, Span, _iter_free, _normalize, _to_number
+from .core import _NOT_LINE_NUMBER, _NUM, Span, _iter_free, _normalize, _to_number
 
 # --- Цена ---
 
@@ -18,10 +18,13 @@ _PRICE_UNIT = r"млн\.?|миллион\w*|лям\w*|тыс\w*|руб\w*|р\.|�
 _OPT_RUB = r"(?:\s+(?:рублей|руб\w*|р\.|₽))?"  # опциональный суффикс рублей
 
 #: «10-15 млн», «от 10 до 15 млн»; без единицы — только большие числа (рубли).
+#: Обе границы защищены ``_NOT_LINE_NUMBER`` — без неё «у МЦД-3 до 12 млн»
+#: ошибочно давал бы диапазон «3 до 12 млн» (номер линии МЦД принимался за
+#: нижнюю границу цены; баг, Milestone AI-16).
 _PRICE_RANGE = re.compile(
     rf"\b(?:(?:бюджет\w*|цена|стоимость\w*)\s*[—:\-]?\s*)?(?:от\s+)?"
-    rf"({_NUM})\s*({_PRICE_UNIT}|[мmкk])?\s*(?:[-–—]|до)\s*"
-    rf"({_NUM})\s*({_PRICE_UNIT}|[мmкk])?{_OPT_RUB}(?![\w²])"
+    rf"{_NOT_LINE_NUMBER}({_NUM})\s*({_PRICE_UNIT}|[мmкk])?\s*(?:[-–—]|до)\s*"
+    rf"{_NOT_LINE_NUMBER}({_NUM})\s*({_PRICE_UNIT}|[мmкk])?{_OPT_RUB}(?![\w²])"
 )
 #: «бюджет 15м», «цена до 15 млн», «бюджет 15», «бабок 12 лямов» (число <1000 → миллионы).
 _PRICE_BUDGET = re.compile(
@@ -37,6 +40,14 @@ _PRICE_MAX = re.compile(
 )
 #: «за 15 миллионов», «за 15 млн» — трактуем как верхнюю границу.
 _PRICE_ZA = re.compile(rf"\bза\s+({_NUM})\s*({_PRICE_UNIT}){_OPT_RUB}(?![\w²])")
+#: Разговорный обратный порядок слов: «лямов за 15», «миллионов за 15»,
+#: «млн за 15» (единица измерения идёт ПЕРЕД «за N», а не после числа, как в
+#: ``_PRICE_ZA`` выше). Семантика та же, что у ``_PRICE_ZA`` («за» — это
+#: бюджет/потолок, а не точная цена: ``price_exact`` в контракте `Criteria`
+#: не существует в принципе, только ``price_min``/``price_max`` — поэтому
+#: «за N» естественно ложится именно на верхнюю границу ``price_max``, как и
+#: обычное «до N»).
+_PRICE_ZA_UNIT_FIRST = re.compile(rf"\b({_PRICE_UNIT})\s+за\s+({_NUM}){_OPT_RUB}(?![\w²])")
 #: Слитный суффикс: «до 15м», «за 800к» (м/m → млн, к/k → тыс, только слитно).
 _PRICE_SUFFIX = re.compile(rf"\b(до|от|за)\s+({_NUM})([мmкk]){_OPT_RUB}\b")
 #: Голое большое число: «до 15000000» (≥ 100 000 → рубли).
@@ -59,7 +70,12 @@ def _price_multiplier(unit: str) -> int:
 
 
 def extract_price(text: str) -> tuple[PriceFacts, list[Span]]:
-    """Извлечь границы цены, нормализовав в рубли (15 млн → 15_000_000)."""
+    """Извлечь границы цены, нормализовав в рубли (15 млн → 15_000_000).
+
+    Поддерживает и обратный разговорный порядок слов «лямов за 15» (см.
+    ``_PRICE_ZA_UNIT_FIRST``) — трактуется как ``price_max``, аналогично
+    «за 15 млн».
+    """
     norm = _normalize(text)
     spans: list[Span] = []
     price_min: int | None = None
@@ -124,6 +140,10 @@ def extract_price(text: str) -> tuple[PriceFacts, list[Span]]:
 
     for match in _iter_free(_PRICE_ZA, norm, spans):
         _update_max(round(_to_number(match.group(1)) * _price_multiplier(match.group(2))))
+        spans.append(match.span())
+
+    for match in _iter_free(_PRICE_ZA_UNIT_FIRST, norm, spans):
+        _update_max(round(_to_number(match.group(2)) * _price_multiplier(match.group(1))))
         spans.append(match.span())
 
     for match in _iter_free(_PRICE_SUFFIX, norm, spans):

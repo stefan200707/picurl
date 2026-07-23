@@ -64,19 +64,23 @@ async def db_transaction():
 
 @pytest.mark.asyncio
 async def test_structured_fact_lifecycle(db_transaction):
+    import math
+
     pool = db_transaction
     await store_structured_fact(pool, "complex", "c1", "is_center", {"present": True}, "ai", 0.9)
 
     fact = await lookup_structured_fact(pool, "complex", "c1", "is_center")
     assert fact is not None
     assert fact.fact_value == {"present": True}
-    assert fact.confidence == 0.9
+    # confidence — REAL (float4) в Postgres, поэтому 0.9 округляется при обратном
+    # чтении (0.8999999761581421) — сравниваем с допуском, а не на равенство.
+    assert math.isclose(fact.confidence, 0.9, rel_tol=1e-5)
     assert fact.observed_count == 1
 
     await store_structured_fact(pool, "complex", "c1", "is_center", {"present": True}, "ai", 0.95)
     fact2 = await lookup_structured_fact(pool, "complex", "c1", "is_center")
     assert fact2.observed_count == 2
-    assert fact2.confidence == 0.95
+    assert math.isclose(fact2.confidence, 0.95, rel_tol=1e-5)
 
 
 @pytest.mark.asyncio

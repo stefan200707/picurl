@@ -2,7 +2,7 @@ import re
 
 from app.parsing.schema import Rooms
 
-from .core import Span, _iter_free, _normalize
+from .core import _NOT_LINE_NUMBER, Span, _iter_free, _normalize
 
 # --- Комнатность ---
 
@@ -25,9 +25,12 @@ _ROOMS_NEGATION = re.compile(
 )
 
 #: «2к», «1-комнатную», «2-х комнатная», «1-2 комнатные», «1, 2 и 3 комнатные», «даже 4-комнатную».
+#: Ведущая цифра защищена ``_NOT_LINE_NUMBER`` — без неё «у МЦД-2 комнатная
+#: квартира» ошибочно давал бы Rooms.TWO (номер линии МЦД принимался за
+#: количество комнат; Milestone AI-16).
 _ROOMS_NUM = re.compile(
     r"(?:\bдаже\s+)?"  # учитываем слово «даже» (из задания 2)
-    r"\b(\d(?:\s*[-–—,/]\s*\d|\s+и(?:ли)?\s+\d)*)"
+    rf"\b{_NOT_LINE_NUMBER}(\d(?:\s*[-–—,/]\s*\d|\s+и(?:ли)?\s+\d)*)"
     r"(?:\s*\+)?"
     r"(?:\s*[-–—]?\s*х)?"
     r"\s*[-–—]?\s*"
@@ -35,8 +38,8 @@ _ROOMS_NUM = re.compile(
     r"(?:\s+кв-р\w*|\s+квартир\w*|\s+кв\b)?"
 )
 
-#: Голый чип «3+» (без слова «комнат»).
-_ROOMS_PLUS = re.compile(r"\b(\d)\s*\+(?!\s*\d)")
+#: Голый чип «3+» (без слова «комнат»); та же защита от номера линии.
+_ROOMS_PLUS = re.compile(rf"\b{_NOT_LINE_NUMBER}(\d)\s*\+(?!\s*\d)")
 
 
 def _digit_rooms(digit: int) -> Rooms | None:

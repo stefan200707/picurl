@@ -24,6 +24,9 @@ from .poi import extract_poi_requirements as extract_poi_requirements
 from .price import PriceFacts as PriceFacts
 from .price import extract_price as extract_price
 from .rooms import extract_rooms as extract_rooms
+from .station_class import (
+    extract_station_class_requirements as extract_station_class_requirements,
+)
 from .time import TimeFacts as TimeFacts
 from .time import extract_time_to_metro as extract_time_to_metro
 
@@ -136,6 +139,11 @@ def apply_rules(text: str) -> RulesOutcome:
     landmark_reqs, spans = extract_landmark_requirements(norm)
     if landmark_reqs:
         criteria.landmark_requirements.extend(landmark_reqs)
+        consumed.extend(spans)
+
+    station_class_reqs, spans = extract_station_class_requirements(norm)
+    if station_class_reqs:
+        criteria.station_class_requirements.extend(station_class_reqs)
         consumed.extend(spans)
 
     fm_names, spans = extract_fallback_metro(norm)

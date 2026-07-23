@@ -1,7 +1,7 @@
 import re
 from typing import NamedTuple
 
-from .core import _NUM, Span, _iter_free, _normalize, _to_number
+from .core import _NOT_LINE_NUMBER, _NUM, Span, _iter_free, _normalize, _to_number
 
 # --- Площадь (общая и кухни) ---
 
@@ -42,8 +42,14 @@ _AREA_KEYWORD = re.compile(
     rf")"
     rf"(?:\s*{_AREA_UNIT})?"
 )
-#: «70-100 метров», «от 40 до 60 м²» — единица обязательна.
-_AREA_RANGE = re.compile(rf"\b(?:от\s+)?({_NUM})\s*(?:[-–—]|до)\s*({_NUM})\s*{_AREA_UNIT}")
+#: «70-100 метров», «от 40 до 60 м²» — единица обязательна. Обе границы
+#: защищены ``_NOT_LINE_NUMBER`` — та же утечка номера линии, что и в
+#: ``price.py._PRICE_RANGE`` («у МЦД-3 до 60 метров» иначе давал бы
+#: area_min=3; Milestone AI-16).
+_AREA_RANGE = re.compile(
+    rf"\b(?:от\s+)?{_NOT_LINE_NUMBER}({_NUM})\s*(?:[-–—]|до)\s*"
+    rf"{_NOT_LINE_NUMBER}({_NUM})\s*{_AREA_UNIT}"
+)
 _AREA_MIN = re.compile(rf"\b(?:от|не\s+меньше|минимум)\s+({_NUM})\s*{_AREA_UNIT}")
 _AREA_MAX = re.compile(rf"\b(?:до|не\s+больше|максимум)\s+({_NUM})\s*{_AREA_UNIT}")
 _AREA_KVADRATOV = re.compile(rf"\b({_NUM})\s*квадрат\w*|\bквадрат\w*\s+({_NUM})\b")
