@@ -1,8 +1,13 @@
 import json
 
 from app.ai.schema import ComplexCandidate
-from app.geo.distance import haversine
-from app.parsing.schema import Criteria, LandmarkRequirement, POIRequirement
+from app.geo.distance import CENTER_RADIUS_M, haversine
+from app.parsing.schema import (
+    Criteria,
+    LandmarkRequirement,
+    POIRequirement,
+    StationClassRequirement,
+)
 from app.reference.loader import DATA_DIR, load_all, normalize
 
 #: Максимум ЖК-кандидатов, уходящих в ИИ (шорт-лист держим коротким, чтобы
@@ -11,6 +16,104 @@ from app.reference.loader import DATA_DIR, load_all, normalize
 #: ранжирование по дистанции — детерминированное (app/geo/distance.haversine),
 #: поэтому в шорт-лист попадают именно ближайшие ЖК, а не «побольше на глаз».
 SHORTLIST_LIMIT = 50
+
+#: Радиус «рядом» по умолчанию (метры), когда пользователь не указал точную
+#: дистанцию («рядом с МГУ» без «в 500 метрах»). Сознательно переиспользуем
+#: CENTER_RADIUS_M (app/geo/distance.py, 5 км — тот же порядок величины, что и
+#: эвристика «центр Москвы») вместо нового произвольного числа: единый масштаб
+#: «районного» расстояния по проекту. Это эвристика, а не точная величина —
+#: как и другие калибруемые пороги проекта (semantic-кэш, confidence
+#: промоушена), при появлении данных может потребовать калибровки. Используется
+#: только для решения «какие ЖК считать совпадением» (resolve_known_facts/
+#: fully_resolved); ранжирование самого шорт-листа (_rank_by_landmark)
+#: продолжает отдавать всех кандидатов отсортированными по дистанции без этой
+#: отсечки, если явный max_distance_m не задан — так у ИИ (если запрос требует
+#: ещё и его) остаётся выбор шире одного жёсткого радиуса.
+LANDMARK_DEFAULT_RADIUS_M = CENTER_RADIUS_M
+
+#: Радиус «рядом» по умолчанию для класса станций (Milestone AI-15: «рядом с
+#: МЦД не важно какой станции», «у любого метро») — тот же детерминированный
+#: механизм (haversine), что и у ориентиров выше, но точка не одна, а ближайшая
+#: станция подходящего класса. Значение меньше LANDMARK_DEFAULT_RADIUS_M
+#: (5 км, «районный» масштаб): 1500 м — эвристика пешей доступности до станции
+#: (~15-20 минут шагом), а не «где-то в том же районе». Как и другие
+#: калибруемые пороги проекта (семантический кэш, confidence промоушена), это
+#: приближение, требующее калибровки на реальных данных, а не точная величина.
+STATION_CLASS_DEFAULT_RADIUS_M = 1500.0
+
+
+def _landmark_radius(landmarks: list[LandmarkRequirement]) -> float:
+    """Действующий радиус «рядом» для списка требований-ориентиров.
+
+    Явно заданный пользователем ``max_distance_m`` (минимальный среди
+    нескольких ориентиров — самое строгое ограничение) побеждает; иначе —
+    :data:`LANDMARK_DEFAULT_RADIUS_M`.
+    """
+    declared = [lm.max_distance_m for lm in landmarks if lm.max_distance_m is not None]
+    return min(declared) if declared else LANDMARK_DEFAULT_RADIUS_M
+
+
+def _station_class_radius(requirements: list[StationClassRequirement]) -> float:
+    """Действующий радиус «рядом» для списка требований по классу станций.
+
+    Аналог :func:`_landmark_radius`: явная ``max_distance_m`` (самая строгая
+    среди нескольких требований) побеждает; иначе — умолчание
+    :data:`STATION_CLASS_DEFAULT_RADIUS_M`.
+    """
+    declared = [r.max_distance_m for r in requirements if r.max_distance_m is not None]
+    return min(declared) if declared else STATION_CLASS_DEFAULT_RADIUS_M
+
+
+def _matching_station_points(ref_data, line_prefix: str) -> list[tuple[float, float]]:
+    """Координаты станций metro.json, подходящих под класс/линию.
+
+    ``line_prefix == "метро"`` — особый случай «любая станция метро вообще»
+    (пользователь явно сказал, что линия не важна, без указания класса):
+    подходит любая станция справочника с известными координатами, включая
+    МЦД/МЦК (они физически являются частью карты метро). Иначе — станции, чьё
+    поле ``RefEntry.line`` совпадает с запрошенным классом по префиксу
+    (нормализованное сравнение): ``"МЦД"`` матчит и «МЦД», и «МЦД-1»/«МЦД-2»…;
+    ``"МЦД-2"`` матчит только эту конкретную линию. У пересадочных станций
+    ``line`` может перечислять несколько линий через « / » (см. RefEntry) —
+    матчим, если подходит хотя бы одна из них. Станции без координат или без
+    заполненного ``line`` (справочник ещё не обогащён — см. CLAUDE.md, раздел
+    про справочники) в подходящие не попадают — сужение по ним просто
+    невозможно, что вызывающий код обязан отразить явным warning'ом, а не
+    тихо проигнорировать.
+    """
+    prefix_norm = normalize(line_prefix)
+    points: list[tuple[float, float]] = []
+    for entry in ref_data.metro:
+        if entry.lat is None or entry.lon is None:
+            continue
+        if prefix_norm == "метро":
+            points.append((entry.lat, entry.lon))
+            continue
+        if not entry.line:
+            continue
+        lines = [normalize(part) for part in entry.line.split("/")]
+        if any(line.startswith(prefix_norm) for line in lines):
+            points.append((entry.lat, entry.lon))
+    return points
+
+
+def station_class_points(criteria: Criteria) -> list[tuple[float, float]]:
+    """Все точки станций, подходящих хотя бы под одно из требований класса.
+
+    Несколько ``station_class_requirements`` трактуются как «класс1 ИЛИ
+    класс2»: ЖК подходит, если он в радиусе хотя бы от ОДНОЙ станции хотя бы
+    одного из требований. Публичная функция (не приватная): переиспользуется
+    и в этом модуле (ранжирование/резолвинг), и в ``app.ai.enrichment``
+    (всегда включённая ветка без ИИ) для явного warning'а, когда координат
+    станций подходящего класса нет вовсе.
+    """
+    if not criteria.station_class_requirements:
+        return []
+    ref_data = load_all()
+    points: list[tuple[float, float]] = []
+    for requirement in criteria.station_class_requirements:
+        points.extend(_matching_station_points(ref_data, requirement.line_prefix))
+    return points
 
 
 def _location_filter(criteria: Criteria) -> set[str] | None:
@@ -45,8 +148,13 @@ def build_candidate_shortlist(criteria: Criteria) -> list[ComplexCandidate]:
     # Для запросов «рядом с ориентиром» усечение до SHORTLIST_LIMIT должно идти
     # ПОСЛЕ сортировки по дистанции — иначе «первые N из справочника» отсекут
     # реально ближайшие ЖК. Поэтому при наличии ориентира собираем всех
-    # подходящих кандидатов, а лимит применяем в конце.
+    # подходящих кандидатов, а лимит применяем в конце. Класс станций
+    # (Milestone AI-15) — тот же приём; при одновременном наличии обоих типов
+    # запроса (редкий случай) приоритет отдаём ориентиру — конкретная точка
+    # точнее, чем «любая станция класса».
     rank_by_landmark = bool(criteria.landmark_requirements)
+    rank_by_station_class = bool(criteria.station_class_requirements) and not rank_by_landmark
+    rank_by_distance = rank_by_landmark or rank_by_station_class
 
     def _get_candidates(loc_names: set[str] | None) -> list[ComplexCandidate]:
         result = []
@@ -80,7 +188,7 @@ def build_candidate_shortlist(criteria: Criteria) -> list[ComplexCandidate]:
                 )
             )
 
-            if not rank_by_landmark and len(result) >= SHORTLIST_LIMIT:
+            if not rank_by_distance and len(result) >= SHORTLIST_LIMIT:
                 break
         return result
 
@@ -93,6 +201,8 @@ def build_candidate_shortlist(criteria: Criteria) -> list[ComplexCandidate]:
 
     if rank_by_landmark:
         candidates = _rank_by_landmark(candidates, criteria.landmark_requirements)
+    elif rank_by_station_class:
+        candidates = _rank_by_station_class(candidates, criteria.station_class_requirements)
 
     return candidates[:SHORTLIST_LIMIT]
 
@@ -134,9 +244,58 @@ def _rank_by_landmark(
     return ranked
 
 
+def _rank_by_station_class(
+    candidates: list[ComplexCandidate], requirements: list[StationClassRequirement]
+) -> list[ComplexCandidate]:
+    """Отфильтровать и отсортировать ЖК по дистанции до БЛИЖАЙШЕЙ станции класса.
+
+    Аналог :func:`_rank_by_landmark`, но точка не одна: «подходит любая станция
+    класса» — для каждого кандидата берём минимальное расстояние до ЛЮБОЙ из
+    станций, подходящих хотя бы под одно из ``requirements`` (несколько
+    требований трактуются как «класс1 ИЛИ класс2»). Чистая математика
+    (:func:`app.geo.distance.haversine`), без обращения к ИИ. Если у станций
+    подходящего класса вовсе нет координат (справочник ещё не обогащён),
+    сужение физически невозможно — кандидатов возвращаем как есть, без
+    сортировки/отсечки; вызывающий код (``app.ai.enrichment.enrich``) обязан
+    отразить это явным warning'ом, а не молчать.
+    """
+    criteria_stub = Criteria(station_class_requirements=requirements)
+    points = station_class_points(criteria_stub)
+    if not points:
+        return candidates
+
+    max_distance = min(
+        (r.max_distance_m for r in requirements if r.max_distance_m is not None),
+        default=None,
+    )
+
+    scored: list[tuple[float, ComplexCandidate]] = []
+    unknown: list[ComplexCandidate] = []
+    for c in candidates:
+        if c.lat is None or c.lon is None:
+            unknown.append(c)
+            continue
+        dist = min(haversine(lat, lon, c.lat, c.lon) for lat, lon in points)
+        if max_distance is not None and dist > max_distance:
+            continue
+        scored.append((dist, c))
+
+    scored.sort(key=lambda pair: pair[0])
+    ranked = [c for _dist, c in scored]
+
+    # Кандидаты без координат добавляем только когда нет жёсткой отсечки по
+    # дистанции (иначе их нельзя гарантированно отнести к «в радиусе»).
+    if max_distance is None:
+        ranked.extend(unknown)
+    return ranked
+
+
 def resolve_known_facts(candidates: list[ComplexCandidate], criteria: Criteria) -> dict:
     ref_data = load_all()
     center_district_ids = [d.id for d in ref_data.districts if d.is_center and d.id]
+    # Считаем один раз на весь вызов (не на кандидата) — чистая функция, но
+    # незачем перечитывать/пересобирать список точек в цикле.
+    station_points = station_class_points(criteria)
 
     poi_findings = {}
     matched_complex_ids = []
@@ -161,6 +320,34 @@ def resolve_known_facts(candidates: list[ComplexCandidate], criteria: Criteria) 
         if criteria.center_requested and c.is_center is not True:
             satisfies = False
 
+        # Ориентир («рядом с МГУ») — чистая математика (haversine), без ИИ.
+        # Кандидат без координат не может подтвердить близость — не считаем
+        # совпадением (аналогично неизвестному центру выше), а не додумываем.
+        if criteria.landmark_requirements:
+            if c.lat is None or c.lon is None:
+                satisfies = False
+            else:
+                radius = _landmark_radius(criteria.landmark_requirements)
+                dist = min(
+                    haversine(lm.lat, lm.lon, c.lat, c.lon) for lm in criteria.landmark_requirements
+                )
+                if dist > radius:
+                    satisfies = False
+
+        # Класс станций («рядом с МЦД не важно какой станции») — та же чистая
+        # математика, но точка не одна: подходит ЖК в радиусе хотя бы от
+        # ОДНОЙ станции подходящего класса. Ни станций с координатами, ни
+        # координат самого ЖК нет — совпадением не считаем (аналогично
+        # ориентиру/центру выше), а не додумываем.
+        if criteria.station_class_requirements:
+            if not station_points or c.lat is None or c.lon is None:
+                satisfies = False
+            else:
+                radius = _station_class_radius(criteria.station_class_requirements)
+                dist = min(haversine(lat, lon, c.lat, c.lon) for lat, lon in station_points)
+                if dist > radius:
+                    satisfies = False
+
         if satisfies:
             matched_complex_ids.append(c.id)
 
@@ -179,7 +366,12 @@ def fully_resolved(
     Центр разрешим из справочника (флаг ``is_center`` района), но только когда
     он известен у всех кандидатов; хоть один неизвестный (``None``) — уходим в
     ИИ. Аналогично POI: категория обязана присутствовать в ``known_poi`` каждого
-    кандидата, иначе факт не подтверждён и нужен ИИ.
+    кандидата, иначе факт не подтверждён и нужен ИИ. Ориентир
+    (``landmark_requirements``) — та же логика: близость доказуема только для
+    кандидатов с известными координатами, хоть один без ``lat``/``lon`` считаем
+    неполным решением (даже если для него дальше выберут «не совпал»). Класс
+    станций (``station_class_requirements``) — аналогично: нужны и координаты
+    хотя бы одной подходящей станции, и координаты каждого кандидата.
     """
     if criteria.center_requested:
         for c in candidates or []:
@@ -191,6 +383,18 @@ def fully_resolved(
             for req in criteria.poi_requirements:
                 if req.category.value not in findings:
                     return False
+
+    if criteria.landmark_requirements:
+        for c in candidates or []:
+            if c.lat is None or c.lon is None:
+                return False
+
+    if criteria.station_class_requirements:
+        if not station_class_points(criteria):
+            return False
+        for c in candidates or []:
+            if c.lat is None or c.lon is None:
+                return False
     return True
 
 
@@ -225,4 +429,7 @@ def build_query_signature(text: str, criteria: Criteria) -> str:
     if criteria.landmark_requirements:
         landmarks = sorted(normalize(lm.name) for lm in criteria.landmark_requirements)
         parts.append("landmark=" + ",".join(landmarks))
+    if criteria.station_class_requirements:
+        classes = sorted(normalize(r.line_prefix) for r in criteria.station_class_requirements)
+        parts.append("station_class=" + ",".join(classes))
     return " | ".join(parts)

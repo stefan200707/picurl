@@ -4,6 +4,7 @@ import pytest
 
 from app.ai.enrichment import (
     enrich,
+    merge_enrichment,
     resolve_options,
     sanitize_against_shortlist,
     sanitize_option_resolution,
@@ -16,7 +17,17 @@ from app.ai.schema import (
 )
 from app.config import get_settings
 from app.geo.poi import POICategory
-from app.parsing.schema import Criteria, POIRequirement
+from app.parsing.schema import (
+    Criteria,
+    LandmarkRequirement,
+    POIRequirement,
+    StationClassRequirement,
+)
+
+#: Координаты МГУ, как в app/reference/landmarks.json (используются и в
+#: tests/geo/test_candidates.py) — без явной дистанции, как в живом запросе
+#: «однушка рядом с МГУ подешевле» из бага AI-12.
+_MGU = LandmarkRequirement(name="МГУ им. Ломоносова", lat=55.703326, lon=37.530762)
 
 
 @pytest.fixture
@@ -137,15 +148,145 @@ async def test_enrich_logs_when_disabled(mock_build, mock_log, mock_settings):
 @patch("app.ai.enrichment.log_ai_call", new_callable=AsyncMock)
 @patch("app.ai.enrichment.build_candidate_shortlist", return_value=[])
 async def test_enrich_logs_when_no_candidates(mock_build, mock_log, mock_settings):
-    """Пустой шорт-лист тоже логируется (одна строка на каждый вызов enrich)."""
+    """Пустой шорт-лист тоже логируется (одна строка на каждый вызов enrich).
+
+    Критерии с poi_requirements гарантированно проходят гейт 1 (Milestone
+    AI-14) и реально доходят до build_candidate_shortlist — иначе (с «пустыми»
+    критериями) enrich() короткозамкнётся раньше, и этот тест перестанет
+    проверять то, что заявлено в его имени/докстринге (см.
+    test_enrich_gate1_blocks_when_nothing_to_enrich для проверки самого гейта).
+    """
+    criteria = Criteria(
+        poi_requirements=[POIRequirement(category=POICategory.SCHOOL, raw_phrase="школа")]
+    )
+
+    await enrich("что-то невнятное со школой", criteria, [], pool=None)
+
+    mock_build.assert_called_once()
+    mock_log.assert_awaited_once()
+    fields = mock_log.await_args.kwargs
+    assert fields["had_poi_or_center"] is True
+    assert fields["ai_called"] is False
+
+
+# --- Гейт 1 (Milestone AI-14): возврат fallback-гейта из enrich() -----------
+#
+# До этой правки гейт 1 был закомментирован (Milestone AI-11), из-за чего
+# enrich() дёргал ИИ-путь (шорт-лист/кэш/модель) на КАЖДЫЙ запрос — даже когда
+# обогащать нечего (нет poi_requirements/center_requested/option_candidates).
+# Живой прогон показал два бесполезных вызова ИИ на таком запросе, оба упали в
+# 429 (общая квота OAuth-сессии). Гейт 2 (fully_resolved_deterministically)
+# остаётся выключенным — численный критерий возврата (N >= 500, порог 90%) по
+# CLAUDE.md ещё не подтверждён на данных.
+
+
+@pytest.mark.asyncio
+@patch("app.ai.enrichment.log_ai_call", new_callable=AsyncMock)
+@patch("app.ai.enrichment.call_model")
+@patch("app.ai.enrichment.build_candidate_shortlist")
+async def test_enrich_gate1_blocks_when_nothing_to_enrich(
+    mock_build, mock_call, mock_log, mock_settings
+):
+    """Нет ни poi_requirements, ни center_requested, ни option_candidates —
+    ИИ-путь не запускается вовсе (ни шорт-лист, ни модель), но строка в
+    ai_call_log всё равно пишется (наблюдаемость не должна зависеть от гейта)."""
     criteria = Criteria()
 
-    await enrich("что-то невнятное", criteria, [], pool=None)
+    result = await enrich("двушка у метро, до 15 млн, с отделкой", criteria, [], pool=None)
+
+    mock_build.assert_not_called()
+    mock_call.assert_not_called()
+    assert result.ai_used is False
+    assert result.ai_failed is False
+    assert result.success is True
 
     mock_log.assert_awaited_once()
     fields = mock_log.await_args.kwargs
     assert fields["had_poi_or_center"] is False
     assert fields["ai_called"] is False
+    assert fields["cache_hit"] is False
+    assert fields["criteria_changed_by_ai"] is False
+
+
+@pytest.mark.asyncio
+@patch("app.ai.enrichment.log_ai_call", new_callable=AsyncMock)
+async def test_enrich_gate1_preserves_existing_warnings(mock_log, mock_settings):
+    """Гейт 1 не должен стирать уже накопленные warnings нижних слоёв (инвариант
+    «ничего не отбрасывается молча» касается и самого гейта)."""
+    criteria = Criteria()
+    warnings = ["«тарабарщина»: не удалось распознать, не попало в ссылку"]
+
+    await enrich("хочу тарабарщину", criteria, warnings, pool=None)
+
+    assert warnings == ["«тарабарщина»: не удалось распознать, не попало в ссылку"]
+
+
+@pytest.mark.asyncio
+@patch("app.ai.enrichment.log_ai_call", new_callable=AsyncMock)
+@patch("app.ai.enrichment.build_candidate_shortlist", return_value=[])
+async def test_enrich_gate1_allows_when_poi_present(mock_build, mock_log, mock_settings):
+    """poi_requirements — гейт 1 пропускает запрос дальше (в шорт-лист)."""
+    criteria = Criteria(
+        poi_requirements=[POIRequirement(category=POICategory.SCHOOL, raw_phrase="школа")]
+    )
+
+    await enrich("хочу со школой", criteria, [], pool=None)
+
+    mock_build.assert_called_once()
+
+
+@pytest.mark.asyncio
+@patch("app.ai.enrichment.log_ai_call", new_callable=AsyncMock)
+@patch("app.ai.enrichment.build_candidate_shortlist", return_value=[])
+async def test_enrich_gate1_allows_when_center_requested(mock_build, mock_log, mock_settings):
+    """center_requested — гейт 1 пропускает запрос дальше (в шорт-лист)."""
+    criteria = Criteria(center_requested=True)
+
+    await enrich("хочу в центре", criteria, [], pool=None)
+
+    mock_build.assert_called_once()
+
+
+@pytest.mark.asyncio
+@patch("app.ai.enrichment.log_ai_call", new_callable=AsyncMock)
+@patch("app.ai.enrichment.call_option_resolver")
+@patch("app.ai.enrichment.build_candidate_shortlist", return_value=[])
+async def test_enrich_gate1_allows_when_only_option_candidates_present(
+    mock_build, mock_resolver, mock_log, mock_settings
+):
+    """Непустые option_candidates тоже приоткрывают гейт 1 (промпт 25): даже без
+    poi/center основной ИИ-путь (шорт-лист) не короткозамыкается раньше срока —
+    условие гейта обязано учитывать все три признака «есть что обогащать»."""
+    mock_resolver.return_value = OptionResolutionAnswer(matches=[])
+    criteria = Criteria()
+
+    await enrich(
+        "квартира с отдельным санузлом",
+        criteria,
+        [],
+        pool=None,
+        option_candidates=["отдельным санузлом"],
+    )
+
+    mock_build.assert_called_once()
+
+
+@pytest.mark.asyncio
+@patch("app.ai.enrichment.log_ai_call", new_callable=AsyncMock)
+@patch("app.ai.enrichment.build_candidate_shortlist", return_value=[])
+async def test_enrich_gate1_allows_landmark_only_request(mock_build, mock_log, mock_settings):
+    """landmark_requirements — единственное осознанное исключение из буквального
+    условия гейта 1: сужение по ориентиру (Milestone AI-13, регрессия AI-12)
+    работает отдельной, всегда включённой веткой ниже по коду и само не зовёт
+    ИИ. Если бы гейт 1 не пропускал landmark-only запросы дальше, они бы молча
+    схлопывались в noop() до этой ветки — именно баг AI-12, воспроизведённый
+    падением test_enrich_resolves_landmark_* при попытке не сделать это
+    исключение (см. комментарий у гейта в app/ai/enrichment.py)."""
+    criteria = Criteria(landmark_requirements=[_MGU])
+
+    await enrich("рядом с мгу", criteria, [], pool=None)
+
+    mock_build.assert_called_once()
 
 
 @pytest.mark.asyncio
@@ -249,9 +390,16 @@ async def test_enrich_api_error(mock_build, mock_lookup, mock_call, mock_setting
 
     result = await enrich("хочу со школой", criteria, warnings)
 
-    assert result.ai_used is True
+    # Честный ai_used (правка "честный ai_used"): попытка провалилась, ИИ ни на
+    # что не повлиял — ai_used=False, а не True. Сам факт неудачной попытки не
+    # теряется — он в отдельном поле ai_failed.
+    assert result.ai_used is False
+    assert result.ai_failed is True
     assert result.success is False
     assert "не удалось обработать ИИ-обогащение (ошибка сервиса)" in warnings
+    # AIMeta (то, что реально уходит в ответ API) прокидывает оба поля.
+    assert result.meta.ai_used is False
+    assert result.meta.ai_failed is True
 
 
 @pytest.mark.asyncio
@@ -358,3 +506,388 @@ async def test_resolve_options_disabled_keeps_warning(mock_resolver, _mock_build
     mock_resolver.assert_not_called()
     assert criteria.option_groups == []
     assert any("отдельным санузлом" in w for w in warnings)
+
+
+# --- Регрессия AI-12: сужение complexes по ориентиру («рядом с МГУ») --------
+#
+# Баг (живой прогон): «однушка рядом с МГУ подешевле» распознавала ориентир
+# (координаты есть), но complexes не сужались (в URL нет blocks=...) и
+# warnings были пустыми — пользователь не предупреждён. Причина: сужение шло
+# только через матч POI/центра, а landmark_requirements не учитывался вовсе,
+# плюс единственный путь применения (гейт 2) выключен по Milestone AI-11.
+# Здесь — отдельный, всегда включённый детерминированный шаг именно для
+# ориентиров (чистая математика haversine, не работа ИИ).
+
+
+@pytest.mark.asyncio
+@patch("app.ai.enrichment.log_ai_call", new_callable=AsyncMock)
+@patch("app.ai.enrichment.build_candidate_shortlist")
+async def test_enrich_resolves_landmark_deterministically_when_ai_disabled(
+    mock_build, mock_log, mock_settings
+):
+    """«Рядом с ориентиром» сужает complexes без ИИ, даже когда ИИ выключен."""
+    mock_settings.AI_ENRICHMENT_ENABLED = False
+    mock_build.return_value = [
+        ComplexCandidate(
+            id="1",
+            name="У МГУ",
+            district=None,
+            county=None,
+            metro=[],
+            is_center=None,
+            known_poi={},
+            lat=55.7050,
+            lon=37.5320,
+        ),
+        ComplexCandidate(
+            id="2",
+            name="Далеко",
+            district=None,
+            county=None,
+            metro=[],
+            is_center=None,
+            known_poi={},
+            lat=55.9000,
+            lon=37.4000,
+        ),
+    ]
+    criteria = Criteria(landmark_requirements=[_MGU])
+    warnings = []
+
+    result = await enrich("однушка рядом с мгу подешевле", criteria, warnings)
+
+    assert result.ai_used is False
+    assert result.success is True
+    assert result.matched_complex_ids == ["1"]
+    # ИИ тут не при чём — не должно быть даже гейт-1 warning'а «ИИ выключено».
+    assert not any("выключено" in w for w in warnings)
+
+
+@pytest.mark.asyncio
+@patch("app.ai.enrichment.log_ai_call", new_callable=AsyncMock)
+@patch("app.ai.enrichment.build_candidate_shortlist")
+async def test_enrich_resolves_landmark_even_when_ai_enabled(mock_build, mock_log, mock_settings):
+    """Сужение по ориентиру не идёт в модель, даже когда ИИ включён и доступен
+    (это чистая математика, а не задача, требующая рассуждения ИИ)."""
+    mock_build.return_value = [
+        ComplexCandidate(
+            id="1",
+            name="У МГУ",
+            district=None,
+            county=None,
+            metro=[],
+            is_center=None,
+            known_poi={},
+            lat=55.7050,
+            lon=37.5320,
+        ),
+    ]
+    criteria = Criteria(landmark_requirements=[_MGU])
+
+    with patch("app.ai.enrichment.call_model") as mock_call:
+        result = await enrich("рядом с мгу", criteria, [])
+        mock_call.assert_not_called()
+
+    assert result.matched_complex_ids == ["1"]
+    assert result.ai_used is False
+
+
+@pytest.mark.asyncio
+@patch("app.ai.enrichment.log_ai_call", new_callable=AsyncMock)
+@patch("app.ai.enrichment.build_candidate_shortlist")
+async def test_enrich_landmark_warns_when_no_coordinates(mock_build, mock_log, mock_settings):
+    """Если у ЖК-кандидатов вообще нет координат — сужение физически
+    невозможно; честный warning вместо тишины (инвариант «ничего не
+    отбрасывается молча»), а не имитация работы."""
+    mock_settings.AI_ENRICHMENT_ENABLED = False
+    mock_build.return_value = [
+        ComplexCandidate(
+            id="1",
+            name="ЖК без координат",
+            district=None,
+            county=None,
+            metro=[],
+            is_center=None,
+            known_poi={},
+        ),
+    ]
+    criteria = Criteria(landmark_requirements=[_MGU])
+    warnings = []
+
+    result = await enrich("рядом с мгу", criteria, warnings)
+
+    assert result.matched_complex_ids == []
+    assert any("нет координат" in w for w in warnings)
+
+
+@pytest.mark.asyncio
+@patch("app.ai.enrichment.log_ai_call", new_callable=AsyncMock)
+@patch("app.ai.enrichment.build_candidate_shortlist")
+async def test_enrich_landmark_warns_when_nothing_nearby(mock_build, mock_log, mock_settings):
+    """Координаты есть, но в радиусе «рядом» ничего не найдено — предупреждаем,
+    а не оставляем criteria молча ненасыщенными (иначе URL покажет весь город,
+    и пользователь решит, что фильтр применился)."""
+    mock_settings.AI_ENRICHMENT_ENABLED = False
+    mock_build.return_value = [
+        ComplexCandidate(
+            id="1",
+            name="Далеко",
+            district=None,
+            county=None,
+            metro=[],
+            is_center=None,
+            known_poi={},
+            lat=55.9000,
+            lon=37.4000,
+        ),
+    ]
+    criteria = Criteria(landmark_requirements=[_MGU])
+    warnings = []
+
+    result = await enrich("рядом с мгу", criteria, warnings)
+
+    assert result.matched_complex_ids == []
+    assert any("не найдено" in w for w in warnings)
+
+
+@pytest.mark.asyncio
+@patch("app.ai.enrichment.log_ai_call", new_callable=AsyncMock)
+@patch("app.ai.enrichment.call_model")
+@patch("app.ai.enrichment.lookup_semantic", return_value=None)
+@patch("app.ai.enrichment.build_candidate_shortlist")
+async def test_enrich_landmark_combined_with_poi_still_uses_ai_path(
+    mock_build, mock_lookup, mock_call, mock_log, mock_settings
+):
+    """Landmark + POI вместе — короткого замыкания нет (POI всё ещё требует
+    ИИ), но кандидаты для ИИ уже учитывают расстояние до ориентира."""
+    mock_build.return_value = [
+        ComplexCandidate(
+            id="1",
+            name="У МГУ",
+            district=None,
+            county=None,
+            metro=[],
+            is_center=None,
+            known_poi={"school": True},
+            lat=55.7050,
+            lon=37.5320,
+        ),
+    ]
+    mock_call.return_value = AIEnrichmentAnswer(
+        matched_complex_ids=["1"],
+        center_district_ids=[],
+        poi_findings={},
+        explanation="x",
+        confidence=0.9,
+    )
+    criteria = Criteria(
+        landmark_requirements=[_MGU],
+        poi_requirements=[POIRequirement(category=POICategory.SCHOOL, raw_phrase="школа")],
+    )
+
+    result = await enrich("рядом с мгу со школой", criteria, [])
+
+    mock_call.assert_called_once()
+    assert result.ai_used is True
+
+
+@pytest.mark.asyncio
+@patch("app.ai.enrichment.log_ai_call", new_callable=AsyncMock)
+@patch("app.ai.enrichment.build_candidate_shortlist")
+async def test_enrich_landmark_result_merges_into_criteria_complexes(
+    mock_build, mock_log, mock_settings
+):
+    """merge_enrichment применяет результат так же, как если бы его вернула
+    модель — итоговая проверка (fixes AI-12): URL получает сужение по ЖК."""
+    from app.parsing.schema import MatchedEntity
+    from app.reference.loader import RefEntry
+
+    mock_settings.AI_ENRICHMENT_ENABLED = False
+    mock_build.return_value = [
+        ComplexCandidate(
+            id="42",
+            name="У МГУ",
+            district=None,
+            county=None,
+            metro=[],
+            is_center=None,
+            known_poi={},
+            lat=55.7050,
+            lon=37.5320,
+        ),
+    ]
+    criteria = Criteria(landmark_requirements=[_MGU])
+    warnings = []
+
+    result = await enrich("рядом с мгу", criteria, warnings)
+
+    with patch(
+        "app.reference.loader.load_complexes",
+        return_value=[RefEntry(name="У МГУ", slug="near-mgu", id="42")],
+    ):
+        criteria = merge_enrichment(criteria, result)
+
+    assert criteria.complexes == [MatchedEntity(name="У МГУ", slug="near-mgu", id="42")]
+
+
+# --- Класс станций «любая станция линии» (Milestone AI-15) ------------------
+#
+# «Нужна двушка рядом с МЦД не важно какой станции, до 15 млн» — обобщение
+# ориентиров (см. регрессию AI-12 выше) на КЛАСС точек: чистая математика
+# (haversine до БЛИЖАЙШЕЙ станции подходящего класса), отдельная всегда
+# включённая ветка, не гейт 1/2.
+
+_MCD = StationClassRequirement(line_prefix="МЦД")
+
+
+@pytest.mark.asyncio
+@patch("app.ai.enrichment.log_ai_call", new_callable=AsyncMock)
+@patch("app.ai.enrichment.build_candidate_shortlist")
+async def test_enrich_gate1_allows_station_class_only_request(mock_build, mock_log, mock_settings):
+    """station_class_requirements — то же обязательное исключение из гейта 1,
+    что и landmark_requirements: своя ветка ниже сама не зовёт ИИ."""
+    mock_build.return_value = []
+    criteria = Criteria(station_class_requirements=[_MCD])
+
+    await enrich("рядом с мцд не важно какой станции", criteria, [], pool=None)
+
+    mock_build.assert_called_once()
+
+
+@pytest.mark.asyncio
+@patch("app.ai.enrichment.log_ai_call", new_callable=AsyncMock)
+@patch("app.ai.enrichment.station_class_points")
+@patch("app.ai.enrichment.build_candidate_shortlist")
+async def test_enrich_resolves_station_class_deterministically_when_ai_disabled(
+    mock_build, mock_points, mock_log, mock_settings
+):
+    """«Рядом с МЦД не важно какой станции» сужает complexes без ИИ, даже
+    когда ИИ выключен."""
+    mock_settings.AI_ENRICHMENT_ENABLED = False
+    mock_points.return_value = [(55.8000, 37.6000)]
+    mock_build.return_value = [
+        ComplexCandidate(
+            id="1",
+            name="У станции",
+            district=None,
+            county=None,
+            metro=[],
+            is_center=None,
+            known_poi={},
+            lat=55.8009,
+            lon=37.6000,
+        ),
+        ComplexCandidate(
+            id="2",
+            name="Далеко",
+            district=None,
+            county=None,
+            metro=[],
+            is_center=None,
+            known_poi={},
+            lat=56.2000,
+            lon=37.0000,
+        ),
+    ]
+    criteria = Criteria(station_class_requirements=[_MCD])
+    warnings = []
+
+    result = await enrich("двушка рядом с мцд не важно какой станции", criteria, warnings)
+
+    assert result.ai_used is False
+    assert result.success is True
+    assert result.matched_complex_ids == ["1"]
+    assert not any("выключено" in w for w in warnings)
+
+
+@pytest.mark.asyncio
+@patch("app.ai.enrichment.log_ai_call", new_callable=AsyncMock)
+@patch("app.ai.enrichment.station_class_points", return_value=[])
+@patch("app.ai.enrichment.build_candidate_shortlist")
+async def test_enrich_station_class_warns_when_no_station_coordinates(
+    mock_build, mock_points, mock_log, mock_settings
+):
+    """Ни у одной станции подходящего класса нет координат (metro.json ещё не
+    обогащён) — честный warning вместо тишины."""
+    mock_settings.AI_ENRICHMENT_ENABLED = False
+    mock_build.return_value = [
+        ComplexCandidate(
+            id="1",
+            name="ЖК",
+            district=None,
+            county=None,
+            metro=[],
+            is_center=None,
+            known_poi={},
+            lat=55.8009,
+            lon=37.6000,
+        ),
+    ]
+    criteria = Criteria(station_class_requirements=[_MCD])
+    warnings = []
+
+    result = await enrich("рядом с мцд не важно какой станции", criteria, warnings)
+
+    assert result.matched_complex_ids == []
+    assert any("в справочнике метро нет координат" in w for w in warnings)
+
+
+@pytest.mark.asyncio
+@patch("app.ai.enrichment.log_ai_call", new_callable=AsyncMock)
+@patch("app.ai.enrichment.station_class_points", return_value=[(55.8000, 37.6000)])
+@patch("app.ai.enrichment.build_candidate_shortlist")
+async def test_enrich_station_class_warns_when_no_complex_coordinates(
+    mock_build, mock_points, mock_log, mock_settings
+):
+    """Станции класса известны, но ни у одного ЖК-кандидата нет координат —
+    сужение физически невозможно, честный warning."""
+    mock_settings.AI_ENRICHMENT_ENABLED = False
+    mock_build.return_value = [
+        ComplexCandidate(
+            id="1",
+            name="ЖК без координат",
+            district=None,
+            county=None,
+            metro=[],
+            is_center=None,
+            known_poi={},
+        ),
+    ]
+    criteria = Criteria(station_class_requirements=[_MCD])
+    warnings = []
+
+    result = await enrich("рядом с мцд не важно какой станции", criteria, warnings)
+
+    assert result.matched_complex_ids == []
+    assert any("в справочнике ЖК нет координат" in w for w in warnings)
+
+
+@pytest.mark.asyncio
+@patch("app.ai.enrichment.log_ai_call", new_callable=AsyncMock)
+@patch("app.ai.enrichment.station_class_points", return_value=[(55.8000, 37.6000)])
+@patch("app.ai.enrichment.build_candidate_shortlist")
+async def test_enrich_station_class_warns_when_nothing_nearby(
+    mock_build, mock_points, mock_log, mock_settings
+):
+    """Координаты есть, но в радиусе «рядом» ничего не найдено — предупреждаем."""
+    mock_settings.AI_ENRICHMENT_ENABLED = False
+    mock_build.return_value = [
+        ComplexCandidate(
+            id="1",
+            name="Далеко",
+            district=None,
+            county=None,
+            metro=[],
+            is_center=None,
+            known_poi={},
+            lat=56.2000,
+            lon=37.0000,
+        ),
+    ]
+    criteria = Criteria(station_class_requirements=[_MCD])
+    warnings = []
+
+    result = await enrich("рядом с мцд не важно какой станции", criteria, warnings)
+
+    assert result.matched_complex_ids == []
+    assert any("не найдено" in w for w in warnings)

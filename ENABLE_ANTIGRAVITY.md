@@ -84,6 +84,7 @@ uv run fastapi dev
   "criteria": { ... },
   "warnings": [],
   "ai_used": true,
+  "ai_failed": false,
   "ai_cache_hit": false,
   "ai_explanation": "Подобраны ЖК в центральных районах с доступом к школам."
 }
@@ -105,13 +106,138 @@ uv run python -m app.ai.promotion
 
 ---
 
+## Альтернатива: Claude (Anthropic API) вместо Antigravity
+
+Вместо Antigravity вы можете использовать Claude от Anthropic. Есть два способа аутентификации:
+
+### Способ 1: API-ключ (явная конфигурация)
+
+**Для dev/prod окружений** (сервер, CI, Docker), где keychain недоступен.
+
+1. Создайте или скопируйте существующий API-ключ на [console.anthropic.com](https://console.anthropic.com/account/keys).
+2. Добавьте в `.env`:
+   ```env
+   AI_ENRICHMENT_ENABLED=true
+   AI_PROVIDER=claude
+   ANTHROPIC_API_KEY=sk-ant-api03-...
+   AI_MODEL_NAME=claude-sonnet-5
+   DATABASE_URL=postgresql://postgres:password@localhost:5432/picurl_ai
+   ```
+3. Перезапустите сервер: `uv run fastapi dev`
+
+### Способ 2: OAuth-сессия Claude Code (удобнее на macOS)
+
+**Только для macOS** с установленным [Claude Code](https://claude.ai). На других платформах используйте способ 1.
+
+#### На macOS (локально):
+
+1. Откройте терминал и залогиньтесь в Claude Code:
+   ```bash
+   claude /login
+   ```
+   Следуйте инструкциям браузера. OAuth-токен автоматически сохранится в keychain macOS.
+
+2. Настройте `.env` (CLAUDE_OAUTH_TOKEN остаётся пустым):
+   ```env
+   AI_ENRICHMENT_ENABLED=true
+   AI_PROVIDER=claude
+   # ANTHROPIC_API_KEY= (оставить пустым или убрать)
+   # CLAUDE_OAUTH_TOKEN= (токен возьмётся из keychain автоматически)
+   AI_MODEL_NAME=claude-sonnet-5
+   DATABASE_URL=postgresql://postgres:password@localhost:5432/picurl_ai
+   ```
+
+3. Перезапустите сервер: `uv run fastapi dev`
+
+Если OAuth-токен в keychain обновился (CLI это делает автоматически), сервис подхватит обновление в течение 60 секунд без перезапуска.
+
+#### На Linux / CI / Docker (без keychain):
+
+1. Получите OAuth-токен командой:
+   ```bash
+   claude setup-token
+   ```
+
+2. Задайте токен явно в `.env`:
+   ```env
+   AI_ENRICHMENT_ENABLED=true
+   AI_PROVIDER=claude
+   CLAUDE_OAUTH_TOKEN=sk-ant-oat01-... # токен из шага 1
+   AI_MODEL_NAME=claude-sonnet-5
+   DATABASE_URL=postgresql://postgres:password@localhost:5432/picurl_ai
+   ```
+
+3. Перезапустите сервер.
+
+### Приоритет аутентификации Claude
+
+Когда `AI_PROVIDER=claude`, сервис пытается аутентифицироваться в таком порядке:
+
+1. **`ANTHROPIC_API_KEY`** (если задан) — это явная конфигурация, имеет приоритет
+2. **`CLAUDE_OAUTH_TOKEN`** (если задан) — токен из `claude setup-token` или переменной окружения
+3. **keychain macOS** (автоматически, если платформа macOS) — OAuth-сессия из `claude /login`
+
+Если ничего из этого не найдено, ИИ-слой отключается **автоматически**, и базовый детерминированный пайплайн (regex + rapidfuzz) продолжает работать. Это не ошибка — сервис полностью функционален и без ИИ.
+
+### Одновременно x-api-key и Authorization: Bearer не отправляются
+
+При вызове Anthropic API сервис отправляет **ровно одно** из:
+- `Authorization: Bearer` + заголовок `anthropic-beta: oauth-2025-04-20` (при OAuth)
+- Заголовок `x-api-key` (при API-ключе)
+
+Одновременно оба — не отправляются, так как API это отвергает.
+
+### Токен из keychain обновляется с кэшем на 60 секунд
+
+Чтобы не дёргать keychain на каждый запрос (это blocking I/O), сервис кэширует токен на 60 секунд. Обновление токена CLI подхватывается автоматически — перезапуск сервера не требуется.
+
+---
+
 ## Возможные проблемы (Troubleshooting)
 
 1. **Пишет "ИИ-обогащение выключено — часть запроса не обработана"**
    - Проверьте, что в `.env` точно прописано `AI_ENRICHMENT_ENABLED=true`.
    - Убедитесь, что вы перезапустили сервер (`uv run fastapi dev`) после изменения `.env`.
-   - Убедитесь, что установлен `AI_PROVIDER=antigravity` и вы авторизованы в `agy` (или правильно указали `ANTIGRAVITY_CLI_PATH`). (Если провайдер случайно остался `claude`, но нет ключа `ANTHROPIC_API_KEY`, система принудительно отключит ИИ).
+   
+   **Если `AI_PROVIDER=antigravity`:**
+   - Убедитесь, что установлен CLI `agy` и вы авторизованы (`agy --auth-code`), или правильно указан `ANTIGRAVITY_CLI_PATH`.
+   
+   **Если `AI_PROVIDER=claude`:**
+   - **Способ 1 (API-ключ):** Проверьте, что `ANTHROPIC_API_KEY` задан и корректен.
+   - **Способ 2 (OAuth на macOS):** Проверьте, залогинены ли вы в Claude Code (`claude /login`). Проверить логин: `security find-generic-password -s "Claude Code-credentials" -w 2>/dev/null | grep -q claudeAiOauth && echo "OK" || echo "NOT LOGGED IN"`.
+   - **Способ 2 (OAuth на Linux/CI):** Убедитесь, что `CLAUDE_OAUTH_TOKEN` задан и не пуст.
 
 2. **Ошибки подключения к PostgreSQL / таймауты ИИ**
    - Проверьте статус контейнера: `docker ps`.
    - Убедитесь, что строка `DATABASE_URL` в `.env` правильная. Модуль ИИ не упадет полностью без БД, но семантическое кэширование и долгосрочная память работать не будут.
+
+3. **OAuth-сессия (Claude Code): общая квота и деградация при истощении**
+   
+   **Аутентификация работает**, но имеет важное ограничение: OAuth-токен сессии Claude Code **делит лимит с самим Claude Code**. Пока вы активно работаете в терминале с Claude, сервис конкурирует с ним за один и тот же бюджет вызовов.
+   
+   **Когда использовать OAuth:**
+   - ✅ Локальная разработка и ручные проверки через Swagger UI
+   - ❌ Фоновые задачи, нагрузочное тестирование, production-окружения
+   
+   **Для production или нагрузки:** используйте **способ 1 (ANTHROPIC_API_KEY)** — он имеет отдельную квоту, независимую от Claude Code.
+   
+   **Что происходит, если квота исчерпана (ошибка 429):**
+   - Сервис делает **один повторный вызов** автоматически
+   - Если и повтор падает на 429, ИИ-слой **деградирует** (не влияет на основной pipeline)
+   - В ответе HTTP появляется warning в поле `warnings`: `"не удалось обработать ИИ-обогащение (ошибка сервиса)"`
+   - Базовый детерминированный парсер (regex + rapidfuzz) отрабатывает штатно, ссылка всё равно возвращается
+   
+   Если часто видите такой warning при живой работе — это признак исчерпанной квоты. Подождите несколько минут или перейдите на API-ключ для постоянной работы.
+
+4. **Справочник ошибок ИИ-слоя (API Anthropic)**
+   
+   Если ИИ-слой не срабатывает, сервис логирует ошибку и деградирует (ссылка всё равно возвращается). Вот что означают основные коды:
+   
+   | Код | Категория | Причина | Решение |
+   |-----|-----------|---------|---------|
+   | `401` / `authentication_error` | Аутентификация | Токен протух, невалиден или истёк | Обновить: `claude /login` (OAuth) или проверить `ANTHROPIC_API_KEY` |
+   | `429` / `rate_limit_error` | Лимит | Исчерпана квота API Anthropic (общая для OAuth-сессии и Claude Code) | Подождать несколько минут ИЛИ перейти на отдельный `ANTHROPIC_API_KEY` |
+   | `404` / `not_found_error` | Конфигурация | `AI_MODEL_NAME` указан неверно или не существует | Проверить `AI_MODEL_NAME` в `.env` (примеры: `claude-sonnet-5`, `claude-opus-4-8`) |
+   | `500` / серверная ошибка | Сервис | Временный сбой Anthropic API | Сервис переподключится автоматически при следующем запросе |
+   
+   Во всех случаях основной детерминированный пайплайн (regex + rapidfuzz + справочники) продолжает работать нормально.

@@ -22,6 +22,19 @@ TRIGGERED_SCORE_THRESHOLD = 75.0
 #: районе» ~ «Бабушкинский район» = 86.5, «Рокоссовсого» ~ «Рокоссовского» = 96).
 STRICT_QRATIO_THRESHOLD = SCORE_THRESHOLD
 
+#: Записи справочника с очень коротким именем/алиасом (без пробелов, символов
+#: <= этого числа — округа-аббревиатуры «САО»/«ВАО»/«НАО»/«ЦАО»…, алиас «юг»,
+#: метро «ЗИЛ», район «Уюн») нельзя сравнивать нечётко: на строках длиной 2-4
+#: символа WRatio/QRatio легко достигают порога СЛУЧАЙНО, просто из-за общих
+#: букв, а не смыслового сходства (предлог «со» ~ «САО» = 80.0/80.0 ровно,
+#: «во» ~ «ВАО» = 80.0/80.0 ровно, частица «надо» ~ алиас «НАО» = 85.7/85.7 —
+#: см. CLAUDE.md, разбор бага «квартира со сквозным санузлом» → ложный округ
+#: САО). Для таких кандидатов требуем точного совпадения нормализованного
+#: текста окна вместо порога — это защищает от всего класса коротких
+#: служебных слов/частиц разом, а не только от «со» (whack-a-mole со
+#: стоп-словами здесь ненадёжен: коротких предлогов/частиц в русском много).
+SHORT_ENTITY_EXACT_MAX_LEN = 3
+
 SCORE_BONUS_MARKER = 10.0
 SCORE_BONUS_PREP_MATCH = 5.0
 SCORE_PENALTY_PREP_MISMATCH = -5.0
@@ -247,6 +260,13 @@ def _score_window(window_tokens, text_before, start_idx, end_idx, is_synthetic, 
         _, etype, entry = valid_choices[r[2]]
         is_triggered = etype in triggered_types
 
+        # Короткие записи справочника (аббревиатуры округов и т.п.) — точное
+        # совпадение вместо порога, см. комментарий у SHORT_ENTITY_EXACT_MAX_LEN.
+        if len(matched_str.replace(" ", "")) <= SHORT_ENTITY_EXACT_MAX_LEN:
+            if query_norm == matched_str:
+                good_res.append(r)
+            continue
+
         item_threshold = TRIGGERED_SCORE_THRESHOLD if is_triggered else SCORE_THRESHOLD
         if r[1] < item_threshold:
             continue
@@ -256,7 +276,31 @@ def _score_window(window_tokens, text_before, start_idx, end_idx, is_synthetic, 
             if clean_wratio < TRIGGERED_SCORE_THRESHOLD:
                 continue
 
-        if (is_synthetic or not is_triggered) and fuzz.QRatio(
+        # Однословные окна ("санузлом", "видом") под "options"/"option_groups"
+        # дополнительно проверяются строго, даже если сработал подстроковый
+        # kw_partial-триггер («сануз»/«вид»/«пол»/«балкон»/«лоджи» — часть
+        # слова, а не явный анкерный маркер вроде "жк "/"метро "/"район ").
+        # WRatio учитывает partial_ratio и завышает оценку, когда короткое
+        # слово — просто подстрока куда более длинного многословного алиаса
+        # («санузлом» ~ «несколько санузлов» = 78.75 WRatio, но всего 53.8
+        # QRatio — семантически это НЕ совпадение: «отдельный санузел» ложно
+        # матчился на «Два и более санузла», см. CLAUDE.md). Двусловные+
+        # триггернутые окна («сквозным санузлом» ~ «сквозной санузел», «двумя
+        # санузлами» ~ «2 санузла») не задеты — там сравниваются строки
+        # сопоставимой длины, ложного «раздувания» partial_ratio нет.
+        # Ограничено только options/option_groups: для metro/district/county/
+        # complex однословные окна — штатный кейс явного анкерного триггера
+        # ("ЖК X", "у метро X") на первом слове многословного имени сущности
+        # (следующее окно уже целиком ловит полное имя, а это — промежуточный
+        # кандидат); принудительная строгая проверка там убирала бы истинную
+        # верхнюю оценку окна и обнажала слабый ЧУЖОЙ тип-кандидат на том же
+        # спане (напр. "Волжский" в "ЖК Волжский парк" — совпадение с районом
+        # «Всеволожский» при WRatio=QRatio=80.0).
+        single_token_option_window = len(window_tokens) == 1 and etype in (
+            "options",
+            "option_groups",
+        )
+        if (is_synthetic or not is_triggered or single_token_option_window) and fuzz.QRatio(
             query_norm, matched_str
         ) < STRICT_QRATIO_THRESHOLD:
             continue

@@ -164,6 +164,38 @@ class LandmarkRequirement(BaseModel):
     max_distance_m: int | None = None
 
 
+class StationClassRequirement(BaseModel):
+    """Требование «рядом с любой станцией класса» (МЦД/МЦК/линия метро).
+
+    В отличие от :class:`LandmarkRequirement` (единственная точка) и
+    entity-матчинга конкретной станции метро (:mod:`app.parsing.entity_match`),
+    здесь пользователю **не важна конкретная станция** — годится любая станция
+    указанного класса/линии («рядом с МЦД не важно какой станции», «у любого
+    метро»). У pik.ru нет фильтра «любая станция линии», поэтому запрос
+    обслуживается тем же механизмом сужения ``complexes`` по дистанции
+    (haversine), что и именованные ориентиры (промпт 23) — только расстояние
+    считается до БЛИЖАЙШЕЙ станции подходящего класса, а не единственной точки
+    (см. :func:`app.geo.candidates.build_candidate_shortlist`).
+
+    - ``line_prefix`` — класс/линия станций: ``"МЦД"``/``"МЦК"`` (любая линия
+      этого класса), конкретная линия («МЦД-2») или ``"метро"`` — «любая
+      станция метро вообще» (пользователь явно сказал, что станция/линия не
+      важна, без указания конкретного класса).
+    - ``raw`` — исходный распознанный фрагмент текста (для читаемости/логов).
+    - ``max_distance_m`` — верхняя граница расстояния (по аналогии с
+      :class:`LandmarkRequirement`/:class:`POIRequirement`); явный парсинг
+      дистанции для этого правила пока не реализован (в текущих примерах её
+      никто не называет), поле зарезервировано на будущее — не «висит» без
+      документации, а не «забыто».
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    line_prefix: str
+    raw: str = ""
+    max_distance_m: int | None = None
+
+
 class MatchedEntity(BaseModel):
     """Сущность справочника (метро/округ/район/ЖК), найденная матчером.
 
@@ -242,6 +274,13 @@ class Criteria(BaseModel):
     # ориентира детерминированно (см. app/geo/candidates.py), без похода в ИИ.
     landmark_requirements: list[LandmarkRequirement] = Field(default_factory=list)
 
+    # --- Класс станций «любая станция линии» (Milestone AI-15) -----------------
+    # «рядом с МЦД не важно какой станции», «у любого метро» — сужают complexes
+    # по дистанции до БЛИЖАЙШЕЙ станции подходящего класса (см.
+    # app/geo/candidates.py), тем же детерминированным механизмом (haversine),
+    # что и именованные ориентиры выше — без похода в ИИ.
+    station_class_requirements: list[StationClassRequirement] = Field(default_factory=list)
+
     # --- Расширяемость: слаги «как есть» (см. docs/pik-url-schema.md) --------
     current_benefit: str | None = None
     option_groups: list[str] = Field(default_factory=list)
@@ -318,6 +357,14 @@ class Criteria(BaseModel):
             ]
         else:
             public.pop("landmark_requirements", None)
+
+        if self.station_class_requirements:
+            public["station_class_requirements"] = [
+                req.model_dump(exclude_none=True, mode="json")
+                for req in self.station_class_requirements
+            ]
+        else:
+            public.pop("station_class_requirements", None)
 
         if not self.center_requested:
             public.pop("center_requested", None)

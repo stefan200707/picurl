@@ -1,6 +1,10 @@
 import functools
 import json
 import logging
+import platform
+import subprocess
+import time
+from typing import Literal, NamedTuple
 
 import httpx
 from anthropic import APIStatusError, APITimeoutError, AsyncAnthropic
@@ -11,12 +15,100 @@ from app.config import get_settings
 
 logger = logging.getLogger(__name__)
 
+# Заголовок, разрешающий OAuth-токену ходить в Messages API. Без него токен
+# сессии отвергается (для API-ключа заголовок не нужен и не отправляется).
+_OAUTH_BETA = "oauth-2025-04-20"
+# Имя записи в keychain macOS, куда Claude Code кладёт учётные данные логина.
+_KEYCHAIN_SERVICE = "Claude Code-credentials"
+# Токен в keychain обновляется самим CLI, поэтому перечитываем его, а не берём
+# один раз на старте процесса. Короткий TTL — компромисс: не дёргаем keychain
+# (блокирующий subprocess) на каждый запрос, но подхватываем refresh за минуту.
+_TOKEN_TTL_SECONDS = 60.0
+
+_token_cache: tuple[float, str | None] = (0.0, None)
+
+
+class ClaudeCredentials(NamedTuple):
+    """Чем аутентифицируемся в Anthropic API.
+
+    ``kind="api_key"`` → заголовок ``x-api-key``; ``kind="oauth"`` →
+    ``Authorization: Bearer`` + бета-заголовок. Одновременно отправлять оба
+    нельзя — API отвергает такой запрос, поэтому это именно выбор одного из.
+    """
+
+    kind: Literal["api_key", "oauth"]
+    secret: str
+
+
+def _read_keychain_token() -> str | None:
+    """OAuth-токен активной сессии Claude Code из keychain macOS.
+
+    Возвращает ``None``, если пользователь не залогинен, keychain недоступен
+    или платформа не macOS — вызывающий код трактует это как «ИИ не настроен»
+    и деградирует на детерминированный пайплайн.
+    """
+    if platform.system() != "Darwin":
+        return None
+    try:
+        raw = subprocess.run(
+            ["security", "find-generic-password", "-s", _KEYCHAIN_SERVICE, "-w"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        if raw.returncode != 0:
+            return None
+        data = json.loads(raw.stdout)
+        return (data.get("claudeAiOauth") or {}).get("accessToken") or None
+    except (subprocess.SubprocessError, json.JSONDecodeError, OSError):
+        logger.warning("Не удалось прочитать OAuth-токен Claude из keychain", exc_info=True)
+        return None
+
+
+def _read_oauth_token() -> str | None:
+    """Токен из настроек (приоритет) либо из keychain, с кэшем на TTL."""
+    global _token_cache
+
+    settings = get_settings()
+    if settings.CLAUDE_OAUTH_TOKEN:
+        return settings.CLAUDE_OAUTH_TOKEN
+
+    cached_at, cached_token = _token_cache
+    now = time.monotonic()
+    if cached_token is not None and now - cached_at < _TOKEN_TTL_SECONDS:
+        return cached_token
+
+    token = _read_keychain_token()
+    _token_cache = (now, token)
+    return token
+
+
+def resolve_claude_credentials(settings) -> ClaudeCredentials | None:
+    """Как аутентифицироваться в Anthropic: ключ, OAuth-сессия или никак.
+
+    API-ключ имеет приоритет (явная конфигурация сильнее неявной сессии).
+    ``None`` означает «учётных данных нет» — не ошибка, а сигнал выключить
+    ИИ-слой; базовый пайплайн от этого не страдает.
+    """
+    if settings.ANTHROPIC_API_KEY:
+        return ClaudeCredentials("api_key", settings.ANTHROPIC_API_KEY)
+    token = _read_oauth_token()
+    if token:
+        return ClaudeCredentials("oauth", token)
+    return None
+
 
 @functools.cache
-def _get_claude_client(api_key: str) -> AsyncAnthropic:
-    """Переиспользуемый Anthropic-клиент (кэш по ключу) — не создаём httpx-пул
-    на каждый запрос."""
-    return AsyncAnthropic(api_key=api_key, timeout=httpx.Timeout(15.0))
+def _get_claude_client(kind: str, secret: str) -> AsyncAnthropic:
+    """Переиспользуемый Anthropic-клиент (кэш по учётным данным) — не создаём
+    httpx-пул на каждый запрос."""
+    if kind == "oauth":
+        return AsyncAnthropic(
+            auth_token=secret,
+            default_headers={"anthropic-beta": _OAUTH_BETA},
+            timeout=httpx.Timeout(15.0),
+        )
+    return AsyncAnthropic(api_key=secret, timeout=httpx.Timeout(15.0))
 
 
 def _is_transient(exc: Exception) -> bool:
@@ -126,10 +218,14 @@ async def call_claude[T: BaseModel](
     settings,
     answer_model: type[T] = AIEnrichmentAnswer,
 ) -> T:
-    if not settings.ANTHROPIC_API_KEY:
-        raise ValueError("AI enrichment is disabled or API key is missing")
+    credentials = resolve_claude_credentials(settings)
+    if credentials is None:
+        raise ValueError(
+            "Нет учётных данных Claude: задайте ANTHROPIC_API_KEY либо "
+            "залогиньтесь в терминале командой `claude` (пункт /login)"
+        )
 
-    client = _get_claude_client(settings.ANTHROPIC_API_KEY)
+    client = _get_claude_client(*credentials)
 
     user_message = json.dumps(user_payload, ensure_ascii=False)
 

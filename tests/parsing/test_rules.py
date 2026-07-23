@@ -28,7 +28,7 @@ from app.parsing.rules import (
     extract_time_to_metro,
     extract_unsupported,
 )
-from app.parsing.schema import HousingType, Rooms, Sort
+from app.parsing.schema import Finish, HousingType, Rooms, Sort
 
 # ---------------------------------------------------------------------------
 # Комнатность
@@ -119,6 +119,31 @@ def test_extract_rooms_does_not_eat_price_suffix() -> None:
     assert spans == []
 
 
+@pytest.mark.parametrize(
+    "text",
+    [
+        "у мцд-2 комнатная квартира",
+        "у мцд-3 комнатная квартира",
+    ],
+)
+def test_extract_rooms_does_not_eat_line_number(text: str) -> None:
+    """Регрессия (Milestone AI-16): цифра из «МЦД-N» перед словом «комнатная» не
+    должна становиться комнатностью — тот же класс бага, что и в цене/площади.
+    """
+    rooms, spans = extract_rooms(text)
+    assert rooms == []
+    assert spans == []
+
+
+def test_extract_rooms_no_line_number_leak_with_word_form() -> None:
+    """«МЦД-3 трёшка» распознаёт «трёшку» по словоформе, а не по цифре «3»."""
+    text = "мцд-3 трешка"
+    rooms, spans = extract_rooms(text)
+    assert rooms == [Rooms.THREE_PLUS]
+    for start, end in spans:
+        assert "мцд" not in text[start:end].lower()
+
+
 # ---------------------------------------------------------------------------
 # Цена
 # ---------------------------------------------------------------------------
@@ -144,11 +169,23 @@ def test_extract_rooms_does_not_eat_price_suffix() -> None:
         ("10-15 млн", PriceFacts(price_min=10_000_000, price_max=15_000_000)),
         ("от 10 до 15 млн", PriceFacts(price_min=10_000_000, price_max=15_000_000)),
         ("от 6 до 9 миллионов", PriceFacts(price_min=6_000_000, price_max=9_000_000)),
+        # Регрессия: номер линии «МЦД-N»/«МЦК-N» не должен становиться нижней
+        # границей диапазона (баг, Milestone AI-16: «мцд-3 до 12 млн» давал
+        # price_min=3_000_000 — цифра из «МЦД-3» ошибочно трактовалась как
+        # низ диапазона «3 … до 12 млн»).
+        ("у мцд-3 до 12 млн", PriceFacts(price_max=12_000_000)),
+        ("у мцд-2 до 12 млн", PriceFacts(price_max=12_000_000)),
+        ("однушка у мцд-4 до 15 млн", PriceFacts(price_max=15_000_000)),
+        ("рядом с мцк-1 до 10 млн", PriceFacts(price_max=10_000_000)),
         # «за X»
         ("за 15 миллионов", PriceFacts(price_max=15_000_000)),
         ("за 15 млн", PriceFacts(price_max=15_000_000)),
         ("за 15 млн рублей", PriceFacts(price_max=15_000_000)),
         ("за 15 млн руб.", PriceFacts(price_max=15_000_000)),
+        # «единица за X» — обратный разговорный порядок слов (баг №2)
+        ("лямов за 15", PriceFacts(price_max=15_000_000)),
+        ("миллионов за 15", PriceFacts(price_max=15_000_000)),
+        ("млн за 15", PriceFacts(price_max=15_000_000)),
         # Бюджет
         ("бюджет 15 млн", PriceFacts(price_max=15_000_000)),
         ("бюджет 15м", PriceFacts(price_max=15_000_000)),
@@ -194,6 +231,33 @@ def test_extract_price_spans_point_to_source() -> None:
     assert text[start:end] == "до 15 млн"
 
 
+def test_extract_price_unit_before_za_bug_report_example() -> None:
+    """Ровно кейс из описания бага: «...хату двушку лямов за 15 у метро»."""
+    text = "кароче хочу хату двушку лямов за 15 у метро"
+    price, spans = extract_price(text)
+    assert price == PriceFacts(price_max=15_000_000)
+    assert spans  # цена не потеряна целиком
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "однушка у мцд-3 до 12 млн",
+        "однушка у мцд-2 до 12 млн",
+    ],
+)
+def test_extract_price_does_not_consume_line_number(text: str) -> None:
+    """Регрессия бага (Milestone AI-16): цифра из «МЦД-N» не должна попадать в
+    span ценового правила — её обязан «съесть» ``station_class.py``, а не
+    ценовой диапазон. ``price_min`` остаётся ``None``, а «мцд-N» целиком вне
+    consumed-диапазона цены.
+    """
+    price, spans = extract_price(text)
+    assert price == PriceFacts(price_max=12_000_000)
+    for start, end in spans:
+        assert "мцд" not in text[start:end].lower()
+
+
 # ---------------------------------------------------------------------------
 # Площадь
 # ---------------------------------------------------------------------------
@@ -231,6 +295,11 @@ def test_extract_price_spans_point_to_source() -> None:
         ("до 15 млн", AreaFacts()),
         ("с 5 по 20 этаж", AreaFacts()),
         ("", AreaFacts()),
+        # Регрессия: номер линии «МЦД-N» не должен становиться нижней
+        # границей диапазона площади (тот же класс бага, что и в цене,
+        # Milestone AI-16: «мцд-3 до 60 метров» давал area_min=3.0).
+        ("квартира у мцд-3 до 60 метров", AreaFacts(area_max=60)),
+        ("двушка у мцд-4 до 60 метров", AreaFacts(area_max=60)),
     ],
 )
 def test_extract_area(text: str, expected: AreaFacts) -> None:
@@ -244,6 +313,23 @@ def test_extract_area_kitchen_not_confused_with_total() -> None:
     """«кухня от 8» не должна стать общей площадью, и наоборот."""
     area, _ = extract_area("площадь от 40, кухня от 8")
     assert area == AreaFacts(area_min=40, area_kitchen_min=8)
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "квартира у мцд-3 до 60 метров",
+        "двушка у мцд-4 до 60 метров",
+    ],
+)
+def test_extract_area_does_not_consume_line_number(text: str) -> None:
+    """Та же защита, что и у цены (Milestone AI-16): «мцд-N» не попадает в
+    consumed-диапазон площади — его съедает ``station_class.py``.
+    """
+    area, spans = extract_area(text)
+    assert area == AreaFacts(area_max=60)
+    for start, end in spans:
+        assert "мцд" not in text[start:end].lower()
 
 
 # ---------------------------------------------------------------------------
@@ -349,15 +435,31 @@ def test_extract_finish(text: str, expected: list) -> None:
 
 
 def test_extract_finish_conflict_last_mention_wins() -> None:
+    """Взаимоисключающие упоминания: побеждает последнее по позиции (CLAUDE.md)."""
     finish, spans = extract_finish("без отделки, ну или с отделкой")
-    assert finish == [0, 1]
-    assert len(spans) == 2  # оба упоминания «съедены»
+    assert finish == [1]  # только READY — «без отделки» отброшено как проигравшее
+    assert len(spans) == 2  # оба упоминания всё равно «съедены» (span'ы не теряются)
 
 
 def test_extract_finish_conflict_last_mention_wins_2() -> None:
+    """Пример из CLAUDE.md/бага: не должно получаться hasFinish=1,0 (оба значения)."""
     finish, spans = extract_finish("черновая отделка, хотя нет, лучше с отделкой под ключ")
-    assert finish == [0, 1]
+    assert finish == [1]  # только READY — «черновая отделка» (NONE) отброшена
     assert len(spans) == 3  # "черновая отделка" (False), "с отделкой" (True), "под ключ" (True)
+
+
+def test_extract_finish_conflict_bug_report_example() -> None:
+    """Ровно кейс из описания бага: «с отделкой, хотя нет, лучше без отделки»."""
+    finish, spans = extract_finish("с отделкой, хотя нет, лучше без отделки, до 8 млн")
+    assert finish == [0]  # NONE — последнее по позиции упоминание побеждает
+    assert len(spans) == 2
+
+
+def test_extract_finish_multiple_positive_types_not_conflicting() -> None:
+    """Разные ПОЛОЖИТЕЛЬНЫЕ разновидности отделки не противоречат друг другу."""
+    finish, spans = extract_finish("готовая отделка и с мебелью")
+    assert finish == [Finish.READY, Finish.FURNISHED]
+    assert len(spans) == 2
 
 
 # ---------------------------------------------------------------------------
@@ -684,6 +786,74 @@ def test_poi_max_distance_parsed():
     assert poi_reqs[0].max_distance_m is None
 
 
+def test_poi_bare_sad_bug_report_example():
+    """Ровно кейс из описания бага: голое разговорное «сады» не теряется."""
+    from app.geo.poi import POICategory
+    from app.parsing.rules.poi import extract_poi_requirements
+
+    poi_reqs, _center, _spans = extract_poi_requirements(
+        "двушка, новые сады в 300 метрах, школа не дальше 500 м, ТиНАО"
+    )
+    by_cat = {req.category: req for req in poi_reqs}
+    kindergarten = by_cat[POICategory.KINDERGARTEN]
+    assert kindergarten.only_new is True
+    assert kindergarten.max_distance_m == 300
+    assert by_cat[POICategory.SCHOOL].max_distance_m == 500
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "сады",
+        "садов поблизости",
+        "новые сады",
+    ],
+)
+def test_poi_bare_sad_plural_forms(text: str):
+    """Множественное число «сад» (сады/садов/...) — детсад, маркер не нужен."""
+    from app.geo.poi import POICategory
+    from app.parsing.rules.poi import extract_poi_requirements
+
+    poi_reqs, _center, _spans = extract_poi_requirements(text)
+    assert len(poi_reqs) == 1
+    assert poi_reqs[0].category == POICategory.KINDERGARTEN
+
+
+def test_poi_bare_sad_singular_requires_marker():
+    """Единственное число «сад» без маркера «нов-» НЕ матчится (риск ложных срабатываний)."""
+    from app.geo.poi import POICategory
+    from app.parsing.rules.poi import extract_poi_requirements
+
+    # Без маркера — бытовое «сад» лучше пропустить, чем ложно сработать.
+    poi_reqs, _center, _spans = extract_poi_requirements("сад рядом")
+    assert poi_reqs == []
+
+    # С обязательным маркером «нов-» — распознаётся.
+    poi_reqs, _center, _spans = extract_poi_requirements("новый сад рядом")
+    assert len(poi_reqs) == 1
+    assert poi_reqs[0].category == POICategory.KINDERGARTEN
+    assert poi_reqs[0].only_new is True
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "хочу квартиру рядом с Ботаническим садом",
+        "хочу квартиру у метро Александровский сад",
+        "живу у метро Ботанический сад",
+    ],
+)
+def test_poi_bare_sad_does_not_match_metro_toponyms(text: str):
+    """Регрессия: топонимы-станции метро («Ботанический сад» и т.п.) не дают
+    ложного POI-требования по детсаду — единственное число без маркера «нов-».
+    """
+    from app.geo.poi import POICategory
+    from app.parsing.rules.poi import extract_poi_requirements
+
+    poi_reqs, _center, _spans = extract_poi_requirements(text)
+    assert all(req.category != POICategory.KINDERGARTEN for req in poi_reqs)
+
+
 def test_extract_landmark_near_mgu():
     """«рядом с МГУ» → LandmarkRequirement с координатами ориентира."""
     from app.parsing.rules.landmark import extract_landmark_requirements
@@ -725,3 +895,121 @@ def test_landmark_flows_into_criteria():
     outcome = apply_rules("двушка рядом с МГУ")
     assert len(outcome.criteria.landmark_requirements) == 1
     assert outcome.criteria.landmark_requirements[0].name == "МГУ им. Ломоносова"
+
+
+# --- Класс станций «любая станция линии» (Milestone AI-15) ------------------
+#
+# Обобщение ориентиров (промпт 23) на КЛАСС точек: «рядом с МЦД не важно какой
+# станции» — пользователю подходит ЛЮБАЯ станция класса, а не одна конкретная
+# точка. Регрессия бага: запрос «Нужна двушка рядом с МЦД не важно какой
+# станции и округа, до 15 млн» терял этот фрагмент в warnings целиком.
+
+
+def test_extract_station_class_explicit_line():
+    """«рядом с МЦД» / «у МЦД» / «около МЦК» → line_prefix класса линии."""
+    from app.parsing.rules.station_class import extract_station_class_requirements
+
+    reqs, spans = extract_station_class_requirements("двушка рядом с МЦД до 15 млн")
+    assert len(reqs) == 1
+    assert reqs[0].line_prefix == "МЦД"
+    assert spans
+
+    reqs, _ = extract_station_class_requirements("хочу квартиру у МЦД")
+    assert [r.line_prefix for r in reqs] == ["МЦД"]
+
+    reqs, _ = extract_station_class_requirements("квартира около МЦК")
+    assert [r.line_prefix for r in reqs] == ["МЦК"]
+
+
+def test_extract_station_class_specific_numbered_line():
+    """Конкретная нумерованная линия («МЦД-2») распознаётся отдельно от «МЦД»."""
+    from app.parsing.rules.station_class import extract_station_class_requirements
+
+    reqs, _ = extract_station_class_requirements("рядом с МЦД-2")
+    assert [r.line_prefix for r in reqs] == ["МЦД-2"]
+
+
+def test_extract_station_class_qualifier_tail_consumed():
+    """«не важно какой станции» сразу после явной линии засчитывается «понятым» —
+    регрессия исходного бага: раньше именно этот хвост оставался в warnings.
+    """
+    from app.parsing.rules.station_class import extract_station_class_requirements
+
+    text = "рядом с МЦД не важно какой станции и округа, до 15 млн"
+    reqs, spans = extract_station_class_requirements(text)
+    assert [r.line_prefix for r in reqs] == ["МЦД"]
+
+    consumed_text = "".join(text[s:e] for s, e in spans)
+    assert "не важно какой станции" in consumed_text
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "недалеко от любой станции метро",
+        "у любого метро",
+        "рядом с метро не важно каким",
+        "рядом с метро не важно какой станции",
+    ],
+)
+def test_extract_station_class_any_metro_station(text: str):
+    """Явное «любая станция»/«не важно» без указания класса → line_prefix «метро»."""
+    from app.parsing.rules.station_class import extract_station_class_requirements
+
+    reqs, spans = extract_station_class_requirements(text)
+    assert [r.line_prefix for r in reqs] == ["метро"]
+    assert spans
+
+
+def test_extract_station_class_no_false_positive_named_station():
+    """«у метро Аэропорт» называет конкретную станцию — это работа
+    app.parsing.entity_match, а не этого правила. Ложных срабатываний нет.
+    """
+    from app.parsing.rules.station_class import extract_station_class_requirements
+
+    reqs, spans = extract_station_class_requirements("хочу двушку у метро Аэропорт до 15 млн")
+    assert reqs == []
+    assert spans == []
+
+
+def test_extract_station_class_no_false_positive_plain_metro():
+    """«у метро» без какого-либо уточнения («любой»/«не важно») тоже не матчим —
+    неотличимо от обычной связки перед именем станции."""
+    from app.parsing.rules.station_class import extract_station_class_requirements
+
+    reqs, _ = extract_station_class_requirements("квартира у метро подешевле")
+    assert reqs == []
+
+
+def test_station_class_flows_into_criteria():
+    """apply_rules прокидывает требование в Criteria.station_class_requirements."""
+    from app.parsing.rules import apply_rules
+
+    outcome = apply_rules("двушка рядом с МЦД не важно какой станции")
+    assert len(outcome.criteria.station_class_requirements) == 1
+    assert outcome.criteria.station_class_requirements[0].line_prefix == "МЦД"
+
+
+def test_station_class_bug_regression_no_warning_leftover():
+    """Регрессия исходного бага: «рядом с МЦД не важно какой станции» больше не
+    попадает в warnings как нераспознанный текст."""
+    from app.parsing.parser import parse
+
+    result = parse("Нужна двушка рядом с МЦД не важно какой станции и округа, до 15 млн")
+    assert any(req.line_prefix == "МЦД" for req in result.criteria.station_class_requirements)
+    assert not any("не важно какой станции" in w for w in result.warnings)
+
+
+def test_station_class_numbered_line_does_not_leak_into_price_e2e():
+    """End-to-end регрессия основного бага (Milestone AI-16): «у МЦД-3 до 12
+    млн» больше не даёт ложный ``price_min`` из номера линии. «МЦД-3»
+    полностью съедается ``station_class.py`` (а не ценовым правилом), поэтому
+    warnings пустые.
+    """
+    from app.parsing.parser import parse
+
+    result = parse("однушка у МЦД-3 до 12 млн")
+    assert result.criteria.price_min is None
+    assert result.criteria.price_max == 12_000_000
+    assert [req.line_prefix for req in result.criteria.station_class_requirements] == ["МЦД-3"]
+    assert result.warnings == []

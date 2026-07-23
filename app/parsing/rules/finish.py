@@ -22,7 +22,25 @@ _FINISH_FURNISHED = re.compile(r"\b(?:готов\w+\s+)?отделк\w+\s+с\s+�
 def extract_finish(text: str) -> tuple[list[Finish], list[Span]]:
     """Извлечь отделку (список значений Finish).
 
-    При противоречивых упоминаниях сохраняются все уникальные запрошенные варианты.
+    ``Finish`` описывает единое состояние отделки квартиры, а не набор
+    независимых булевых флагов: «без отделки» (``NONE``) взаимоисключает
+    любую из «положительных» разновидностей (``READY``/``WHITE_BOX``/
+    ``FURNISHED``) — квартира не может одновременно быть без отделки и с
+    отделкой. Поэтому при упоминании ОБЕИХ групп в одном тексте (пользователь
+    передумал: «с отделкой, хотя нет, лучше без отделки») побеждает группа
+    ПОСЛЕДНЕГО по позиции в тексте упоминания (см. CLAUDE.md), а
+    противоречащая группа отбрасывается целиком — а не «черновая» дедупликация
+    по значению, как было раньше (расхождение с CLAUDE.md, приводившее к
+    бессмысленному ``hasFinish=1,0`` в URL).
+
+    Несколько РАЗНЫХ положительных разновидностей в одном тексте (например,
+    «готовая» и «с мебелью») друг другу не противоречат — обе сохраняются как
+    множественный выбор (``list[Finish]`` остаётся списком не просто «для
+    единообразия типа», а для этого легитимного случая).
+
+    Диапазоны (``consumed_spans``) возвращаются для ВСЕХ распознанных
+    упоминаний отделки, включая отброшенное противоречащей группой — текст был
+    понят, даже если проигравшее значение не попало в итоговый список.
     """
     norm = _normalize(text)
     candidates: list[tuple[int, Finish, Span]] = []
@@ -66,9 +84,19 @@ def extract_finish(text: str) -> tuple[list[Finish], list[Span]]:
             else:
                 filtered.append(c)
 
+    # Разрешение противоречий: см. докстринг выше. «Съеденные» spans остаются
+    # полными (все распознанные упоминания понятны), а вот в итоговый список
+    # значений попадает только победившая по позиции группа.
+    has_negative = any(finish is Finish.NONE for _, finish, _ in filtered)
+    has_positive = any(finish is not Finish.NONE for _, finish, _ in filtered)
+    resolved = filtered
+    if has_negative and has_positive:
+        last_mention_is_negative = filtered[-1][1] is Finish.NONE
+        resolved = [c for c in filtered if (c[1] is Finish.NONE) == last_mention_is_negative]
+
     unique_finishes = []
     seen = set()
-    for _, finish, _ in filtered:
+    for _, finish, _ in resolved:
         if finish not in seen:
             unique_finishes.append(finish)
             seen.add(finish)

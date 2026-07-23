@@ -343,15 +343,25 @@ def test_ai_learning_loop_e2e(e2e_client, mock_anthropic_client, memory_db, monk
     assert "complexes" not in data5["criteria"]
 
     # Scenario 6: v1 Regression
+    #
+    # Milestone AI-14: гейт 1 в enrich() теперь включён. Этот запрос —
+    # чисто структурный (комнатность/метро/цена/отделка), без poi_requirements,
+    # center_requested или нераспознанных фраз-кандидатов на опции. Раньше (пока
+    # гейт был выключен, Milestone AI-11) enrich() всё равно дёргал ИИ на любой
+    # запрос — это и есть тот самый бесполезный вызов, из-за которого гейт
+    # вернули: обогащать здесь нечего, детерминированный слой уже дал полный
+    # ответ. Правильное новое ожидание — ИИ НЕ вызывается вовсе, а v1-пайплайн
+    # (парсинг → URL → валидация) по-прежнему работает независимо от ИИ-слоя.
     text6 = "двушка у метро Внуково, до 15 млн, с отделкой"
     calls_before = mock_anthropic_client.call_count
     resp6 = e2e_client.post("/build-url", json={"text": text6})
     assert resp6.status_code == 200
     data6 = resp6.json()
 
-    assert data6["ai_used"] is True
+    assert data6["ai_used"] is False
+    assert data6["ai_failed"] is False
     assert data6["ai_cache_hit"] is False
-    assert mock_anthropic_client.call_count == calls_before + 1  # AI call happens now
+    assert mock_anthropic_client.call_count == calls_before  # гейт 1: вызова ИИ нет
     assert data6["criteria"]["rooms"] == "2"
     assert data6["criteria"]["price_max"] == 15000000
     assert data6["criteria"]["finish"] == "готовая"

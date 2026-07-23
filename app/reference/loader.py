@@ -65,6 +65,13 @@ class RefEntry(BaseModel):
     district: str | None = None
     county: str | None = None
     metro: str | None = None
+    # Линия, которой принадлежит станция («Сокольническая», «МЦК», «МЦД-2»;
+    # у пересадочного узла — несколько через « / »). Заполняется только для
+    # записей metro.json скриптом ``python -m app.reference.refresh_metro_geo``
+    # (данные OSM). Для остальных справочников остаётся None. Потребитель —
+    # сужение ЖК по классу станций («рядом с МЦД не важно какой станции» —
+    # Milestone AI-15, см. app/geo/candidates.py) детерминированно, без ИИ.
+    line: str | None = None
 
 
 class ReferenceData(BaseModel):

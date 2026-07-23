@@ -13,6 +13,13 @@ class Settings(BaseSettings):
     # gemini-3.5-flash). Для Claude выставить AI_PROVIDER=claude + ANTHROPIC_API_KEY.
     AI_PROVIDER: str = "antigravity"
     ANTHROPIC_API_KEY: str | None = None
+    # OAuth-сессия Claude Code как альтернатива API-ключу: залогинился в
+    # терминале (`claude` → /login) — и больше ничего настраивать не нужно.
+    # Пустое значение = взять токен из keychain macOS (см.
+    # app.ai.client._read_oauth_token). Задавать явно нужно только там, где
+    # keychain недоступен (Linux, CI, docker) — тогда сюда кладётся токен,
+    # выданный `claude setup-token`.
+    CLAUDE_OAUTH_TOKEN: str | None = None
     ANTIGRAVITY_CLI_PATH: str | None = None
     # Единственное поле «какую модель звать» — используется обоими провайдерами
     # (передаётся в `agy --model` для antigravity и в Anthropic API для claude).

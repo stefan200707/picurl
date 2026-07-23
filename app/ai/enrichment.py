@@ -3,7 +3,7 @@ import logging
 import asyncpg
 from pydantic import BaseModel
 
-from app.ai.client import call_model, call_option_resolver
+from app.ai.client import call_model, call_option_resolver, resolve_claude_credentials
 from app.ai.embeddings import embed
 from app.ai.memory import (
     log_ai_call,
@@ -19,6 +19,7 @@ from app.geo.candidates import (
     build_query_signature,
     fully_resolved,
     resolve_known_facts,
+    station_class_points,
 )
 from app.parsing.schema import Criteria
 from app.reference.loader import load_option_groups, load_options, normalize
@@ -33,12 +34,24 @@ logger = logging.getLogger(__name__)
 
 class AIMeta(BaseModel):
     ai_used: bool = False
+    ai_failed: bool = False
     cache_hit: bool = False
     explanation: str | None = None
 
 
 class EnrichmentResult(BaseModel):
+    """Итог обогащения одного запроса.
+
+    ``ai_used`` — честный флаг «ИИ реально повлиял на результат» (успешный
+    живой вызов модели или landmark-сужение, см. ниже); он НЕ означает «была
+    попытка обратиться к ИИ». Неудачную попытку (сеть/валидация/провайдер
+    упал) фиксирует отдельное поле ``ai_failed`` — до этой правки ``failed()``
+    выставлял ``ai_used=True`` при провале, из-за чего ответ API читался как
+    «ИИ поучаствовал», хотя он упал с ошибкой и ничего не вернул.
+    """
+
     ai_used: bool
+    ai_failed: bool = False
     cache_hit: bool
     success: bool
     matched_complex_ids: list[str] = []
@@ -48,7 +61,12 @@ class EnrichmentResult(BaseModel):
 
     @property
     def meta(self) -> AIMeta:
-        return AIMeta(ai_used=self.ai_used, cache_hit=self.cache_hit, explanation=self.explanation)
+        return AIMeta(
+            ai_used=self.ai_used,
+            ai_failed=self.ai_failed,
+            cache_hit=self.cache_hit,
+            explanation=self.explanation,
+        )
 
     @classmethod
     def noop(cls):
@@ -82,7 +100,9 @@ class EnrichmentResult(BaseModel):
 
     @classmethod
     def failed(cls):
-        return cls(ai_used=True, cache_hit=False, success=False)
+        # ai_used=False: попытка провалилась, ИИ ни на что не повлиял.
+        # ai_failed=True: сам факт неудачной попытки не теряется молча.
+        return cls(ai_used=False, ai_failed=True, cache_hit=False, success=False)
 
     @classmethod
     def from_ai(cls, answer: AIEnrichmentAnswer):
@@ -253,7 +273,13 @@ async def resolve_options(
         return
 
     settings = get_settings()
-    is_claude_missing = settings.AI_PROVIDER == "claude" and not settings.ANTHROPIC_API_KEY
+    # .lower() — как в client.call_typed: AI_PROVIDER=Claude не должен
+    # проскакивать гейт и падать уже внутри клиента. Учётными данными
+    # считается и API-ключ, и OAuth-сессия Claude Code
+    # (см. app.ai.client.resolve_claude_credentials).
+    is_claude_missing = (
+        settings.AI_PROVIDER.lower() == "claude" and resolve_claude_credentials(settings) is None
+    )
     if not settings.AI_ENRICHMENT_ENABLED or is_claude_missing:
         # ИИ выключен — фрагменты остаются в warnings как есть, ничего не теряем.
         return
@@ -339,12 +365,41 @@ async def enrich(
             logger.warning(f"Failed to write ai_call_log: {e}")
         return result
 
-    # Гейт 1 (пока выключен — см. docs/ai-enrichment-architecture.md, «Критерий
-    # возврата гейтов»). При включении расширить проверкой option_candidates,
-    # иначе резолвинг опций (промпт 25) сломается:
-    # if not criteria.poi_requirements and not criteria.center_requested \
-    #         and not (option_candidates or []):
-    #     return await _log(EnrichmentResult.noop())
+    # Гейт 1 (Milestone AI-14 — включён; гейт 2 ниже остаётся выключен, см.
+    # docs/ai-enrichment-architecture.md, «Критерий возврата гейтов»). Не звать
+    # ничего из ИИ-пути (ни шорт-лист, ни семантический кэш, ни сам call_model
+    # ниже), если в запросе нет вообще ничего, что можно обогатить: ни
+    # poi_requirements, ни center_requested, ни непустых option_candidates.
+    # resolve_options() выше уже отработал независимо от этого гейта (мутирует
+    # criteria/warnings на месте до сюда) — его результат не теряется вне
+    # зависимости от исхода этой проверки. option_candidates включены в условие
+    # намеренно (промпт 25): без них узкая проверка только по poi/center была бы
+    # достаточна для этого early-return, но не отражала бы факт «у запроса есть
+    # что резолвить» так же явно для читателя/будущих правок этого гейта.
+    #
+    # landmark_requirements — ОБЯЗАТЕЛЬНОЕ исключение, а не часть буквального
+    # условия из ТЗ на этот гейт: сужение по ориентиру (Milestone AI-13,
+    # «однушка рядом с МГУ») — отдельная, всегда включённая ветка чистой
+    # математики НИЖЕ по коду, которая сама не зовёт ИИ и сама решает, доходить
+    # ли до gate 2/call_model. Если бы гейт 1 не пропускал landmark-only запросы
+    # сюда, они бы молча схлопывались в noop() ДО этой ветки — регрессия того
+    # самого бага AI-12, который чинили отдельно. Проверено падением 5 тестов
+    # (test_enrich_resolves_landmark_*, test_enrich_landmark_*) при попытке
+    # ограничиться буквальным условием без этого пункта.
+    #
+    # station_class_requirements (Milestone AI-15, «рядом с МЦД не важно какой
+    # станции») — то же обязательное исключение, что и landmark_requirements
+    # выше: своя отдельная всегда включённая ветка чистой математики ниже по
+    # коду (не зовёт ИИ сама), гейт 1 не должен схлопывать такие запросы в
+    # noop() до неё.
+    if (
+        not criteria.poi_requirements
+        and not criteria.center_requested
+        and not criteria.landmark_requirements
+        and not criteria.station_class_requirements
+        and not (option_candidates or [])
+    ):
+        return await _log(EnrichmentResult.noop())
 
     candidates = build_candidate_shortlist(criteria)
     if not candidates:
@@ -357,12 +412,97 @@ async def enrich(
     # это и есть измерение «что было бы, если включить гейт 2».
     log_fields["fully_resolved_deterministically"] = fully_resolved(known, criteria, candidates)
 
+    # Сужение по ориентиру («рядом с МГУ» и т.п.) — чистая математика
+    # (haversine на lat/lon, см. app/geo/candidates.resolve_known_facts), а не
+    # работа ИИ. Это НЕ гейт 1/2 выше (те про POI/центр и остаются выключены по
+    # Milestone AI-11) — отдельный, всегда включённый шаг именно для
+    # landmark_requirements: должен отрабатывать детерминированно, даже когда
+    # ИИ выключен или недоступен (иначе распознанный ориентир с координатами
+    # молча пропадает — см. AI-12 аудит бага «однушка рядом с МГУ подешевле»).
+    # Если запрос требует ЕЩЁ и POI/центр — оставляем как есть, там своя
+    # (пока ИИ-зависимая) логика ниже.
+    if (
+        criteria.landmark_requirements
+        and not criteria.poi_requirements
+        and not criteria.center_requested
+    ):
+        names = ", ".join(f"«{lm.name}»" for lm in criteria.landmark_requirements)
+        if not any(c.lat is not None and c.lon is not None for c in candidates):
+            # Ни у одного кандидата нет координат — сужение физически
+            # невозможно (см. app/reference/complexes.json). Инвариант
+            # «ничего не отбрасывается молча»: честно предупреждаем, а не
+            # тихо возвращаем исходные (неотфильтрованные) criteria.
+            warnings.append(
+                f"не удалось сузить список ЖК рядом с {names}: в справочнике ЖК нет координат"
+            )
+            return await _log(EnrichmentResult.noop())
+
+        if not known["matched_complex_ids"]:
+            warnings.append(f"рядом с {names} подходящих ЖК не найдено")
+
+        result = EnrichmentResult(
+            ai_used=False,
+            cache_hit=False,
+            success=True,
+            matched_complex_ids=known["matched_complex_ids"],
+        )
+        return await _log(result)
+
+    # Сужение по классу станций («рядом с МЦД не важно какой станции», «у
+    # любого метро» — Milestone AI-15) — то же обобщение ориентира на КЛАСС
+    # точек: чистая математика (haversine до БЛИЖАЙШЕЙ станции подходящего
+    # класса, см. app.geo.candidates.resolve_known_facts), а не работа ИИ.
+    # Всегда включённая ветка по тем же причинам, что и landmark-ветка выше:
+    # должна отрабатывать детерминированно независимо от доступности ИИ.
+    if (
+        criteria.station_class_requirements
+        and not criteria.poi_requirements
+        and not criteria.center_requested
+        and not criteria.landmark_requirements
+    ):
+        names = ", ".join(f"«{r.line_prefix}»" for r in criteria.station_class_requirements)
+
+        if not station_class_points(criteria):
+            # Ни у одной станции подходящего класса нет координат — сужение
+            # физически невозможно (справочник metro.json ещё не обогащён
+            # полями lat/lon/line). Инвариант «ничего не отбрасывается молча»:
+            # честно предупреждаем, а не тихо возвращаем исходные criteria.
+            warnings.append(
+                f"не удалось сузить список ЖК рядом со станциями класса {names}: "
+                "в справочнике метро нет координат нужных станций"
+            )
+            return await _log(EnrichmentResult.noop())
+
+        if not any(c.lat is not None and c.lon is not None for c in candidates):
+            warnings.append(
+                f"не удалось сузить список ЖК рядом со станциями класса {names}: "
+                "в справочнике ЖК нет координат"
+            )
+            return await _log(EnrichmentResult.noop())
+
+        if not known["matched_complex_ids"]:
+            warnings.append(f"рядом со станциями класса {names} подходящих ЖК не найдено")
+
+        result = EnrichmentResult(
+            ai_used=False,
+            cache_hit=False,
+            success=True,
+            matched_complex_ids=known["matched_complex_ids"],
+        )
+        return await _log(result)
+
     # Гейт 2 (пока выключен — см. docs/ai-enrichment-architecture.md):
     # if log_fields["fully_resolved_deterministically"]:
     #     return await _log(EnrichmentResult.from_deterministic(known))
 
     settings = get_settings()
-    is_claude_missing = settings.AI_PROVIDER == "claude" and not settings.ANTHROPIC_API_KEY
+    # .lower() — как в client.call_typed: AI_PROVIDER=Claude не должен
+    # проскакивать гейт и падать уже внутри клиента. Учётными данными
+    # считается и API-ключ, и OAuth-сессия Claude Code
+    # (см. app.ai.client.resolve_claude_credentials).
+    is_claude_missing = (
+        settings.AI_PROVIDER.lower() == "claude" and resolve_claude_credentials(settings) is None
+    )
 
     if not settings.AI_ENRICHMENT_ENABLED or is_claude_missing:
         if criteria.poi_requirements or criteria.center_requested:
