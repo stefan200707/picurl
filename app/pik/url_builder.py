@@ -78,23 +78,8 @@ def build_url(criteria: Criteria) -> str:
         elif len(criteria.complexes) == 1 and criteria.complexes[0].id:
             query_params["blocks"] = criteria.complexes[0].id
     else:
-        # Multi-query для локаций
-        if criteria.counties:
-            ids = [c.id for c in criteria.counties if c.id]
-            if ids:
-                query_params["districtCounties"] = ",".join(ids)
-        if criteria.metro:
-            ids = [m.id for m in criteria.metro if m.id]
-            if ids:
-                query_params["metroStations"] = ",".join(ids)
-        if criteria.districts:
-            ids = [d.id for d in criteria.districts if d.id]
-            if ids:
-                query_params["districtLocations"] = ",".join(ids)
-        if criteria.complexes:
-            ids = [c.id for c in criteria.complexes if c.id]
-            if ids:
-                query_params["blocks"] = ",".join(ids)
+        # Multi-query для локаций — общая сборка id (AUDIT_REPORT 2.3)
+        query_params.update(criteria.location_query_dict())
 
     # Общие query-параметры добавляем в конец
     query_params.update(criteria.to_query_dict())

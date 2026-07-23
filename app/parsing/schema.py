@@ -382,7 +382,7 @@ class Criteria(BaseModel):
             query_params["optionGroups"] = ",".join(self.option_groups)
         if self.options:
             query_params["options"] = ",".join(self.options)
-        if getattr(self, "required_tags", None):
+        if self.required_tags:
             query_params["requiredTags"] = ",".join(self.required_tags)
 
         # 10. Тип и статус
@@ -391,19 +391,31 @@ class Criteria(BaseModel):
         if self.only_available:
             query_params["status"] = "free"
 
-        # 11. Сортировка
+        # 11. Сортировка (используем собственные свойства Sort.field/order,
+        # AUDIT_REPORT 2.2 — вместо ручного if/elif по значению)
         if self.sort:
-            if self.sort == Sort.PRICE_ASC:
-                query_params["sortBy"] = "price"
-                query_params["orderBy"] = "asc"
-            elif self.sort == Sort.PRICE_DESC:
-                query_params["sortBy"] = "price"
-                query_params["orderBy"] = "desc"
-            elif self.sort == Sort.AREA_ASC:
-                query_params["sortBy"] = "area"
-                query_params["orderBy"] = "asc"
-            elif self.sort == Sort.AREA_DESC:
-                query_params["sortBy"] = "area"
-                query_params["orderBy"] = "desc"
+            query_params["sortBy"] = self.sort.field
+            query_params["orderBy"] = self.sort.order
 
         return query_params
+
+    def location_query_dict(self) -> dict[str, str]:
+        """Собирает multi-query id локаций (AUDIT_REPORT 2.3).
+
+        Возвращает ``{districtCounties, metroStations, districtLocations,
+        blocks}`` из id всех локационных сущностей (через запятую). Общий
+        источник правды для `validator` (всегда query) и multi-query ветки
+        `url_builder`.
+        """
+        location_params: dict[str, str] = {}
+        mapping = (
+            ("districtCounties", self.counties),
+            ("metroStations", self.metro),
+            ("districtLocations", self.districts),
+            ("blocks", self.complexes),
+        )
+        for key, entities in mapping:
+            ids = [e.id for e in entities if e.id]
+            if ids:
+                location_params[key] = ",".join(ids)
+        return location_params

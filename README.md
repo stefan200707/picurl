@@ -38,7 +38,7 @@ docker exec -i picurl-postgres psql -U postgres -d picurl_ai < app/ai/migrations
 AI_ENRICHMENT_ENABLED=true
 AI_PROVIDER=antigravity
 AI_MODEL_NAME=gemini-3.5-flash
-DATABASE_URL=postgresql+asyncpg://postgres:password@localhost:5432/picurl_ai
+DATABASE_URL=postgresql://postgres:password@localhost:5432/picurl_ai
 ```
 
 ### 4. Запуск сервера
@@ -67,6 +67,7 @@ uv run fastapi dev
   "result_count": 142,
   "warnings": [],
   "ai_used": true,
+  "ai_cache_hit": false,
   "ai_explanation": "Подобраны ЖК в центральных районах."
 }
 ```

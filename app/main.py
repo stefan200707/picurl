@@ -27,9 +27,7 @@ async def lifespan(app: FastAPI):
         try:
             import asyncpg
 
-            from app.ai.memory import DATABASE_URL
-
-            app.state.memory_pool = await asyncpg.create_pool(DATABASE_URL)
+            app.state.memory_pool = await asyncpg.create_pool(settings.DATABASE_URL)
         except Exception as e:
             import logging
 

@@ -343,7 +343,7 @@ async def enrich(
     try:
         context = build_context(text, criteria, candidates, known)
         answer = await call_model(SYSTEM_PROMPT, context)
-    except (ValueError, Exception) as e:
+    except Exception as e:
         from anthropic import APIStatusError, APITimeoutError
         from pydantic import ValidationError
 

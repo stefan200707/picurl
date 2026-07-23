@@ -46,10 +46,11 @@ def test_e2e_full_cycle_success(client, mock_validator_client):
     assert response.status_code == 200
     data = response.json()
 
-    assert (
-        data["url"]
-        == "https://www.pik.ru/search/two-room/finish/m-aeroport-vnukovo?priceFrom=0&priceTo=15000000&sortBy=price&orderBy=asc"
+    expected_url = (
+        "https://www.pik.ru/search/two-room/finish/m-aeroport-vnukovo"
+        "?priceFrom=0&priceTo=15000000&sortBy=price&orderBy=asc"
     )
+    assert data["url"] == expected_url
     assert data["result_count"] == 47
     assert data["warnings"] == []
 
