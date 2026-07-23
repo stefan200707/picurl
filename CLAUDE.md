@@ -559,4 +559,48 @@ regex скомпилированы один раз на уровне модул�
 
 ---
 
+## Генеральная уборка техдолга (Milestone AI-12, промпт 27)
+
+Чистка по итогам `AUDIT_REPORT.md` (2026-07-22), не покрытая промптами 22–26.
+Поведение API (`POST /build-url`) не менялось — только устранение дублирования,
+мёртвого кода, ruff-нарушений и расхождений в документации.
+
+- **Дублирование/мёртвый код (`AUDIT_REPORT.md` раздел 2):** удалён мёртвый
+  повторный расчёт `sortBy`/`orderBy` в `validator.py` (2.1); `to_query_dict()`
+  использует свойства `Sort.field`/`Sort.order` (2.2); сборка id локаций
+  вынесена в общий `Criteria.location_query_dict()`, переиспользуется в
+  `url_builder`/`validator` (2.3); общий хвост `refresh()`/`run_refresh()` →
+  `_merge_and_write()` (2.4); убрано лишнее `ai_meta = AIMeta()` в
+  `endpoints.py` (2.5); текст warning'а о недостающих id/slug сведён к
+  `parser._missing_id_warning()` (2.7); `is_center()` помечен как
+  зарезервированный (2.9); `getattr(...required_tags...)` → `self.required_tags`
+  (2.10); `for complex` → `for block` в `refresh_poi.py` (2.12).
+- **Единый источник `DATABASE_URL` (2.8):** строка подключения к БД ИИ читается
+  только из `get_settings().DATABASE_URL` (`app/config.py`, дефолт прежний);
+  модульная константа `app.ai.memory.DATABASE_URL` убрана,
+  `memory.py`/`promotion.py`/`main.py` переведены на конфиг.
+- **Ruff (раздел 3):** длинные regex-строки в `rules/rooms.py`/`rules/price.py`
+  разбиты неявной конкатенацией литералов (3.1); длинные URL в тестах вынесены
+  в переменные (3.2); `except (ValueError, Exception)` → `except Exception`
+  в `enrichment.py` (3.3, B014).
+- **Документация (раздел 4):** единственный источник правды по онбордингу
+  ИИ/БД — **`ENABLE_ANTIGRAVITY.md`** (на него ссылается этот файл). `ENABLE_AI.md`,
+  `ANTIGRAVITY_INSTRUCTIONS.md`, `docs/db-setup.md` сведены к однострочным
+  ссылкам на него; `SETUP.md` остаётся общим чек-листом. Поправлены имена
+  таблиц (`ai_structured_facts`, `ai_semantic_cache` вместо `ai_facts`/
+  `district_facts`), DSN-префикс `postgresql://` (не `postgresql+asyncpg://`) в
+  `SETUP.md`/`README.md`, битая ссылка в `app/knowledge_base/README.md`.
+- **Кандидаты на удаление (раздел 5):** root-level скретчи (`check.py`,
+  `refactor_entity_match.py`, `run_stress_test.py`, `scratch.py`,
+  `test_overpass.py`, `test_regex.py`, `update_cache.py`, `update_json.py`) и
+  `stress_test_output.txt` опустошены (0 байт) и внесены в `DEPRECATED_FILES.md`
+  для физического `git rm` человеком (агент удалять файлы не может). Их эффект
+  уже зафиксирован в JSON-справочниках/`CLAUDE.md`.
+- **Зависимость `google-antigravity`** оставлена в `pyproject.toml`: Python-кода
+  она не импортируется (`grep -rn "import.*antigravity" app/` пусто),
+  но ставит CLI-бинарник `agy`, через который идёт интеграция с Antigravity
+  (`app/ai/client.call_antigravity` вызывает `agy --print` через subprocess).
+
+---
+
 При каждом изменении проекта — изменять и дополнять CLAUDE.md.

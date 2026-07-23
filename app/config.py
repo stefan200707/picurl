@@ -20,7 +20,10 @@ class Settings(BaseSettings):
     # факту не использовался при провайдере antigravity (AUDIT_REPORT 1.4) —
     # поле убрано, источник истины теперь один.
     AI_MODEL_NAME: str = "gemini-3.5-flash"
-    DATABASE_URL: str | None = None
+    # Единый источник строки подключения к БД ИИ (AUDIT_REPORT 2.8): раньше
+    # app/ai/memory.py читал DATABASE_URL напрямую через os.getenv в обход
+    # pydantic-settings, а это поле было мёртвым. Дефолт сохранён прежним.
+    DATABASE_URL: str = "postgresql://postgres:password@localhost:5432/picurl_ai"
 
     # Пороги промоушена ИИ-фактов в детерминированные справочники
     # (см. app/ai/promotion.py). Вынесены в конфиг, чтобы оператор мог ужесточить

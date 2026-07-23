@@ -29,6 +29,13 @@ def haversine(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
 
 
 def is_center(lat: float, lon: float, radius_m: float = CENTER_RADIUS_M) -> bool:
-    """Эвристическая проверка, находится ли точка в 'центре Москвы'."""
+    """Эвристическая проверка, находится ли точка в 'центре Москвы'.
+
+    Зарезервировано, см. AUDIT_REPORT.md 2.9: из прод-пути не вызывается —
+    реальный флаг центральности района берётся из курируемого/промоутнутого
+    поля ``RefEntry.is_center`` (см. ``app/geo/candidates.center_by_district``),
+    а не из этой геометрической эвристики. Оставлена как задел для проставления
+    первичного значения ``is_center`` новым районам в скрипте инициализации.
+    """
     dist = haversine(MOSCOW_CENTER_LAT, MOSCOW_CENTER_LON, lat, lon)
     return dist <= radius_m

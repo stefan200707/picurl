@@ -22,7 +22,7 @@ import sys
 import asyncpg
 from pydantic import BaseModel
 
-from app.ai.memory import DATABASE_URL
+from app.config import get_settings
 
 logger = logging.getLogger(__name__)
 
@@ -156,7 +156,7 @@ async def fetch_rows(pool: asyncpg.Pool, days: int | None) -> list[CallLogRow]:
 
 
 async def run_report(days: int | None = None) -> None:
-    pool = await asyncpg.create_pool(DATABASE_URL)
+    pool = await asyncpg.create_pool(get_settings().DATABASE_URL)
     if not pool:
         logger.error("Failed to connect to database")
         return

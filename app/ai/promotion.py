@@ -10,7 +10,8 @@ from collections import defaultdict
 import asyncpg
 from pydantic import BaseModel
 
-from app.ai.memory import DATABASE_URL, StructuredFact
+from app.ai.memory import StructuredFact
+from app.config import get_settings
 from app.reference.loader import DATA_DIR, normalize
 from app.reference.refresh import load_existing, write_entries
 
@@ -321,7 +322,7 @@ async def find_alias_facts(pool: asyncpg.Pool) -> list[StructuredFact]:
 
 
 async def run_promotion(report_only: bool = False):
-    pool = await asyncpg.create_pool(DATABASE_URL)
+    pool = await asyncpg.create_pool(get_settings().DATABASE_URL)
     if not pool:
         logger.error("Failed to connect to database")
         return

@@ -14,28 +14,28 @@ async def refresh_all_pois():
 
     cache = json.loads(CACHE_FILE.read_text("utf-8")) if CACHE_FILE.exists() else {}
 
-    for complex in complexes:
-        if not complex.lat or not complex.lon or not complex.slug:
+    for block in complexes:
+        if not block.lat or not block.lon or not block.slug:
             continue
 
-        if complex.slug not in cache:
-            cache[complex.slug] = {}
+        if block.slug not in cache:
+            cache[block.slug] = {}
 
         for category in POICategory:
             if category == POICategory.OTHER:
                 continue
 
-            if category.value in cache[complex.slug]:
+            if category.value in cache[block.slug]:
                 continue
 
-            print(f"Fetching {category.value} for {complex.name}...")
+            print(f"Fetching {category.value} for {block.name}...")
             try:
                 # Use a large radius like 2000m to cache max potential range
-                res = await fetch_poi(complex.lat, complex.lon, category, 2000)
-                cache[complex.slug][category.value] = res.model_dump()
+                res = await fetch_poi(block.lat, block.lon, category, 2000)
+                cache[block.slug][category.value] = res.model_dump()
                 await asyncio.sleep(1)
             except Exception as e:
-                print(f"Failed to fetch for {complex.name} / {category}: {e}")
+                print(f"Failed to fetch for {block.name} / {category}: {e}")
 
         CACHE_FILE.write_text(json.dumps(cache, indent=2, ensure_ascii=False) + "\n", "utf-8")
 
