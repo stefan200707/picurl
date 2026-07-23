@@ -118,20 +118,26 @@ def format_report(report: UsageReport, days: int | None) -> str:
     if report.total == 0:
         return f"Наблюдаемость ИИ ({period}): данных пока нет (ai_call_log пуст)."
 
+    had = f"{report.had_poi_or_center} ({report.pct_had_poi_or_center}%)"
+    resolved = f"{report.fully_resolved_within_had} ({report.pct_fully_resolved_within_had}%)"
+    cache = f"{report.cache_hit} ({report.pct_cache_hit}%)"
+    changed = (
+        f"{report.criteria_changed_by_ai} "
+        f"({report.pct_criteria_changed_within_ai_called}% от вызовов ИИ)"
+    )
+    without = (
+        f"{report.changed_without_poi_or_center} "
+        f"({report.pct_changed_without_poi_or_center}%)"
+    )
     lines = [
         f"Наблюдаемость вызовов ИИ ({period})",
-        f"  Всего запросов:                         {report.total}",
-        f"  С POI/центром (гейт 1 сработал бы):      {report.had_poi_or_center} "
-        f"({report.pct_had_poi_or_center}%)",
-        f"    из них разрешимо детерминированно:     {report.fully_resolved_within_had} "
-        f"({report.pct_fully_resolved_within_had}%)  ← кандидаты на «гейт 2 спас бы вызов»",
-        f"  Ответов из кэша (cache_hit):             {report.cache_hit} "
-        f"({report.pct_cache_hit}%)",
-        f"  Реально звался ИИ (ai_called):           {report.ai_called}",
-        f"  ИИ изменил criteria (польза вызова):     {report.criteria_changed_by_ai} "
-        f"({report.pct_criteria_changed_within_ai_called}% от вызовов ИИ)",
-        f"    из них без POI/центра (метрика гейта 1): {report.changed_without_poi_or_center} "
-        f"({report.pct_changed_without_poi_or_center}%)",
+        f"  всего запросов: {report.total}",
+        f"  с POI/центром (гейт 1 сработал бы): {had}",
+        f"    из них разрешимо детерминированно: {resolved}  ← кандидаты на гейт 2",
+        f"  ответов из кэша (cache_hit): {cache}",
+        f"  реально звался ИИ (ai_called): {report.ai_called}",
+        f"  ИИ изменил criteria (польза вызова): {changed}",
+        f"    из них без POI/центра (метрика гейта 1): {without}",
     ]
     return "\n".join(lines)
 
