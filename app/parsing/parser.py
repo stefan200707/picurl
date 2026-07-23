@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 
 from app.parsing.entity_match import match_entities
 from app.parsing.rules import Span, apply_rules
-from app.parsing.schema import Criteria
+from app.parsing.schema import Criteria, MatchedEntity
 from app.parsing.stopwords import STOP_WORDS
 
 #: Максимум значимых слов в нераспознанном фрагменте, чтобы считать его
@@ -63,6 +63,27 @@ def _is_significant(text_chunk: str) -> bool:
     # Если остались только стоп-слова, кусок незначимый
     significant_words = [w for w in words if w not in STOP_WORDS]
     return len(significant_words) > 0
+
+
+def _missing_id_warning(
+    entity_field: str, entity_name: str, ent: MatchedEntity, total_locations: int
+) -> str | None:
+    """Сформировать warning о недостающей URL-форме сущности (AUDIT_REPORT 2.7).
+
+    Правило single-путь / multi-query: при нескольких локациях всё уходит в
+    query по ``id``; при единственной локации район/ЖК всё равно требуют ``id``
+    (пути «рядом с районом/ЖК» нет), а метро/округ могут пойти в путь по
+    ``slug``. Возвращает текст предупреждения либо ``None``, если у сущности
+    есть нужная форма.
+    """
+    needs_id_only = total_locations > 1 or entity_field in ("districts", "complexes")
+    if needs_id_only:
+        if not ent.id:
+            return f'{entity_name} "{ent.name}" не имеет id, в ссылку не попадет'
+        return None
+    if not ent.slug and not ent.id:
+        return f'{entity_name} "{ent.name}" не имеет slug или id, в ссылку не попадет'
+    return None
 
 
 def _looks_like_option(text_chunk: str) -> bool:
@@ -162,23 +183,9 @@ def parse(text: str) -> ParseResult:
         ]
         for entity_field, entity_name in fields:
             for ent in getattr(criteria, entity_field):
-                if total_locations > 1:
-                    if not ent.id:
-                        warnings.append(
-                            f'{entity_name} "{ent.name}" не имеет id, в ссылку не попадет'
-                        )
-                else:
-                    if entity_field in ("districts", "complexes"):
-                        if not ent.id:
-                            warnings.append(
-                                f'{entity_name} "{ent.name}" не имеет id, в ссылку не попадет'
-                            )
-                    else:
-                        if not ent.slug and not ent.id:
-                            warnings.append(
-                                f'{entity_name} "{ent.name}" '
-                                "не имеет slug или id, в ссылку не попадет"
-                            )
+                warning = _missing_id_warning(entity_field, entity_name, ent, total_locations)
+                if warning:
+                    warnings.append(warning)
 
     # 4. Вычисляем нераспознанные куски текста
     merged_consumed = _merge_spans(consumed)

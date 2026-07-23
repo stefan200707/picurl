@@ -1,14 +1,13 @@
 import json
 import logging
-import os
 from datetime import datetime
 from typing import Any
 
 import asyncpg
 from pydantic import BaseModel
 
-# Для настройки подключения можно использовать переменные окружения.
-DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:password@localhost:5432/picurl_ai")
+# Строка подключения к БД ИИ читается из единого источника —
+# get_settings().DATABASE_URL (см. app/config.py, AUDIT_REPORT 2.8).
 
 
 class StructuredFact(BaseModel):

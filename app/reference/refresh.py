@@ -227,9 +227,12 @@ def load_existing(path: Path) -> list[RefEntry]:
     return [RefEntry.model_validate(item) for item in raw]
 
 
-def refresh(client: httpx.Client, data_dir: Path = DATA_DIR) -> dict[str, int]:
-    """Обновить справочники в ``data_dir``; вернуть итоговые размеры по файлам."""
-    blocks = fetch_blocks(client)
+def _merge_and_write(blocks: list[BlockPayload], data_dir: Path) -> dict[str, int]:
+    """Общий хвост refresh/run_refresh (AUDIT_REPORT 2.4): сборка справочников
+    из блоков, merge с кураторскими данными и запись на диск.
+
+    Возвращает итоговые размеры по файлам.
+    """
     fetched_by_kind: dict[str, list[RefEntry]] = {
         "complexes": complexes_from_blocks(blocks),
         "counties": counties_from_blocks(blocks),
@@ -244,6 +247,12 @@ def refresh(client: httpx.Client, data_dir: Path = DATA_DIR) -> dict[str, int]:
         write_entries(path, merged)
         counts[kind] = len(merged)
     return counts
+
+
+def refresh(client: httpx.Client, data_dir: Path = DATA_DIR) -> dict[str, int]:
+    """Обновить справочники в ``data_dir``; вернуть итоговые размеры по файлам."""
+    blocks = fetch_blocks(client)
+    return _merge_and_write(blocks, data_dir)
 
 
 async def run_refresh(data_dir: Path = DATA_DIR) -> dict[str, int]:
@@ -252,20 +261,7 @@ async def run_refresh(data_dir: Path = DATA_DIR) -> dict[str, int]:
     async with httpx.AsyncClient(timeout=30, headers=headers) as client:
         blocks = await fetch_blocks_async(client)
 
-    fetched_by_kind: dict[str, list[RefEntry]] = {
-        "complexes": complexes_from_blocks(blocks),
-        "counties": counties_from_blocks(blocks),
-        "metro": metro_from_blocks(blocks),
-        "districts": districts_from_blocks(blocks),
-    }
-
-    counts: dict[str, int] = {}
-    for kind in REFRESHABLE:
-        path = data_dir / REFERENCE_FILES[kind]
-        merged = merge_entries(load_existing(path), fetched_by_kind[kind], kind)
-        write_entries(path, merged)
-        counts[kind] = len(merged)
-    return counts
+    return _merge_and_write(blocks, data_dir)
 
 
 def main() -> int:
