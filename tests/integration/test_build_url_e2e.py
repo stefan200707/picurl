@@ -52,7 +52,12 @@ def test_e2e_full_cycle_success(client, mock_validator_client):
     )
     assert data["url"] == expected_url
     assert data["result_count"] == 47
-    assert data["warnings"] == []
+    # Честность result_count (аудит validate(), 2026-07-23): api.pik.ru/v2/filter
+    # игнорирует metroStations/districtLocations/districtCounties, поэтому при
+    # локационном фильтре валидатор ОБЯЗАН предупредить, что число не учитывает
+    # метро — раньше это молча выдавалось за полноценную проверку.
+    assert len(data["warnings"]) == 1
+    assert "result_count не учитывает фильтр по метро" in data["warnings"][0]
 
     criteria = data["criteria"]
     assert criteria["rooms"] == "2"
@@ -117,15 +122,42 @@ def test_e2e_colloquial_typos(client, text, expected_url_fragment, expected_crit
 
 
 def test_e2e_multi_select(client):
-    """3. Multi-select: несколько метро/районов → проверить переход путь→query."""
-    response = client.post("/build-url", json={"text": "двушка у метро Сокол или Аэропорт"})
+    """3. Multi-select: несколько метро/районов → проверить переход путь→query.
+
+    Станции взяты с ДОСТОВЕРНЫМИ GUID (снимок ``KNOWN_METRO_GUIDS``): прежние
+    «Сокол или Аэропорт» после аудита validate() перестали подходить — id
+    «Сокола» (``guid-sokol``) был доказанно фейковым и вычищен, такие сущности
+    теперь обслуживает geo-фолбэк на blocks, а не metroStations.
+    """
+    response = client.post("/build-url", json={"text": "двушка у метро Каширская или Коломенская"})
     assert response.status_code == 200
     data = response.json()
 
     assert "metroStations=" in data["url"]
-    assert "m-sokol" not in data["url"].split("?")[0]
+    assert "m-kashirskaya" not in data["url"].split("?")[0]
 
-    assert set(data["criteria"]["metro"]) == {"Сокол", "Аэропорт"}
+    assert set(data["criteria"]["metro"]) == {"Каширская", "Коломенская"}
+
+
+def test_e2e_metro_without_trusted_id_falls_back_to_blocks(client):
+    """3б. Метро без достоверного id (Коммунарка) → сужение по blocks.
+
+    Регрессия аудита validate() (2026-07-23): раньше в URL уходил синтетический
+    GUID (``c1d2e3f4-…``), бэкенд валидации его молча игнорировал, и
+    result_count выдавался за проверку. Теперь: фейковый id вычищен, сущность
+    сужается проверяемым параметром blocks (ЖК у станции), а warnings честно
+    называют применённое приближение.
+    """
+    response = client.post("/build-url", json={"text": "двушка недалеко от метро Коммунарка"})
+    assert response.status_code == 200
+    data = response.json()
+
+    url = data["url"]
+    assert "blocks=" in url
+    assert "c1d2e3f4" not in url  # вычищенный фейковый GUID не возвращается
+    assert data["criteria"]["metro"] == ["Коммунарка"]
+    # Из warnings видно, что применён geo-фолбэк, а не штатный фильтр метро.
+    assert any("Коммунарка" in w and "id не подтверждён" in w for w in data["warnings"])
 
 
 def test_e2e_unrecognized_warnings(client):

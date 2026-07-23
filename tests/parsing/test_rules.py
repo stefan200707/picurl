@@ -1263,3 +1263,116 @@ def test_extract_station_class_distance_does_not_steal_floor():
     assert [r.line_prefix for r in reqs] == ["МЦД-3"]
     assert reqs[0].max_distance_m is None
     assert "на 5 этаже" not in "".join(text[s:e] for s, e in spans)
+
+
+# --- Единый маркер близости (Milestone AI-20, Фикс 1) ------------------------
+#
+# Раньше «недалеко от»/«около»/«возле»/«неподалёку от»/«вблизи» были ПОЛНО
+# перечислены только в rules/landmark.py — TRIGGERS в entity_match и SUFFIX в
+# rules/poi.py были независимыми неполными списками той же семантики. Общий
+# ``core._PROXIMITY_MARKER`` закрывает класс дефекта разом во всех местах.
+
+
+def test_poi_suffix_recognizes_bare_nedaleko():
+    """SUFFIX теперь понимает «недалеко» (без «от») как суффиксный маркер
+    близости — раньше список ограничивался «поблизости»/«неподалеку»/
+    «неподалёку»/«близко»/«рядом с ним», «недалеко» отсутствовал."""
+    from app.parsing.rules.poi import extract_poi_requirements
+
+    text = "школа недалеко"
+    poi_reqs, _center, spans = extract_poi_requirements(text)
+    assert len(poi_reqs) == 1
+    consumed = "".join(text[s:e] for s, e in spans)
+    assert consumed == text
+
+
+# --- Гомоглифы латиница→кириллица (Milestone AI-20, Фикс 2) ------------------
+#
+# Пользователь может случайно печатать смешанным алфавитом (неправильная
+# раскладка): «двушкa» — последняя буква латинская, визуально неотличима от
+# кириллической «а». ``core._normalize`` сохраняет длину строки (инвариант
+# «индексы спанов валидны для исходного текста») — гомоглифы 1:1 это позволяют.
+
+_LATIN_A = "a"
+_LATIN_C = "c"
+_LATIN_E = "e"
+_LATIN_O = "o"
+
+
+def test_normalize_maps_latin_confusables_preserving_length():
+    from app.parsing.rules.core import _normalize
+
+    text = f"двушк{_LATIN_A} у м{_LATIN_E}тр{_LATIN_O}"
+    norm = _normalize(text)
+    assert len(norm) == len(text)
+    assert norm == "двушка у метро"
+
+
+def test_apply_rules_recognizes_rooms_with_latin_homoglyph():
+    """«двушкa» (последняя буква — латинская 'a') по-прежнему распознаётся как
+    Rooms.TWO."""
+    text = f"двушк{_LATIN_A}"
+    outcome = apply_rules(text)
+    assert outcome.criteria.rooms == [Rooms.TWO]
+
+
+def test_apply_rules_poi_prefix_recognizes_latin_c():
+    """Латинская «c» перед POI («c новым детсадом») больше не теряется в
+    warnings — регрессия контрольного кейса Milestone AI-20."""
+    from app.geo.poi import POICategory
+
+    text = f"{_LATIN_C} новым детсадом"
+    outcome = apply_rules(text)
+    assert len(outcome.criteria.poi_requirements) == 1
+    assert outcome.criteria.poi_requirements[0].category == POICategory.KINDERGARTEN
+    assert outcome.criteria.poi_requirements[0].only_new is True
+    consumed = "".join(text[s:e] for s, e in outcome.consumed)
+    assert consumed == text
+
+
+# --- Официальные имена линий метро со словом-носителем (Milestone AI-21) -----
+#
+# Живой баг: «Нужна двушка в районе Троицкой ветки» — AI-17 покрыл
+# цвета/номера/прозвища, но не прямые имена линий. «Троицкой» уезжало в
+# fuzzy-матч округа «Троицкий АО», «ветки» — в warnings и в option_candidates
+# (паразитный вызов ИИ), а гейт 2 при пустых семантических требованиях выливал
+# в blocks весь шорт-лист. Имена линий берутся из metro.json (RefEntry.line) —
+# не дублируем справочник строками в коде.
+
+
+@pytest.mark.parametrize(
+    ("text", "expected_line"),
+    [
+        ("в районе Троицкой ветки", "Троицкая"),
+        ("у Сокольнической линии", "Сокольническая"),
+        ("рядом с Арбатско-Покровской веткой", "Арбатско-Покровская"),
+        ("квартира на Люблинско-Дмитровской линии", "Люблинско-Дмитровская"),
+    ],
+)
+def test_official_line_name_with_carrier(text: str, expected_line: str):
+    from app.parsing.rules.station_class import extract_station_class_requirements
+
+    reqs, spans = extract_station_class_requirements(text)
+    assert [r.line_prefix for r in reqs] == [expected_line]
+    assert spans, "фрагмент линии должен быть засчитан понятым"
+
+
+def test_official_line_name_requires_carrier():
+    """«в районе Троицка» (город) без слова-носителя — НЕ класс станций."""
+    from app.parsing.rules.station_class import extract_station_class_requirements
+
+    reqs, _spans = extract_station_class_requirements("квартира в районе Троицка")
+    assert reqs == []
+
+
+def test_official_line_name_e2e_troitskaya():
+    """Регрессия исходного бага на уровне parse(): линия распознана, округ
+    «Троицкий АО» НЕ матчится ложно, «ветки» не остаётся в warnings."""
+    from app.parsing.parser import parse
+
+    result = parse("Нужна двушка в районе Троицкой ветки")
+    assert [r.line_prefix for r in result.criteria.station_class_requirements] == ["Троицкая"]
+    assert result.criteria.counties == []
+    assert result.warnings == []
+    assert result.option_candidates == []
+    assert result.criteria.rooms == [Rooms.TWO]

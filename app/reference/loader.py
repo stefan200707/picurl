@@ -89,9 +89,38 @@ class ReferenceData(BaseModel):
     landmarks: tuple[RefEntry, ...]
 
 
+#: Таблица «гомоглифов» — латинских букв, визуально неотличимых от
+#: кириллических (пользователь может случайно печатать на неправильной
+#: раскладке: «двушкa»/«Внуковa» с латинской 'a' вместо кириллической 'а').
+#: Единый источник для нормализации сравнения сущностей здесь и для
+#: посимвольной нормализации regex-правил в
+#: ``app.parsing.rules.core._normalize`` (Milestone AI-20) — раньше «двушкa»/
+#: «мeтро» с одной подменённой буквой не распознавались вовсе.
+LATIN_TO_CYRILLIC_CONFUSABLES: dict[str, str] = {
+    "a": "а",
+    "b": "в",
+    "c": "с",
+    "e": "е",
+    "h": "н",
+    "k": "к",
+    "m": "м",
+    "o": "о",
+    "p": "р",
+    "t": "т",
+    "x": "х",
+    "y": "у",
+}
+
+
 def normalize(text: str) -> str:
-    """Нормализовать строку для сравнения имён/алиасов: casefold, ё→е, пробелы."""
-    return " ".join(text.casefold().replace("ё", "е").split())
+    """Нормализовать строку для сравнения имён/алиасов.
+
+    casefold, ё→е, схлопывание пробелов, латинские гомоглифы → кириллица (см.
+    :data:`LATIN_TO_CYRILLIC_CONFUSABLES`).
+    """
+    folded = text.casefold().replace("ё", "е")
+    mapped = "".join(LATIN_TO_CYRILLIC_CONFUSABLES.get(ch, ch) for ch in folded)
+    return " ".join(mapped.split())
 
 
 @cache

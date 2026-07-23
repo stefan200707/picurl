@@ -10,19 +10,31 @@ CLI-скрипт: ``python -m app.reference.refresh``. Это **единстве
 - ``complexes.json`` — обе URL-формы целиком: слаг (``url``) и числовой id
   (тот самый id, что уходит в query-параметр ``blocks``; подтверждено:
   «Мичуринский парк» → ``/mpark`` / ``blocks=1108``);
-- ``counties.json`` — имена и слаги округов Москвы (``locations.child.url``,
-  например ``zao``);
+- ``counties.json`` — имена, слаги И числовые id округов Москвы
+  (``locations.child.url`` / ``locations.child.id``, например ``zao`` / ``34``);
 - ``metro.json`` / ``districts.json`` — имена станций/районов, встречающихся
   у ЖК (без слагов/id).
 
-Ограничение: GUID-ы станций для ``metroStations`` и числовые id округов для
-``districtCounties`` отдаёт только front-API ``www.pik.ru`` (закрыт
-бот-защитой Qrator), поэтому эти поля ведутся вручную в JSON. Скрипт **не
-затирает** ручную докурацию: записи мёржатся по слагу/имени, кураторские
-``slug``/``id``/``aliases`` сохраняются, файлы перезаписываются идемпотентно
-со стабильной сортировкой (диффы читаемы). ``benefits.json`` /
-``option_groups.json`` / ``options.json`` этим эндпоинтом не покрываются и
-не трогаются.
+Ограничение: GUID-ы станций для ``metroStations`` отдаёт только закрытый
+бот-защитой Qrator front-API ``www.pik.ru`` — это поле ведётся вручную в
+``metro.json`` (и часть значений там доказанно/предположительно недостоверна,
+см. ``app/pik/id_trust.py`` — задача аудита validate(), 2026-07-23).
+**Числовые id округов (``districtCounties``), вопреки прежнему предположению,
+этим ограничением НЕ страдают** — ``locations.child.id`` есть прямо в ответе
+открытого ``api.pik.ru/v2/block`` (подтверждено живым запросом), поэтому с
+этой правки скрипт вытягивает его наравне со слагом. До этой правки
+``counties.json`` был заполнен вручную неверными id (расходились со всеми
+живыми значениями — см. ответ по задаче аудита); теперь верные id
+подтягиваются автоматически для округов, в которых у ПИК есть хотя бы один
+ЖК — для остальных (в живых данных на момент правки: «ЗелАО», «Московская
+область», «Троицкий АО», «ЦАО») id по-прежнему не подтверждён и намеренно
+пуст (см. правило Б: недостоверный/неподтверждённый id в URL не идёт).
+Скрипт **не затирает** ручную докурацию: записи мёржатся по слагу/имени,
+кураторские ``slug``/``aliases`` сохраняются (``id`` для округов теперь
+всегда предпочитает свежее значение живого API — см. :func:`merge_entries`),
+файлы перезаписываются идемпотентно со стабильной сортировкой (диффы
+читаемы). ``benefits.json`` / ``option_groups.json`` / ``options.json`` этим
+эндпоинтом не покрываются и не трогаются.
 """
 
 import json
@@ -44,6 +56,7 @@ REFRESHABLE = ("complexes", "counties", "metro", "districts")
 
 
 class LocationChild(BaseModel):
+    id: int | None = None
     name: str | None = None
     url: str | None = None
 
@@ -130,7 +143,15 @@ def complexes_from_blocks(blocks: list[BlockPayload]) -> list[RefEntry]:
 
 
 def counties_from_blocks(blocks: list[BlockPayload]) -> list[RefEntry]:
-    """Округа Москвы: имя и слаг из ``locations.child`` (id front-API не отдаёт)."""
+    """Округа Москвы: имя, слаг И числовой id из ``locations.child``.
+
+    ``locations.child.id`` — тот самый id, что нужен для query-параметра
+    ``districtCounties`` — есть прямо в ответе открытого ``api.pik.ru/v2/block``
+    (проверено живым запросом, см. докстринг модуля). Округ попадает сюда,
+    только если у ПИК есть хотя бы один ЖК в нём — для остальных московских
+    округов id остаётся неподтверждённым (см. ``app/reference/counties.json``
+    и правило Б задачи аудита validate()).
+    """
     entries: list[RefEntry] = []
     for block in blocks:
         if not block.locations or not block.locations.parent or not block.locations.child:
@@ -140,7 +161,14 @@ def counties_from_blocks(blocks: list[BlockPayload]) -> list[RefEntry]:
         name = block.locations.child.name
         if not name:
             continue
-        entries.append(RefEntry(name=name, slug=block.locations.child.url or None))
+        child_id = block.locations.child.id
+        entries.append(
+            RefEntry(
+                name=name,
+                slug=block.locations.child.url or None,
+                id=str(child_id) if child_id is not None else None,
+            )
+        )
     return _dedupe(entries)
 
 
@@ -273,8 +301,10 @@ def main() -> int:
     for kind in REFRESHABLE:
         print(f"{REFERENCE_FILES[kind]}: {counts[kind]} записей")
     print(
-        "Напоминание: GUID-ы метро (metroStations) и id округов (districtCounties) "
-        "front-API не отдаёт — докуривать вручную; benefits/option_groups/options "
+        "Напоминание: GUID-ы метро (metroStations) закрытый front-API не отдаёт — "
+        "докуривать вручную (часть уже докуренных значений признана недостоверной, "
+        "см. app/pik/id_trust.py); id округов (districtCounties) теперь тянутся "
+        "отсюда же, из locations.child.id; benefits/option_groups/options "
         "не обновляются этим скриптом."
     )
     return 0

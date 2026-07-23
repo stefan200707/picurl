@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 
 from app.parsing.entity_match import match_entities
 from app.parsing.rules import Span, apply_rules
+from app.parsing.rules.core import _normalize as _normalize_chars
 from app.parsing.schema import Criteria, MatchedEntity
 from app.parsing.stopwords import STOP_WORDS
 
@@ -14,6 +15,54 @@ from app.parsing.stopwords import STOP_WORDS
 #: сматчил». Отсекает длинные куски-мусор (перечисления, свободный текст) —
 #: фразы-синонимы фильтров коротки («отдельный санузел», «своя ванная»).
 MAX_OPTION_CANDIDATE_WORDS = 4
+
+#: Словоформы маркеров близости (синхронизировано с
+#: ``rules.core._PROXIMITY_MARKER``; ё уже нормализована в е) и слова-носители
+#: локации. Фрагмент, целиком состоящий из них, — геохвост пространственной
+#: конструкции, а не кандидат в опции (Milestone AI-20, Фикс 4).
+_PROXIMITY_CHUNK_WORDS = frozenset(
+    {
+        # формы маркера близости
+        "рядом",
+        "поближе",
+        "ближе",
+        "недалеко",
+        "неподалеку",
+        "поблизости",
+        "вблизи",
+        "близко",
+        "около",
+        "возле",
+        "у",
+        "к",
+        "ко",
+        "с",
+        "со",
+        "от",
+        # слова-носители локации
+        "метро",
+        "м",
+        "станция",
+        "станции",
+        "станций",
+        "ветка",
+        "ветки",
+        "ветке",
+        "веток",
+        "линия",
+        "линии",
+        "линий",
+        "район",
+        "района",
+        "районе",
+        "районов",
+        "округ",
+        "округа",
+        "округе",
+        "округов",
+        "жк",
+    }
+)
 
 
 @dataclass
@@ -54,10 +103,22 @@ def _merge_spans(spans: list[Span]) -> list[Span]:
     return merged
 
 
+def _chunk_words(text_chunk: str) -> list[str]:
+    """Лексемы куска после посимвольной нормализации (гомоглифы → кириллица).
+
+    Латинская «c» (визуальный дубль кириллической «с») до Milestone AI-20
+    проходила проверку стоп-слов как «значимое слово» и порождала мусорный
+    warning; нормализация через ``rules.core._normalize`` закрывает весь класс
+    подменённых раскладкой букв разом.
+    """
+    normalized = _normalize_chars(text_chunk)
+    # Оставляем буквы, цифры и дефисные слова целиком (напр. «кв-ра»)
+    return re.findall(r"[а-яёa-z0-9]+(?:-[а-яёa-z0-9]+)*", normalized)
+
+
 def _is_significant(text_chunk: str) -> bool:
     """Проверяет, содержит ли нераспознанный кусок значимую информацию."""
-    # Оставляем буквы, цифры и дефисные слова целиком (напр. «кв-ра»)
-    words = re.findall(r"[а-яёa-z0-9]+(?:-[а-яёa-z0-9]+)*", text_chunk.lower())
+    words = _chunk_words(text_chunk)
     if not words:
         return False
     # Если остались только стоп-слова, кусок незначимый
@@ -95,7 +156,16 @@ def _looks_like_option(text_chunk: str) -> bool:
     похожи). Заведомо неподдерживаемые pik.ru фразы (категория 24) сюда не
     попадают: их спаны уже помечены «понятыми» в apply_rules.
     """
-    words = re.findall(r"[а-яёa-z0-9]+(?:-[а-яёa-z0-9]+)*", text_chunk.lower())
+    words = _chunk_words(text_chunk)
+    # Геохвост («недалеко от метро», «возле округа») — фрагмент целиком из
+    # маркеров близости, слов-носителей локации и стоп-слов. Это остаток
+    # пространственной конструкции, а не фраза-синоним опции: в кандидаты для
+    # ИИ-резолвера он не идёт (Milestone AI-20, Фикс 4) — раньше каждый такой
+    # хвост порождал лишний вызов модели (и падал в 429 на ровном месте).
+    if words and all(
+        w in STOP_WORDS or w in _PROXIMITY_CHUNK_WORDS or w.startswith("ближайш") for w in words
+    ):
+        return False
     significant = [w for w in words if w not in STOP_WORDS]
     if not significant or len(significant) > MAX_OPTION_CANDIDATE_WORDS:
         return False
@@ -181,9 +251,19 @@ def parse(text: str) -> ParseResult:
             ("districts", "Район"),
             ("complexes", "ЖК"),
         ]
+        # Импорт здесь, а не в шапке: parser — верхний слой пайплайна, тянуть
+        # pik/geo при импорте модуля не хочется; функция чистая и лёгкая.
+        from app.pik.location_fallback import handled_by_fallback
+
         for entity_field, entity_name in fields:
             for ent in getattr(criteria, entity_field):
                 warning = _missing_id_warning(entity_field, entity_name, ent, total_locations)
+                # Сущности без достоверного id, которые geo-фолбэк заменит
+                # сужением по blocks (Milestone AI-20), предупреждения «в ссылку
+                # не попадет» не получают — это больше не правда; исход фолбэка
+                # сообщает своя заметка через validator.
+                if warning and handled_by_fallback(entity_field, ent):
+                    warning = None
                 if warning:
                     warnings.append(warning)
 

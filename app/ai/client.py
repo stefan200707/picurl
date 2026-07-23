@@ -1,9 +1,12 @@
+import asyncio
 import functools
 import json
 import logging
 import platform
+import random
 import subprocess
 import time
+from collections.abc import Awaitable, Callable
 from typing import Literal, NamedTuple
 
 import httpx
@@ -120,6 +123,166 @@ def _is_transient(exc: Exception) -> bool:
     return False
 
 
+def _is_transient_antigravity(exc: Exception) -> bool:
+    """Транзиентный сбой agy CLI: ненулевой код возврата (см. RuntimeError,
+    которым мы оборачиваем такой выход ниже) или ошибка запуска процесса
+    (``OSError`` — бинарник временно недоступен). Ошибка валидации JSON-ответа
+    модели (``pydantic.ValidationError``) НЕ транзиентна: тот же промпт почти
+    наверняка даст тот же брак, повтор только тратит бюджет задержки впустую.
+    """
+    return isinstance(exc, RuntimeError | OSError)
+
+
+def _extract_retry_after(exc: Exception) -> float | None:
+    """Уважить заголовок ``Retry-After`` ответа API, если он есть — сервер лучше
+    нас знает, когда квота освободится, чем наша собственная экспонента.
+    Поддерживается только числовой формат (секунды) — единственный, который
+    реально отдаёт Anthropic API; HTTP-date формат не встречался на практике,
+    его парсинг не реализован (некорректное значение просто игнорируется, и
+    вызывающий код падает обратно на экспоненциальный backoff)."""
+    response = getattr(exc, "response", None)
+    if response is None:
+        return None
+    raw = response.headers.get("retry-after")
+    if raw is None:
+        return None
+    try:
+        return max(0.0, float(raw))
+    except ValueError:
+        return None
+
+
+class CircuitOpenError(RuntimeError):
+    """ИИ-слой временно отключён: circuit breaker в состоянии cooldown после
+    серии транзиентных отказов подряд (см. :func:`_record_circuit_failure`).
+    Поднимается ДО сетевого вызова — в этом весь смысл предохранителя: не
+    увеличивать нагрузку на провайдера ровно тогда, когда его квота уже
+    исчерпана (самоусиливающийся отказ, живой инцидент — см. CLAUDE.md)."""
+
+
+# Состояние circuit breaker — уровень процесса (модульные переменные), общее
+# для обоих провайдеров (Claude/Antigravity) и для всех обычных вызовов, и
+# резолвинга опций: один и тот же rate-limit делится всеми путями enrich().
+# asyncio.Lock не привязывается к event loop при создании (Python 3.10+),
+# поэтому модульный синглтон безопасен даже с учётом того, что pytest-asyncio
+# создаёт новый event loop на каждый тест.
+_circuit_lock = asyncio.Lock()
+_consecutive_failures = 0
+_circuit_opened_until = 0.0  # time.monotonic(); 0.0 = breaker закрыт
+
+
+def reset_circuit_breaker() -> None:
+    """Сбросить состояние circuit breaker. Нужен тестам для изоляции — без
+    сброса между тестами открытый одним тестом breaker ломал бы соседние
+    (состояние модульное, а не per-request)."""
+    global _consecutive_failures, _circuit_opened_until
+    _consecutive_failures = 0
+    _circuit_opened_until = 0.0
+
+
+async def _check_circuit_or_raise(settings) -> None:
+    if not settings.AI_CIRCUIT_BREAKER_ENABLED:
+        return
+    async with _circuit_lock:
+        opened_until = _circuit_opened_until
+    if opened_until and time.monotonic() < opened_until:
+        remaining = opened_until - time.monotonic()
+        raise CircuitOpenError(
+            f"серия транзиентных отказов подряд, повтор возможен через {remaining:.0f} с"
+        )
+
+
+async def _record_circuit_failure(settings) -> None:
+    """Учесть отказ (после исчерпания ретраев) в счётчике breaker'а. Считаются
+    только ТРАНЗИЕНТНЫЕ отказы — вызывающий код (:func:`_execute_with_retry`)
+    гарантирует, что сюда не попадают 4xx/ошибки валидации: их повтор не имеет
+    смысла, но и не сигнализирует об исчерпании квоты."""
+    global _consecutive_failures, _circuit_opened_until
+    if not settings.AI_CIRCUIT_BREAKER_ENABLED:
+        return
+    async with _circuit_lock:
+        _consecutive_failures += 1
+        if _consecutive_failures >= settings.AI_CIRCUIT_BREAKER_THRESHOLD:
+            _circuit_opened_until = time.monotonic() + settings.AI_CIRCUIT_BREAKER_COOLDOWN_SECONDS
+            logger.error(
+                f"AI circuit breaker OPEN: {_consecutive_failures} транзиентных отказов подряд, "
+                f"cooldown {settings.AI_CIRCUIT_BREAKER_COOLDOWN_SECONDS}s"
+            )
+
+
+async def _record_circuit_success() -> None:
+    global _consecutive_failures, _circuit_opened_until
+    async with _circuit_lock:
+        _consecutive_failures = 0
+        _circuit_opened_until = 0.0
+
+
+async def _execute_with_retry[T](
+    attempt_fn: Callable[[], Awaitable[T]],
+    *,
+    is_transient: Callable[[Exception], bool],
+    settings,
+    extract_retry_after: Callable[[Exception], float | None] = lambda exc: None,
+) -> T:
+    """Общий экспоненциальный backoff (с джиттером, уважением Retry-After) и
+    circuit breaker для вызовов ИИ-провайдеров.
+
+    Перед первой попыткой проверяет breaker (:func:`_check_circuit_or_raise`) —
+    если открыт, сетевой вызов не делается вовсе. Повторяются только
+    транзиентные сбои (``is_transient``); нетранзиентные (4xx, ошибки
+    валидации) поднимаются немедленно, без ретрая и без влияния на breaker.
+    Суммарная задержка всех ретраев ОДНОГО вызова ограничена
+    ``AI_RETRY_MAX_DELAY_SECONDS`` — иначе латентность ИИ-слоя на один
+    пользовательский запрос могла бы расти неограниченно (было: 15с таймаут ×
+    до 4 вызовов = до 60с).
+    """
+    await _check_circuit_or_raise(settings)
+
+    max_attempts = max(1, settings.AI_RETRY_MAX_ATTEMPTS)
+    base_delay = settings.AI_RETRY_BASE_DELAY_SECONDS
+    max_total_delay = settings.AI_RETRY_MAX_DELAY_SECONDS
+    total_slept = 0.0
+
+    for attempt in range(1, max_attempts + 1):
+        try:
+            result = await attempt_fn()
+        except Exception as exc:
+            if not is_transient(exc):
+                # 4xx/ошибка валидации — не в счётчик breaker'а, повтор бессмыслен.
+                logger.warning(f"Non-transient AI provider error, not retrying: {exc}")
+                raise
+            if attempt >= max_attempts:
+                logger.error(
+                    f"AI provider call failed after {attempt}/{max_attempts} attempts: {exc}"
+                )
+                await _record_circuit_failure(settings)
+                raise
+            delay = extract_retry_after(exc)
+            if delay is None:
+                raw = base_delay * (2 ** (attempt - 1))
+                delay = raw + random.uniform(0.0, raw * 0.2)
+            remaining_budget = max_total_delay - total_slept
+            if remaining_budget <= 0:
+                logger.error(
+                    f"AI provider retry budget ({max_total_delay}s) exhausted on "
+                    f"attempt {attempt}/{max_attempts}: {exc}"
+                )
+                await _record_circuit_failure(settings)
+                raise
+            delay = min(max(delay, 0.0), remaining_budget)
+            logger.warning(
+                f"Transient AI provider error (attempt {attempt}/{max_attempts}), "
+                f"retrying in {delay:.2f}s: {exc}"
+            )
+            await asyncio.sleep(delay)
+            total_slept += delay
+        else:
+            await _record_circuit_success()
+            return result
+
+    raise AssertionError("unreachable: retry loop must return or raise")
+
+
 async def call_typed[T: BaseModel](
     system_prompt: str, user_payload: dict, answer_model: type[T]
 ) -> T:
@@ -158,8 +321,6 @@ async def call_antigravity[T: BaseModel](
     settings,
     answer_model: type[T] = AIEnrichmentAnswer,
 ) -> T:
-    import asyncio
-
     cli_path = settings.ANTIGRAVITY_CLI_PATH or "agy"
     # Единый источник «какую модель звать» (см. app/config.Settings.AI_MODEL_NAME).
     model = settings.AI_MODEL_NAME
@@ -185,7 +346,7 @@ async def call_antigravity[T: BaseModel](
     if model:
         cmd.extend(["--model", model])
 
-    try:
+    async def _invoke() -> T:
         process = await asyncio.create_subprocess_exec(
             *cmd,
             stdout=asyncio.subprocess.PIPE,
@@ -207,9 +368,14 @@ async def call_antigravity[T: BaseModel](
 
         full_response = full_response.strip()
         return answer_model.model_validate_json(full_response)
-    except Exception as e:
-        logger.error(f"Antigravity Agent error: {e}", exc_info=True)
-        raise e
+
+    # Ретрай + circuit breaker (Milestone: 429-инцидент общей квоты) —
+    # распространены и на antigravity: раньше этот путь не ретраился вовсе.
+    return await _execute_with_retry(
+        _invoke,
+        is_transient=_is_transient_antigravity,
+        settings=settings,
+    )
 
 
 async def call_claude[T: BaseModel](
@@ -235,8 +401,8 @@ async def call_claude[T: BaseModel](
         "input_schema": answer_model.model_json_schema(),
     }
 
-    async def _create():
-        return await client.messages.create(
+    async def _create() -> T:
+        response = await client.messages.create(
             model=settings.AI_MODEL_NAME,
             max_tokens=1024,
             system=system_prompt,
@@ -244,19 +410,19 @@ async def call_claude[T: BaseModel](
             tools=[tool],
             tool_choice={"type": "tool", "name": "provide_enrichment_answer"},
         )
+        for block in response.content:
+            if block.type == "tool_use" and block.name == "provide_enrichment_answer":
+                return answer_model.model_validate(block.input)
+        # Не транзиентный сбой (ответ пришёл, но без ожидаемого tool-use блока) —
+        # ретраить бессмысленно, `_is_transient` его и не сочтёт временным.
+        raise ValueError("Model did not return tool use block")
 
-    try:
-        response = await _create()
-    except Exception as e:
-        # Повторяем только временные сбои (таймаут, 429/5xx); 4xx (неверный
-        # запрос/ключ) не ретраим — это лишь удвоит ошибку и задержку.
-        if not _is_transient(e):
-            raise
-        logger.warning(f"Anthropic API transient error, retrying: {e}")
-        response = await _create()
-
-    for block in response.content:
-        if block.type == "tool_use" and block.name == "provide_enrichment_answer":
-            return answer_model.model_validate(block.input)
-
-    raise ValueError("Model did not return tool use block")
+    # Ретрай (экспоненциальный backoff + Retry-After) и circuit breaker —
+    # повторяем только временные сбои (таймаут, 429/5xx); 4xx (неверный
+    # запрос/ключ) не ретраим — это лишь удвоит ошибку и задержку.
+    return await _execute_with_retry(
+        _create,
+        is_transient=_is_transient,
+        extract_retry_after=_extract_retry_after,
+        settings=settings,
+    )

@@ -9,6 +9,7 @@ import json
 
 import pytest
 
+from app.ai.schema import ComplexCandidate
 from app.geo.candidates import (
     STATION_CLASS_DEFAULT_RADIUS_M,
     STATION_CLASS_FALLBACK_LIMIT,
@@ -21,6 +22,7 @@ from app.parsing.schema import (
     Criteria,
     LandmarkRequirement,
     MatchedEntity,
+    POIRequirement,
     StationClassRequirement,
 )
 
@@ -591,3 +593,85 @@ def test_center_fully_resolved_when_all_known(ref_dir):
 
     assert all(c.is_center is not None for c in candidates)
     assert fully_resolved(known, criteria, candidates) is True
+
+
+# --- Дистанция POI из кэша (Milestone AI-20) --------------------------------
+#
+# poi_cache.json хранит closest_distance_m с момента сбора, но
+# resolve_known_facts сверял только count>0 — «садик в 300 метрах» проходил
+# проверку садиком в двух километрах (тот же класс «предохранитель без
+# провода», что уже разбирался в AI-19).
+
+
+def _poi_candidate(dist: float | None) -> ComplexCandidate:
+    return ComplexCandidate(
+        id="c1",
+        name="Тестовый ЖК",
+        district=None,
+        county=None,
+        metro=[],
+        is_center=None,
+        known_poi={"kindergarten": True},
+        poi_distances={"kindergarten": dist},
+    )
+
+
+def test_poi_max_distance_respected_by_resolve_known_facts():
+    """Требование «в 300 метрах» отсекает кандидата с садиком в 800 м."""
+    from app.geo.poi import POICategory
+
+    near = _poi_candidate(250.0)
+    far = _poi_candidate(800.0)
+    far = far.model_copy(update={"id": "c2"})
+    criteria = Criteria(
+        poi_requirements=[
+            POIRequirement(
+                category=POICategory.KINDERGARTEN, raw_phrase="садик", max_distance_m=300
+            )
+        ]
+    )
+    known = resolve_known_facts([near, far], criteria)
+    assert known["matched_complex_ids"] == ["c1"]
+
+
+def test_poi_max_distance_unknown_distance_not_matched():
+    """Дистанция запрошена, но в кэше её нет — совпадением не считаем."""
+    from app.geo.poi import POICategory
+
+    cand = _poi_candidate(None)
+    criteria = Criteria(
+        poi_requirements=[
+            POIRequirement(
+                category=POICategory.KINDERGARTEN, raw_phrase="садик", max_distance_m=300
+            )
+        ]
+    )
+    known = resolve_known_facts([cand], criteria)
+    assert known["matched_complex_ids"] == []
+
+
+def test_poi_without_distance_requirement_unchanged():
+    """Без max_distance_m достаточно count>0 — поведение прежнее."""
+    from app.geo.poi import POICategory
+
+    cand = _poi_candidate(None)
+    criteria = Criteria(
+        poi_requirements=[POIRequirement(category=POICategory.KINDERGARTEN, raw_phrase="садик")]
+    )
+    known = resolve_known_facts([cand], criteria)
+    assert known["matched_complex_ids"] == ["c1"]
+
+
+def test_poi_only_new_is_not_fully_resolved():
+    """«Только новые» кэш не различает (count схлопывает construction:-теги) —
+    факт не подтверждён детерминированно, решение остаётся за ИИ."""
+    from app.geo.poi import POICategory
+
+    cand = _poi_candidate(250.0)
+    criteria = Criteria(
+        poi_requirements=[
+            POIRequirement(category=POICategory.KINDERGARTEN, raw_phrase="садик", only_new=True)
+        ]
+    )
+    known = resolve_known_facts([cand], criteria)
+    assert fully_resolved(known, criteria, [cand]) is False

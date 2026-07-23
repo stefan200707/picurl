@@ -277,20 +277,52 @@ class TestNoGuidRegression:
     """
 
     def test_no_known_guid_is_lost(self) -> None:
+        """Ни один ДОСТОВЕРНЫЙ GUID из снимка не пропал.
+
+        Снимок ``KNOWN_METRO_GUIDS`` исторически включал и 5 синтетических id
+        (hex-«лесенки» и ``guid-*``-заглушки) — аудит validate() 2026-07-23
+        доказал их фейковость, и они вычищены из ``metro.json`` осознанно
+        (``app.pik.id_trust.REMOVED_SYNTHETIC_METRO_IDS``). Тест защищал фейки
+        наравне с настоящими GUID — теперь исключает ровно этот реестр, а
+        сам снимок сохранён как есть (это документ эпохи, а не список правды).
+        """
+        from app.pik.id_trust import REMOVED_SYNTHETIC_METRO_IDS
+
         metro = load_metro()
         current_ids = {entry.id for entry in metro if entry.id}
 
-        lost = [(name, guid) for name, guid in KNOWN_METRO_GUIDS if guid not in current_ids]
+        lost = [
+            (name, guid)
+            for name, guid in KNOWN_METRO_GUIDS
+            if guid not in current_ids and guid not in REMOVED_SYNTHETIC_METRO_IDS
+        ]
         assert lost == [], (
             f"Потеряны GUID станций метро (были в справочнике, сейчас отсутствуют): {lost}. "
             "GUID нельзя терять при слиянии/чистке дублей — см. CLAUDE.md, раздел «Справочники»."
         )
 
+    def test_removed_synthetic_ids_did_not_return(self) -> None:
+        """Вычищенные фейковые id не вернулись в справочник (регрессия аудита)."""
+        from app.pik.id_trust import REMOVED_SYNTHETIC_METRO_IDS
+
+        metro = load_metro()
+        current_ids = {entry.id for entry in metro if entry.id}
+        returned = current_ids & REMOVED_SYNTHETIC_METRO_IDS
+        assert returned == set(), (
+            f"Синтетические id снова появились в metro.json: {returned}. "
+            "Они доказанно фейковые (аудит validate(), 2026-07-23) — см. app/pik/id_trust.py."
+        )
+
     def test_id_count_did_not_shrink(self) -> None:
+        from app.pik.id_trust import REMOVED_SYNTHETIC_METRO_IDS
+
         metro = load_metro()
         current_with_id = sum(1 for entry in metro if entry.id)
+        snapshot_genuine = len(KNOWN_METRO_GUIDS) - len(
+            {guid for _name, guid in KNOWN_METRO_GUIDS} & REMOVED_SYNTHETIC_METRO_IDS
+        )
 
-        assert current_with_id >= len(KNOWN_METRO_GUIDS), (
+        assert current_with_id >= snapshot_genuine, (
             f"Число записей metro.json с id ({current_with_id}) стало меньше эталонного "
-            f"снимка ({len(KNOWN_METRO_GUIDS)}) — похоже, GUID снова потеряны."
+            f"снимка достоверных GUID ({snapshot_genuine}) — похоже, GUID снова потеряны."
         )

@@ -94,6 +94,7 @@
 """
 
 import re
+from functools import cache
 
 from app.parsing.rules.core import (
     _DIST_MARKER,
@@ -269,6 +270,67 @@ _ORDINAL_LINE_MAP: dict[str, list[str]] = {
     "восьм": ["Калининская", "Солнцевская"],
 }
 
+#: Линии, которые НЕ получают стем-паттерна из справочника: МЦК/МЦД покрыты
+#: явными паттернами выше, «Кольцевая»/«Большая кольцевая» — прозвищами кольца
+#: ниже (иначе общий стем «кольцев» конфликтовал бы с защитой от МКАД/ЦКАД).
+_LINE_NAME_EXCLUDED: frozenset[str] = frozenset({"мцк", "кольцевая", "большая кольцевая"})
+
+
+def _official_line_stem_map() -> tuple[tuple[str, str], ...]:
+    """Стемы ОФИЦИАЛЬНЫХ имён линий из ``metro.json`` → каноническое имя.
+
+    Milestone AI-21, живой баг: «в районе Троицкой ветки» — AI-17 покрывал
+    цвета/номера/прозвища, но не прямые имена линий («Троицкой»,
+    «Сокольнической»). Имена берутся из данных (``RefEntry.line``,
+    см. ``app.reference.refresh_metro_geo``), а не дублируются строками в
+    коде — появится новая линия в справочнике, стем появится сам.
+
+    Стем: у каждого слова нормализованного имени отрезается окончание «ая»
+    («троицкая» → «троицк», «арбатско-покровская» → «арбатско-покровск») —
+    ``_carrier_pattern`` добавит ``\\w*``, покрывая все склонения («Троицкой»,
+    «Сокольнической»). Имена, не оканчивающиеся на «ая» (не прилагательные),
+    пропускаются — для них стем-подход дал бы ложные срабатывания. Слово-
+    носитель «ветка»/«линия» обязателен (тот же принцип, что у цветов):
+    «в районе Троицка» (город) без носителя не матчится.
+
+    Собственного ``@cache`` у функции НЕТ намеренно: кэшем владеет
+    ``load_metro()`` (его сбрасывает ``loader.clear_cache()`` — фикстуры
+    тестов подменяют справочник, и застывшая здесь копия пережила бы подмену);
+    компиляция regex кэшируется отдельно, по содержимому карты
+    (:func:`_line_patterns_for`).
+    """
+    from app.reference.loader import load_metro, normalize
+
+    lines: set[str] = set()
+    for entry in load_metro():
+        if entry.line:
+            lines.update(part.strip() for part in entry.line.split(" / "))
+
+    result: list[tuple[str, str]] = []
+    for line in sorted(lines):
+        norm_line = normalize(line)
+        if norm_line in _LINE_NAME_EXCLUDED or norm_line.startswith("мцд"):
+            continue
+        words = norm_line.split()
+        if not all(w.endswith("ая") for w in words):
+            continue
+        stem = r"[-\s]+".join(re.escape(w[:-2]) for w in words)
+        result.append((stem, line))
+    return tuple(result)
+
+
+@cache
+def _line_patterns_for(
+    stem_map: tuple[tuple[str, str], ...],
+) -> tuple[tuple[re.Pattern[str], str], ...]:
+    """Скомпилированные паттерны для карты стемов (кэш по её содержимому).
+
+    Ключ кэша — сама карта: подменили справочник в тестах → карта другая →
+    новый набор паттернов, а не застывшая копия старого.
+    """
+    return tuple((_carrier_pattern(stem), line) for stem, line in stem_map)
+
+
 #: Прозвища с общей подстрокой «кольцо»/«кольцевая» — проверяются в порядке от
 #: более конкретных к общему («большая кольцевая»/«БКЛ»/«центральное кольцо»
 #: раньше голого «кольцо»/«кольцевая»), иначе общий паттерн ниже откусил бы
@@ -410,6 +472,12 @@ def extract_station_class_requirements(
     # которые их подстрокой перекрывают (см. докстринг модуля).
     for compound_stem, lines in _COMPOUND_COLOR_LINE_MAP.items():
         _add_matches(norm, text, _carrier_pattern(compound_stem), lines, reqs, spans)
+
+    # Официальные имена линий из metro.json (Milestone AI-21): «Троицкой
+    # ветки», «Сокольнической линии». До простых цветов — приоритет у точного
+    # имени; пересечений со стемами цветов нет, порядок здесь — на будущее.
+    for pattern, line in _line_patterns_for(_official_line_stem_map()):
+        _add_matches(norm, text, pattern, [line], reqs, spans)
 
     for stem, lines in _COLOR_LINE_MAP.items():
         _add_matches(norm, text, _carrier_pattern(stem), lines, reqs, spans)

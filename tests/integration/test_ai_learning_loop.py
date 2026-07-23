@@ -304,7 +304,12 @@ def test_ai_learning_loop_e2e(e2e_client, mock_anthropic_client, memory_db, monk
     assert resp3.status_code == 200
     data3 = resp3.json()
 
-    assert data3["ai_used"] is True
+    # Гейт 2 включён (Milestone AI-20): факты промоутнуты в JSON-справочники,
+    # известны у всех кандидатов — запрос решается детерминированно, БЕЗ ИИ.
+    # Ровно это и обещал комментарий выше («resolve deterministically without
+    # hitting AI»); прежний assert ai_used=True отражал выключенный гейт 2.
+    assert data3["ai_used"] is False
+    assert data3["ai_failed"] is False
     assert data3["ai_cache_hit"] is False
     assert valid_complex_name in data3["criteria"]["complexes"]
 

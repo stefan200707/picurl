@@ -1,6 +1,7 @@
 from urllib.parse import urlencode
 
 from app.parsing.schema import Criteria, Finish
+from app.pik.location_fallback import resolve_fallback_block_ids
 
 
 def build_url(criteria: Criteria) -> str:
@@ -19,7 +20,11 @@ def build_url(criteria: Criteria) -> str:
       для точного соответствия примеру из ТЗ.
     - Неполные сущности (без id/slug в зависимости от назначения) молча пропускаются
       (фасад `parse` в `app/parsing/parser.py` проверяет их отсутствие и выдает warnings
-      до вызова `build_url`, поэтому здесь дополнительной проверки нет).
+      до вызова `build_url`, поэтому здесь дополнительной проверки нет) — С ОДНИМ
+      ИСКЛЮЧЕНИЕМ: сущности метро/округа/района без достоверного id (аудит
+      validate(), см. `app/pik/location_fallback.py`) не пропадают молча, а
+      заменяются проверяемым сужением по `blocks` (единственный локационный
+      параметр, который бэкенд валидации реально проверяет).
     """
     path_segments = []
     query_params = {}
@@ -80,6 +85,15 @@ def build_url(criteria: Criteria) -> str:
     else:
         # Multi-query для локаций — общая сборка id (AUDIT_REPORT 2.3)
         query_params.update(criteria.location_query_dict())
+
+    # 3.5 Geo-фолбэк на blocks для локаций без достоверного id (аудит validate()):
+    # метро/округ/район, у которых нет ни slug, ни подтверждённого id, тихо
+    # выпадали из ссылки выше — вместо этого сужаем ЖК по привязке/расстоянию.
+    fallback = resolve_fallback_block_ids(criteria)
+    if fallback.block_ids:
+        existing_blocks = query_params.get("blocks", "")
+        merged_ids = (existing_blocks.split(",") if existing_blocks else []) + fallback.block_ids
+        query_params["blocks"] = ",".join(dict.fromkeys(merged_ids))
 
     # Общие query-параметры добавляем в конец
     query_params.update(criteria.to_query_dict())

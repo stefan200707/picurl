@@ -7,6 +7,8 @@ from typing import NamedTuple
 from rapidfuzz import fuzz, process
 
 from app.parsing.rules import Span
+from app.parsing.rules.core import _PROXIMITY_MARKER
+from app.parsing.rules.core import _normalize as _normalize_chars
 from app.parsing.schema import MatchedEntity
 from app.parsing.stopwords import LOCATION_MARKERS, STOP_WORDS
 from app.reference.loader import RefEntry, load_all, normalize
@@ -58,13 +60,23 @@ class EntityMatch(NamedTuple):
 
 TRIGGERS = [
     # (pattern, type)
-    (r"(?i)\bу\s+метро\s+$", "metro"),
+    #
+    # Маркер близости перед «метро» — ЕДИНЫЙ источник форм из
+    # ``rules.core._PROXIMITY_MARKER`` (Milestone AI-20, Фикс 1): раньше здесь
+    # был независимый неполный список («у метро»/«рядом с метро»), и «недалеко
+    # от метро X» матчил сущность X, но сам маркер оставался «непонятым»
+    # текстом → мусорный warning + лишний кандидат в опции (лишний вызов ИИ).
+    (rf"(?i)\b{_PROXIMITY_MARKER}\s+метро\s+$", "metro"),
     (r"(?i)\bна\s+метро\s+$", "metro"),
-    (r"(?i)\bрядом\s+с\s+метро\s+$", "metro"),
+    # Голое «метро » перед именем — самостоятельный однозначный контекст типа
+    # (симметрично уже существующим голым «район »/«округ »/«жк » ниже).
+    (r"(?i)\bметро\s+$", "metro"),
     (r"(?i)\bм\.\s+$", "metro"),
     (r"(?i)\bм\s+$", "metro"),
+    (rf"(?i)\b{_PROXIMITY_MARKER}\s+район[ае]?\s+$", "district"),
     (r"(?i)\bв\s+районе\s+$", "district"),
     (r"(?i)\bрайон\s+$", "district"),
+    (rf"(?i)\b{_PROXIMITY_MARKER}\s+округ[ае]?\s+$", "county"),
     (r"(?i)\bокруг\s+$", "county"),
     (r"(?i)\bв\s+юзао\s+$", "county"),
     (r"(?i)\bв\s+жк\s+$", "complex"),
@@ -96,8 +108,17 @@ def build_choices() -> list[tuple[str, str, RefEntry]]:
 
 
 def get_trigger_type(text_before: str) -> tuple[str, int] | tuple[None, None]:
+    """Найти типоспецифичный триггер («у метро », «в районе », …) в конце текста.
+
+    Текст предварительно прогоняется через посимвольную нормализацию
+    (:func:`app.parsing.rules.core._normalize`): она сохраняет длину строки,
+    поэтому ``m.start()`` остаётся валидным индексом исходного текста, а
+    латинские гомоглифы («у мeтро» с латинской 'e') не ломают триггер
+    (Milestone AI-20, Фикс 2).
+    """
+    normalized = _normalize_chars(text_before)
     for pat, ttype in COMPILED_TRIGGERS:
-        m = pat.search(text_before)
+        m = pat.search(normalized)
         if m:
             return ttype, m.start()
     return None, None
@@ -105,6 +126,16 @@ def get_trigger_type(text_before: str) -> tuple[str, int] | tuple[None, None]:
 
 def _is_stop_word_window(tokens: list[str]) -> bool:
     return all(t.lower() in STOP_WORDS for t in tokens)
+
+
+def _sole_location_kw_type(triggered_types: set[str]) -> str | None:
+    """Единственный локационный тип из сработавших триггеров окна, либо None.
+
+    Типы опций сюда не входят: kw_partial («сануз»/«вид»…) — подстрочная
+    эвристика скоринга, а не однозначный контекст локации.
+    """
+    location_types = [t for t in ("metro", "district", "county", "complex") if t in triggered_types]
+    return location_types[0] if len(location_types) == 1 else None
 
 
 def _adjust_score(
@@ -351,6 +382,12 @@ def _score_window(window_tokens, text_before, start_idx, end_idx, is_synthetic, 
         "matches": final_unique,
         "best_score": best_adj_score,
         "window_size": len(window_tokens),
+        # Типоспецифичный контекст для разрешения конфликта одноимённых
+        # сущностей разных типов в _resolve_candidates (Milestone AI-20,
+        # Фикс 5): триггер из текста ПЕРЕД окном («у метро », «в районе»)
+        # либо, если его нет, ЕДИНСТВЕННОЕ слово-носитель локации внутри
+        # самого окна («метро Коммунарка» — окно содержит «метро»).
+        "trigger_type": trigger_type or _sole_location_kw_type(triggered_types),
     }
 
 
@@ -368,11 +405,25 @@ def _resolve_candidates(candidates):
         top_match = best_matches[0]
         top_name = top_match[2].name
 
-        added_any = False
-        for score, etype, entry in best_matches:
-            if entry.name != top_name:
-                continue
+        # Одноимённые сущности РАЗНЫХ типов («Коммунарка» — и метро, и район)
+        # раньше молча добавлялись обе: ambiguity-warning ниже завязан на
+        # разные entry.name и для них не срабатывал (Milestone AI-20, Фикс 5).
+        # Разрешение: типоспецифичный триггер контекста («у метро …»,
+        # «в районе …») однозначно выбирает тип; без триггера берём лучший по
+        # score тип и даём явный warning вместо тихого добавления обоих.
+        same_name = [m for m in best_matches if m[2].name == top_name]
+        same_name_ambiguity: list[tuple[float, str, RefEntry]] = []
+        if len({m[1] for m in same_name}) > 1:
+            trigger = c.get("trigger_type")
+            if trigger and any(m[1] == trigger for m in same_name):
+                same_name = [m for m in same_name if m[1] == trigger]
+            else:
+                chosen_type = same_name[0][1]
+                same_name_ambiguity = [m for m in same_name if m[1] != chosen_type]
+                same_name = [m for m in same_name if m[1] == chosen_type]
 
+        added_any = False
+        for score, etype, entry in same_name:
             if any(
                 _is_overlap(c["span"], used_span) and used_type == etype
                 for used_span, used_type in used_spans_with_type
@@ -391,24 +442,31 @@ def _resolve_candidates(candidates):
             added_any = True
 
         if added_any:
+            type_names = {
+                "metro": "метро",
+                "county": "округ",
+                "district": "район",
+                "complex": "ЖК",
+                "options": "опция",
+                "option_groups": "группа опций",
+            }
             other_matches = [m for m in best_matches if m[2].name != top_name]
             if other_matches:
-                type_names = {
-                    "metro": "метро",
-                    "county": "округ",
-                    "district": "район",
-                    "complex": "ЖК",
-                    "options": "опция",
-                    "option_groups": "группа опций",
-                }
-                chosen_types = [
-                    type_names.get(m[1], m[1]) for m in best_matches if m[2].name == top_name
-                ]
+                chosen_types = [type_names.get(m[1], m[1]) for m in same_name]
                 chosen_types_str = " и ".join(chosen_types)
                 alt_names = [f"{m[2].name} ({type_names.get(m[1], m[1])})" for m in other_matches]
                 warnings.append(
                     f"Неоднозначность для «{c['text']}»: выбрано {top_name} ({chosen_types_str}), "
                     f"возможные варианты: {', '.join(alt_names)}"
+                )
+            if same_name_ambiguity:
+                chosen_types_str = " и ".join(type_names.get(m[1], m[1]) for m in same_name)
+                alt_types = ", ".join(
+                    f"{top_name} ({type_names.get(m[1], m[1])})" for m in same_name_ambiguity
+                )
+                warnings.append(
+                    f"Неоднозначность для «{c['text']}»: выбрано {top_name} "
+                    f"({chosen_types_str}), возможные варианты: {alt_types}"
                 )
 
     return final_matches, warnings

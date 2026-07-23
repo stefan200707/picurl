@@ -1,10 +1,1520 @@
 {
-  "irtyshskiy": {},
-  "alt53": {},
-  "amur": {},
-  "barclay6": {},
-  "bd": {},
-  "ba85": {},
-  "vladivostok/borisenko": {},
-  "vladivostok/bosforskiypark": {}
+  "irtyshskiy": {
+    "school": {
+      "count": 27,
+      "closest_distance_m": 587.7202514046736
+    },
+    "kindergarten": {
+      "count": 36,
+      "closest_distance_m": 495.32193184933914
+    },
+    "shop": {
+      "count": 81,
+      "closest_distance_m": 391.76706922104376
+    },
+    "parking": {
+      "count": 248,
+      "closest_distance_m": 176.42388969639833
+    },
+    "park_forest": {
+      "count": 122,
+      "closest_distance_m": 582.8744981356018
+    }
+  },
+  "alt53": {
+    "school": {
+      "count": 45,
+      "closest_distance_m": 298.3304518204877
+    },
+    "kindergarten": {
+      "count": 54,
+      "closest_distance_m": 260.0008156235469
+    },
+    "shop": {
+      "count": 145,
+      "closest_distance_m": 63.65481215413264
+    },
+    "parking": {
+      "count": 334,
+      "closest_distance_m": 282.8779389241436
+    },
+    "park_forest": {
+      "count": 104,
+      "closest_distance_m": 172.69859852035273
+    }
+  },
+  "amur": {
+    "school": {
+      "count": 25,
+      "closest_distance_m": 342.1745389585479
+    },
+    "kindergarten": {
+      "count": 36,
+      "closest_distance_m": 623.2910025979764
+    },
+    "shop": {
+      "count": 115,
+      "closest_distance_m": 242.25006594151228
+    },
+    "parking": {
+      "count": 325,
+      "closest_distance_m": 72.5986572769017
+    },
+    "park_forest": {
+      "count": 278,
+      "closest_distance_m": 459.9403993731021
+    }
+  },
+  "barclay6": {
+    "school": {
+      "count": 22,
+      "closest_distance_m": 327.90284357243604
+    },
+    "kindergarten": {
+      "count": 30,
+      "closest_distance_m": 302.2607993724617
+    },
+    "shop": {
+      "count": 100,
+      "closest_distance_m": 152.7176140731884
+    },
+    "parking": {
+      "count": 200,
+      "closest_distance_m": 110.99616781599578
+    },
+    "park_forest": {
+      "count": 180,
+      "closest_distance_m": 220.09032325400656
+    }
+  },
+  "bd": {
+    "school": {
+      "count": 12,
+      "closest_distance_m": 309.6460273703555
+    },
+    "kindergarten": {
+      "count": 22,
+      "closest_distance_m": 170.73307733321118
+    },
+    "shop": {
+      "count": 79,
+      "closest_distance_m": 154.26690919901912
+    },
+    "parking": {
+      "count": 222,
+      "closest_distance_m": 28.462123589443813
+    },
+    "park_forest": {
+      "count": 34,
+      "closest_distance_m": 484.5495257157494
+    }
+  },
+  "ba85": {
+    "school": {
+      "count": 20,
+      "closest_distance_m": 373.2654030521346
+    },
+    "kindergarten": {
+      "count": 17,
+      "closest_distance_m": 893.4955939692439
+    },
+    "shop": {
+      "count": 93,
+      "closest_distance_m": 125.86891014349318
+    },
+    "parking": {
+      "count": 286,
+      "closest_distance_m": 35.34839410724313
+    },
+    "park_forest": {
+      "count": 248,
+      "closest_distance_m": 206.9208230834998
+    }
+  },
+  "vladivostok/borisenko": {
+    "school": {
+      "count": 14,
+      "closest_distance_m": 140.82229629849434
+    },
+    "kindergarten": {
+      "count": 22,
+      "closest_distance_m": 350.0715132113417
+    },
+    "shop": {
+      "count": 176,
+      "closest_distance_m": 147.42437064231638
+    },
+    "parking": {
+      "count": 1335,
+      "closest_distance_m": 70.07252637698937
+    },
+    "park_forest": {
+      "count": 817,
+      "closest_distance_m": 77.54471428165597
+    }
+  },
+  "vladivostok/bosforskiypark": {
+    "school": {
+      "count": 7,
+      "closest_distance_m": 953.720836930019
+    },
+    "kindergarten": {
+      "count": 12,
+      "closest_distance_m": 149.8622626833595
+    },
+    "shop": {
+      "count": 95,
+      "closest_distance_m": 32.905631352031726
+    },
+    "parking": {
+      "count": 832,
+      "closest_distance_m": 80.21559286868369
+    },
+    "park_forest": {
+      "count": 506,
+      "closest_distance_m": 136.6825651038409
+    }
+  },
+  "kazan/botanicheskaya": {
+    "school": {
+      "count": 18,
+      "closest_distance_m": 206.45967242537796
+    },
+    "kindergarten": {
+      "count": 28,
+      "closest_distance_m": 121.8031263284239
+    },
+    "shop": {
+      "count": 95,
+      "closest_distance_m": 157.64348407244947
+    },
+    "parking": {
+      "count": 187,
+      "closest_distance_m": 51.63735652970442
+    },
+    "park_forest": {
+      "count": 54,
+      "closest_distance_m": 116.26086599540008
+    }
+  },
+  "bnab": {
+    "school": {
+      "count": 11,
+      "closest_distance_m": 238.1329540321015
+    },
+    "kindergarten": {
+      "count": 25,
+      "closest_distance_m": 204.59379885189293
+    },
+    "shop": {
+      "count": 61,
+      "closest_distance_m": 309.2863327568142
+    },
+    "parking": {
+      "count": 487,
+      "closest_distance_m": 126.06154244750617
+    },
+    "park_forest": {
+      "count": 73,
+      "closest_distance_m": 315.3401823854104
+    }
+  },
+  "bpark": {
+    "school": {
+      "count": 19,
+      "closest_distance_m": 626.8288069843778
+    },
+    "kindergarten": {
+      "count": 33,
+      "closest_distance_m": 562.4694961265798
+    },
+    "shop": {
+      "count": 100,
+      "closest_distance_m": 37.86709174873464
+    },
+    "parking": {
+      "count": 259,
+      "closest_distance_m": 18.01484078817443
+    },
+    "park_forest": {
+      "count": 135,
+      "closest_distance_m": 270.6911537325355
+    }
+  },
+  "spb/vitpark": {
+    "school": {
+      "count": 22,
+      "closest_distance_m": 728.9284864870654
+    },
+    "kindergarten": {
+      "count": 21,
+      "closest_distance_m": 210.0431302464093
+    },
+    "parking": {
+      "count": 215,
+      "closest_distance_m": 234.06957945744836
+    },
+    "park_forest": {
+      "count": 123,
+      "closest_distance_m": 304.91781309242
+    },
+    "shop": {
+      "count": 106,
+      "closest_distance_m": 180.207934989177
+    }
+  },
+  "yaroslavl/volgapark": {
+    "school": {
+      "count": 6,
+      "closest_distance_m": 614.4558170840256
+    },
+    "kindergarten": {
+      "count": 17,
+      "closest_distance_m": 421.50125304086555
+    },
+    "shop": {
+      "count": 27,
+      "closest_distance_m": 121.09210723444288
+    },
+    "parking": {
+      "count": 55,
+      "closest_distance_m": 75.33769960453625
+    },
+    "park_forest": {
+      "count": 137,
+      "closest_distance_m": 184.13189586374722
+    }
+  },
+  "volp": {
+    "school": {
+      "count": 22,
+      "closest_distance_m": 619.9544641211781
+    },
+    "kindergarten": {
+      "count": 24,
+      "closest_distance_m": 202.05525284775123
+    },
+    "shop": {
+      "count": 101,
+      "closest_distance_m": 58.81502461860451
+    },
+    "parking": {
+      "count": 187,
+      "closest_distance_m": 19.86722293859323
+    },
+    "park_forest": {
+      "count": 72,
+      "closest_distance_m": 87.31412584003203
+    }
+  },
+  "spb/volta": {
+    "school": {
+      "count": 24,
+      "closest_distance_m": 276.2409129963446
+    },
+    "kindergarten": {
+      "count": 36,
+      "closest_distance_m": 445.1059673310561
+    },
+    "shop": {
+      "count": 90,
+      "closest_distance_m": 86.0230275829897
+    },
+    "parking": {
+      "count": 241,
+      "closest_distance_m": 37.418515438258545
+    },
+    "park_forest": {
+      "count": 107,
+      "closest_distance_m": 548.276320185515
+    }
+  },
+  "mkr-vostochnoe-butovo": {
+    "school": {
+      "count": 10,
+      "closest_distance_m": 136.4874864967109
+    },
+    "kindergarten": {
+      "count": 9,
+      "closest_distance_m": 267.6824266208892
+    },
+    "shop": {
+      "count": 31,
+      "closest_distance_m": 230.65165668706598
+    },
+    "parking": {
+      "count": 245,
+      "closest_distance_m": 127.48924149768912
+    },
+    "park_forest": {
+      "count": 35,
+      "closest_distance_m": 324.29448622308206
+    }
+  },
+  "2ngt": {
+    "school": {
+      "count": 19,
+      "closest_distance_m": 479.7548405111229
+    },
+    "kindergarten": {
+      "count": 35,
+      "closest_distance_m": 114.0899186449875
+    },
+    "shop": {
+      "count": 69,
+      "closest_distance_m": 194.9682853550474
+    },
+    "parking": {
+      "count": 193,
+      "closest_distance_m": 61.557780463512486
+    },
+    "park_forest": {
+      "count": 198,
+      "closest_distance_m": 442.71749036854055
+    }
+  },
+  "spb/zpark": {
+    "school": {
+      "count": 12,
+      "closest_distance_m": 671.3138369231458
+    },
+    "kindergarten": {
+      "count": 32,
+      "closest_distance_m": 155.66063197321225
+    },
+    "shop": {
+      "count": 109,
+      "closest_distance_m": 36.34980442453954
+    },
+    "parking": {
+      "count": 363,
+      "closest_distance_m": 26.616743253680152
+    },
+    "park_forest": {
+      "count": 102,
+      "closest_distance_m": 128.13576966493392
+    }
+  },
+  "zelpark": {
+    "school": {
+      "count": 29,
+      "closest_distance_m": 296.0217163745435
+    },
+    "kindergarten": {
+      "count": 26,
+      "closest_distance_m": 316.1629380624033
+    },
+    "shop": {
+      "count": 49,
+      "closest_distance_m": 699.4401540964366
+    },
+    "parking": {
+      "count": 332,
+      "closest_distance_m": 326.5455987139141
+    },
+    "park_forest": {
+      "count": 155,
+      "closest_distance_m": 410.97985604987775
+    }
+  },
+  "blagoveshchensk/zeyapark": {
+    "school": {
+      "count": 3,
+      "closest_distance_m": 1287.1603075581118
+    },
+    "kindergarten": {
+      "count": 14,
+      "closest_distance_m": 570.0967983496073
+    },
+    "shop": {
+      "count": 9,
+      "closest_distance_m": 514.6761004124374
+    },
+    "parking": {
+      "count": 17,
+      "closest_distance_m": 643.1600036770005
+    },
+    "park_forest": {
+      "count": 6,
+      "closest_distance_m": 503.4303893609297
+    }
+  },
+  "il-luga": {
+    "school": {
+      "count": 4,
+      "closest_distance_m": 397.9034188908881
+    },
+    "kindergarten": {
+      "count": 5,
+      "closest_distance_m": 207.77299603184915
+    },
+    "shop": {
+      "count": 24,
+      "closest_distance_m": 107.5924368551828
+    },
+    "parking": {
+      "count": 155,
+      "closest_distance_m": 40.149995736864476
+    },
+    "park_forest": {
+      "count": 62,
+      "closest_distance_m": 294.2472683613126
+    }
+  },
+  "ekb/ip": {
+    "school": {
+      "count": 23,
+      "closest_distance_m": 455.82866985587805
+    },
+    "kindergarten": {
+      "count": 26,
+      "closest_distance_m": 503.45628976717705
+    },
+    "shop": {
+      "count": 92,
+      "closest_distance_m": 29.303891794527757
+    },
+    "parking": {
+      "count": 304,
+      "closest_distance_m": 53.51477065439407
+    },
+    "park_forest": {
+      "count": 140,
+      "closest_distance_m": 111.1181368187937
+    }
+  },
+  "kvb51": {
+    "school": {
+      "count": 23,
+      "closest_distance_m": 812.9924228620373
+    },
+    "kindergarten": {
+      "count": 32,
+      "closest_distance_m": 634.0808046358943
+    },
+    "shop": {
+      "count": 70,
+      "closest_distance_m": 532.8165315613486
+    },
+    "parking": {
+      "count": 206,
+      "closest_distance_m": 57.634999716649844
+    },
+    "park_forest": {
+      "count": 110,
+      "closest_distance_m": 460.20104919250946
+    }
+  },
+  "spb/k11": {
+    "school": {
+      "count": 24,
+      "closest_distance_m": 87.79638535545946
+    },
+    "kindergarten": {
+      "count": 34,
+      "closest_distance_m": 330.7541893440204
+    },
+    "shop": {
+      "count": 102,
+      "closest_distance_m": 113.36427062354466
+    },
+    "parking": {
+      "count": 365,
+      "closest_distance_m": 41.27964449383252
+    },
+    "park_forest": {
+      "count": 200,
+      "closest_distance_m": 163.79639429583804
+    }
+  },
+  "kvartalmit": {
+    "parking": {
+      "count": 197,
+      "closest_distance_m": 249.32900727272275
+    },
+    "park_forest": {
+      "count": 146,
+      "closest_distance_m": 232.4914438746839
+    },
+    "school": {
+      "count": 9,
+      "closest_distance_m": 493.3011541478688
+    },
+    "kindergarten": {
+      "count": 24,
+      "closest_distance_m": 206.2146117498136
+    },
+    "shop": {
+      "count": 58,
+      "closest_distance_m": 221.25059325130704
+    }
+  },
+  "kolskaya8": {
+    "school": {
+      "count": 37,
+      "closest_distance_m": 640.1323240241534
+    },
+    "kindergarten": {
+      "count": 46,
+      "closest_distance_m": 321.31378740625166
+    },
+    "shop": {
+      "count": 135,
+      "closest_distance_m": 125.31522389252278
+    },
+    "parking": {
+      "count": 346,
+      "closest_distance_m": 7.162482274836095
+    },
+    "park_forest": {
+      "count": 346,
+      "closest_distance_m": 177.15724324485134
+    }
+  },
+  "kron9": {
+    "school": {
+      "count": 17,
+      "closest_distance_m": 513.8595545274069
+    },
+    "kindergarten": {
+      "count": 25,
+      "closest_distance_m": 247.6820775591073
+    },
+    "shop": {
+      "count": 104,
+      "closest_distance_m": 116.0907047399327
+    },
+    "parking": {
+      "count": 262,
+      "closest_distance_m": 56.51377875807988
+    },
+    "park_forest": {
+      "count": 203,
+      "closest_distance_m": 291.3724195193848
+    }
+  },
+  "kuzminskyles": {
+    "school": {
+      "count": 10,
+      "closest_distance_m": 343.2564372296616
+    },
+    "kindergarten": {
+      "count": 25,
+      "closest_distance_m": 150.8847762981452
+    },
+    "shop": {
+      "count": 76,
+      "closest_distance_m": 178.54780679511913
+    },
+    "parking": {
+      "count": 236,
+      "closest_distance_m": 43.320945004520986
+    },
+    "park_forest": {
+      "count": 26,
+      "closest_distance_m": 190.4141787341572
+    }
+  },
+  "kutuzovskiy": {
+    "school": {
+      "count": 41,
+      "closest_distance_m": 214.6020673209147
+    },
+    "kindergarten": {
+      "count": 49,
+      "closest_distance_m": 388.7725291329299
+    },
+    "shop": {
+      "count": 118,
+      "closest_distance_m": 287.38769567019904
+    },
+    "parking": {
+      "count": 308,
+      "closest_distance_m": 96.772010580648
+    },
+    "park_forest": {
+      "count": 117,
+      "closest_distance_m": 300.8216651913481
+    }
+  },
+  "spb/lermontovskiy": {
+    "school": {
+      "count": 51,
+      "closest_distance_m": 201.29703568901263
+    },
+    "kindergarten": {
+      "count": 65,
+      "closest_distance_m": 262.69561273890923
+    },
+    "parking": {
+      "count": 220,
+      "closest_distance_m": 57.419496897197824
+    },
+    "shop": {
+      "count": 185,
+      "closest_distance_m": 285.4868737008668
+    },
+    "park_forest": {
+      "count": 258,
+      "closest_distance_m": 142.6244793057817
+    }
+  },
+  "lospark": {
+    "school": {
+      "count": 20,
+      "closest_distance_m": 465.3114529317746
+    },
+    "kindergarten": {
+      "count": 30,
+      "closest_distance_m": 96.9971520017169
+    },
+    "shop": {
+      "count": 78,
+      "closest_distance_m": 76.96052670513166
+    },
+    "parking": {
+      "count": 218,
+      "closest_distance_m": 151.6124674548599
+    },
+    "park_forest": {
+      "count": 137,
+      "closest_distance_m": 341.0038152533018
+    }
+  },
+  "lublinpark": {
+    "school": {
+      "count": 41,
+      "closest_distance_m": 318.4721084032307
+    },
+    "kindergarten": {
+      "count": 57,
+      "closest_distance_m": 192.9242323236663
+    },
+    "shop": {
+      "count": 142,
+      "closest_distance_m": 62.70455753155923
+    },
+    "parking": {
+      "count": 418,
+      "closest_distance_m": 20.486219778357142
+    },
+    "park_forest": {
+      "count": 144,
+      "closest_distance_m": 36.55668584572469
+    }
+  },
+  "mtvpark": {
+    "school": {
+      "count": 10,
+      "closest_distance_m": 219.67271912941632
+    },
+    "kindergarten": {
+      "count": 18,
+      "closest_distance_m": 120.06537470555331
+    },
+    "parking": {
+      "count": 397,
+      "closest_distance_m": 22.70977474827559
+    },
+    "park_forest": {
+      "count": 370,
+      "closest_distance_m": 107.90909981077462
+    },
+    "shop": {
+      "count": 50,
+      "closest_distance_m": 246.3939897293824
+    }
+  },
+  "kazan/matyushino": {
+    "school": {
+      "count": 2,
+      "closest_distance_m": 1443.5341868069536
+    },
+    "kindergarten": {
+      "count": 4,
+      "closest_distance_m": 484.52806989916735
+    },
+    "shop": {
+      "count": 14,
+      "closest_distance_m": 486.24929012374224
+    },
+    "parking": {
+      "count": 60,
+      "closest_distance_m": 193.89663989932959
+    },
+    "park_forest": {
+      "count": 38,
+      "closest_distance_m": 506.7589769753458
+    }
+  },
+  "mles": {
+    "school": {
+      "count": 15,
+      "closest_distance_m": 302.7407666191499
+    },
+    "kindergarten": {
+      "count": 36,
+      "closest_distance_m": 579.9811709424814
+    },
+    "shop": {
+      "count": 94,
+      "closest_distance_m": 13.188298514112454
+    },
+    "parking": {
+      "count": 256,
+      "closest_distance_m": 80.98073209795767
+    },
+    "park_forest": {
+      "count": 163,
+      "closest_distance_m": 78.28549863410994
+    }
+  },
+  "mpark": {
+    "school": {
+      "count": 13,
+      "closest_distance_m": 394.51969400539
+    },
+    "kindergarten": {
+      "count": 17,
+      "closest_distance_m": 714.8169903747056
+    },
+    "shop": {
+      "count": 60,
+      "closest_distance_m": 11.362430428822142
+    },
+    "parking": {
+      "count": 498,
+      "closest_distance_m": 18.730255514945462
+    },
+    "park_forest": {
+      "count": 224,
+      "closest_distance_m": 233.049116402355
+    }
+  },
+  "moskvorechye": {
+    "kindergarten": {
+      "count": 32,
+      "closest_distance_m": 775.3606667374714
+    },
+    "shop": {
+      "count": 75,
+      "closest_distance_m": 694.7654980945596
+    },
+    "parking": {
+      "count": 172,
+      "closest_distance_m": 196.04083760493256
+    },
+    "park_forest": {
+      "count": 131,
+      "closest_distance_m": 313.9716924029932
+    },
+    "school": {
+      "count": 27,
+      "closest_distance_m": 752.3589088487682
+    }
+  },
+  "myakinino": {
+    "school": {
+      "count": 9,
+      "closest_distance_m": 265.6175101768547
+    },
+    "kindergarten": {
+      "count": 25,
+      "closest_distance_m": 144.34262551563967
+    },
+    "parking": {
+      "count": 174,
+      "closest_distance_m": 64.77224407874704
+    },
+    "park_forest": {
+      "count": 153,
+      "closest_distance_m": 239.6848863740902
+    },
+    "shop": {
+      "count": 66,
+      "closest_distance_m": 867.9006820966662
+    }
+  },
+  "narvin": {
+    "school": {
+      "count": 24,
+      "closest_distance_m": 272.4906106937214
+    },
+    "kindergarten": {
+      "count": 28,
+      "closest_distance_m": 186.02264908062273
+    },
+    "shop": {
+      "count": 118,
+      "closest_distance_m": 362.70751631641633
+    },
+    "parking": {
+      "count": 278,
+      "closest_distance_m": 131.6876508699139
+    },
+    "park_forest": {
+      "count": 134,
+      "closest_distance_m": 190.3609010220058
+    }
+  },
+  "nluga": {
+    "school": {
+      "count": 12,
+      "closest_distance_m": 300.55102141699336
+    },
+    "kindergarten": {
+      "count": 14,
+      "closest_distance_m": 414.4177785496102
+    },
+    "shop": {
+      "count": 49,
+      "closest_distance_m": 451.30665753168716
+    },
+    "parking": {
+      "count": 294,
+      "closest_distance_m": 217.3457858789357
+    },
+    "park_forest": {
+      "count": 32,
+      "closest_distance_m": 361.23290875365
+    }
+  },
+  "ochakovo": {
+    "school": {
+      "count": 14,
+      "closest_distance_m": 545.9505953825603
+    },
+    "kindergarten": {
+      "count": 15,
+      "closest_distance_m": 388.71894259493246
+    },
+    "shop": {
+      "count": 46,
+      "closest_distance_m": 257.2296071716079
+    },
+    "parking": {
+      "count": 330,
+      "closest_distance_m": 279.1445042946745
+    },
+    "park_forest": {
+      "count": 310,
+      "closest_distance_m": 443.34288623780066
+    }
+  },
+  "raion-novokurkino": {
+    "school": {
+      "count": 18,
+      "closest_distance_m": 201.02461001768782
+    },
+    "kindergarten": {
+      "count": 43,
+      "closest_distance_m": 258.23242581434755
+    },
+    "shop": {
+      "count": 110,
+      "closest_distance_m": 47.87934519080167
+    },
+    "parking": {
+      "count": 276,
+      "closest_distance_m": 28.724662551163725
+    },
+    "park_forest": {
+      "count": 127,
+      "closest_distance_m": 313.7058601884465
+    }
+  },
+  "kazan/noksapark": {
+    "school": {
+      "count": 6,
+      "closest_distance_m": 348.8806656339954
+    },
+    "kindergarten": {
+      "count": 18,
+      "closest_distance_m": 184.75820987690173
+    },
+    "shop": {
+      "count": 67,
+      "closest_distance_m": 266.83322351886113
+    },
+    "parking": {
+      "count": 166,
+      "closest_distance_m": 56.74971511185248
+    },
+    "park_forest": {
+      "count": 56,
+      "closest_distance_m": 237.28498061703974
+    }
+  },
+  "onezhskiy": {
+    "school": {
+      "count": 29,
+      "closest_distance_m": 651.9244175321721
+    },
+    "kindergarten": {
+      "count": 31,
+      "closest_distance_m": 390.9805825863705
+    },
+    "shop": {
+      "count": 121,
+      "closest_distance_m": 110.31873328117561
+    },
+    "parking": {
+      "count": 301,
+      "closest_distance_m": 179.18924847545802
+    },
+    "park_forest": {
+      "count": 96,
+      "closest_distance_m": 618.2812345536283
+    }
+  },
+  "1dubr": {
+    "school": {
+      "count": 27,
+      "closest_distance_m": 435.2706531046772
+    },
+    "kindergarten": {
+      "count": 35,
+      "closest_distance_m": 500.8584371986934
+    },
+    "shop": {
+      "count": 123,
+      "closest_distance_m": 298.91466857414986
+    },
+    "park_forest": {
+      "count": 68,
+      "closest_distance_m": 583.7645268409378
+    },
+    "parking": {
+      "count": 203,
+      "closest_distance_m": 107.03813971231594
+    }
+  },
+  "plehanova11": {
+    "school": {
+      "count": 23,
+      "closest_distance_m": 746.6645305356857
+    },
+    "kindergarten": {
+      "count": 32,
+      "closest_distance_m": 710.4105794782749
+    },
+    "parking": {
+      "count": 158,
+      "closest_distance_m": 71.58573671883764
+    },
+    "park_forest": {
+      "count": 97,
+      "closest_distance_m": 37.188225896102374
+    },
+    "shop": {
+      "count": 111,
+      "closest_distance_m": 516.6793101876805
+    }
+  },
+  "plr": {
+    "school": {
+      "count": 27,
+      "closest_distance_m": 407.4336245469294
+    },
+    "kindergarten": {
+      "count": 39,
+      "closest_distance_m": 293.8507630647766
+    },
+    "shop": {
+      "count": 80,
+      "closest_distance_m": 169.13354898989252
+    },
+    "parking": {
+      "count": 165,
+      "closest_distance_m": 106.21884616886582
+    },
+    "park_forest": {
+      "count": 94,
+      "closest_distance_m": 297.3815894815987
+    }
+  },
+  "rustaveli": {
+    "school": {
+      "count": 26,
+      "closest_distance_m": 426.3341726122701
+    },
+    "kindergarten": {
+      "count": 33,
+      "closest_distance_m": 401.59323427709904
+    },
+    "shop": {
+      "count": 130,
+      "closest_distance_m": 214.665169031756
+    },
+    "parking": {
+      "count": 706,
+      "closest_distance_m": 23.985698053349473
+    },
+    "park_forest": {
+      "count": 340,
+      "closest_distance_m": 435.0222884996494
+    }
+  },
+  "nn/savinp": {
+    "school": {
+      "count": 1,
+      "closest_distance_m": 1722.324658140986
+    },
+    "kindergarten": {
+      "count": 3,
+      "closest_distance_m": 1159.5213135047304
+    },
+    "shop": {
+      "count": 9,
+      "closest_distance_m": 1220.677752254441
+    },
+    "parking": {
+      "count": 49,
+      "closest_distance_m": 81.59951168054212
+    },
+    "park_forest": {
+      "count": 154,
+      "closest_distance_m": 127.9165735749362
+    }
+  },
+  "sp": {
+    "school": {
+      "count": 5,
+      "closest_distance_m": 467.0098292858725
+    },
+    "kindergarten": {
+      "count": 10,
+      "closest_distance_m": 105.36442827286143
+    },
+    "shop": {
+      "count": 11,
+      "closest_distance_m": 114.4536692115698
+    },
+    "parking": {
+      "count": 298,
+      "closest_distance_m": 55.87002569917221
+    },
+    "park_forest": {
+      "count": 30,
+      "closest_distance_m": 521.1583595342936
+    }
+  },
+  "khabarovsk/sevpark": {
+    "school": {
+      "count": 4,
+      "closest_distance_m": 1647.7312906271443
+    },
+    "kindergarten": {
+      "count": 4,
+      "closest_distance_m": 1392.5148176981813
+    },
+    "shop": {
+      "count": 18,
+      "closest_distance_m": 309.55184286333514
+    },
+    "parking": {
+      "count": 76,
+      "closest_distance_m": 378.4251231788771
+    },
+    "park_forest": {
+      "count": 57,
+      "closest_distance_m": 395.75471643373754
+    }
+  },
+  "sles": {
+    "school": {
+      "count": 2,
+      "closest_distance_m": 302.7776132813888
+    },
+    "kindergarten": {
+      "count": 2,
+      "closest_distance_m": 501.0433849872934
+    },
+    "shop": {
+      "count": 11,
+      "closest_distance_m": 84.23311639421503
+    },
+    "parking": {
+      "count": 147,
+      "closest_distance_m": 70.57424258768626
+    },
+    "park_forest": {
+      "count": 27,
+      "closest_distance_m": 508.67858352269104
+    }
+  },
+  "kazan/siberovo": {
+    "school": {
+      "count": 13,
+      "closest_distance_m": 410.76652013830306
+    },
+    "kindergarten": {
+      "count": 18,
+      "closest_distance_m": 653.5029610422181
+    },
+    "shop": {
+      "count": 67,
+      "closest_distance_m": 183.85374499008708
+    },
+    "parking": {
+      "count": 106,
+      "closest_distance_m": 308.512819103132
+    },
+    "park_forest": {
+      "count": 66,
+      "closest_distance_m": 504.1401015720112
+    }
+  },
+  "s16": {
+    "school": {
+      "count": 30,
+      "closest_distance_m": 843.6273308339632
+    },
+    "kindergarten": {
+      "count": 34,
+      "closest_distance_m": 682.5908915535158
+    },
+    "shop": {
+      "count": 87,
+      "closest_distance_m": 298.02703993722804
+    },
+    "parking": {
+      "count": 221,
+      "closest_distance_m": 87.53283362856799
+    },
+    "park_forest": {
+      "count": 426,
+      "closest_distance_m": 319.09159252650693
+    }
+  },
+  "vladivostok/snezhnyipark": {
+    "school": {
+      "count": 2,
+      "closest_distance_m": 726.9615945463144
+    },
+    "kindergarten": {
+      "count": 5,
+      "closest_distance_m": 650.6564248910292
+    },
+    "shop": {
+      "count": 31,
+      "closest_distance_m": 99.50694827289053
+    },
+    "parking": {
+      "count": 481,
+      "closest_distance_m": 153.95693887245605
+    },
+    "park_forest": {
+      "count": 189,
+      "closest_distance_m": 353.9611839944153
+    }
+  },
+  "strogino-360": {
+    "school": {
+      "count": 14,
+      "closest_distance_m": 505.90856932941165
+    },
+    "kindergarten": {
+      "count": 18,
+      "closest_distance_m": 596.9864640420748
+    },
+    "shop": {
+      "count": 33,
+      "closest_distance_m": 236.97232223227613
+    },
+    "parking": {
+      "count": 109,
+      "closest_distance_m": 194.66962737051935
+    },
+    "park_forest": {
+      "count": 65,
+      "closest_distance_m": 170.80212763217637
+    }
+  },
+  "spb/tallinskiypark": {
+    "school": {
+      "count": 3,
+      "closest_distance_m": 400.95513528127486
+    },
+    "kindergarten": {
+      "count": 6,
+      "closest_distance_m": 361.9093538737473
+    },
+    "shop": {
+      "count": 33,
+      "closest_distance_m": 21.125192924729344
+    },
+    "parking": {
+      "count": 261,
+      "closest_distance_m": 91.43832148252089
+    },
+    "park_forest": {
+      "count": 80,
+      "closest_distance_m": 856.8801365938315
+    }
+  },
+  "kazan/taular": {
+    "school": {
+      "count": 15,
+      "closest_distance_m": 384.174229506622
+    },
+    "kindergarten": {
+      "count": 21,
+      "closest_distance_m": 250.34382863487218
+    },
+    "shop": {
+      "count": 73,
+      "closest_distance_m": 251.4839579927051
+    },
+    "parking": {
+      "count": 154,
+      "closest_distance_m": 192.67693105852192
+    },
+    "park_forest": {
+      "count": 46,
+      "closest_distance_m": 94.83116219341704
+    }
+  },
+  "tbulvar": {
+    "school": {
+      "count": 12,
+      "closest_distance_m": 149.28269481645432
+    },
+    "kindergarten": {
+      "count": 26,
+      "closest_distance_m": 314.2850885416512
+    },
+    "shop": {
+      "count": 85,
+      "closest_distance_m": 88.43617163963344
+    },
+    "parking": {
+      "count": 244,
+      "closest_distance_m": 142.97466626763284
+    },
+    "park_forest": {
+      "count": 29,
+      "closest_distance_m": 98.77799692689092
+    }
+  },
+  "ulan-ude/ulaankhoto": {
+    "kindergarten": {
+      "count": 16,
+      "closest_distance_m": 236.17309099185704
+    },
+    "shop": {
+      "count": 25,
+      "closest_distance_m": 32.98656645243586
+    },
+    "parking": {
+      "count": 138,
+      "closest_distance_m": 64.71616653752412
+    },
+    "park_forest": {
+      "count": 34,
+      "closest_distance_m": 453.58090314969695
+    },
+    "school": {
+      "count": 15,
+      "closest_distance_m": 110.64855377918893
+    }
+  },
+  "ekb/utes": {
+    "school": {
+      "count": 12,
+      "closest_distance_m": 280.1172610170821
+    },
+    "kindergarten": {
+      "count": 10,
+      "closest_distance_m": 514.20584290897
+    },
+    "shop": {
+      "count": 56,
+      "closest_distance_m": 315.2304349198885
+    },
+    "parking": {
+      "count": 173,
+      "closest_distance_m": 57.24923131335873
+    },
+    "park_forest": {
+      "count": 91,
+      "closest_distance_m": 164.1686401737163
+    }
+  },
+  "yuzhno-sakhalinsk/yunpark": {
+    "school": {
+      "count": 0,
+      "closest_distance_m": null
+    },
+    "kindergarten": {
+      "count": 3,
+      "closest_distance_m": 530.983068583513
+    },
+    "shop": {
+      "count": 18,
+      "closest_distance_m": 421.8762168234561
+    },
+    "parking": {
+      "count": 19,
+      "closest_distance_m": 47.52424004235349
+    },
+    "park_forest": {
+      "count": 13,
+      "closest_distance_m": 639.2773593033351
+    }
+  },
+  "spb/shkiperskiy": {
+    "school": {
+      "count": 35,
+      "closest_distance_m": 307.42693649725214
+    },
+    "kindergarten": {
+      "count": 37,
+      "closest_distance_m": 237.12238409669342
+    },
+    "shop": {
+      "count": 93,
+      "closest_distance_m": 265.788761971684
+    },
+    "parking": {
+      "count": 292,
+      "closest_distance_m": 92.64933116088119
+    },
+    "park_forest": {
+      "count": 332,
+      "closest_distance_m": 286.7325700767049
+    }
+  },
+  "yunino": {
+    "school": {
+      "count": 17,
+      "closest_distance_m": 383.7785528648526
+    },
+    "kindergarten": {
+      "count": 19,
+      "closest_distance_m": 319.9176710613853
+    },
+    "shop": {
+      "count": 63,
+      "closest_distance_m": 169.47238265854605
+    },
+    "parking": {
+      "count": 330,
+      "closest_distance_m": 24.85220792554793
+    },
+    "park_forest": {
+      "count": 34,
+      "closest_distance_m": 299.10839277456176
+    }
+  },
+  "ytnv": {
+    "school": {
+      "count": 21,
+      "closest_distance_m": 748.4162613825671
+    },
+    "kindergarten": {
+      "count": 25,
+      "closest_distance_m": 510.6286886774072
+    },
+    "shop": {
+      "count": 63,
+      "closest_distance_m": 131.84078118609247
+    },
+    "parking": {
+      "count": 243,
+      "closest_distance_m": 173.5931295616582
+    },
+    "park_forest": {
+      "count": 90,
+      "closest_distance_m": 240.4672492726048
+    }
+  },
+  "spb/yanles": {
+    "school": {
+      "count": 3,
+      "closest_distance_m": 759.042275876476
+    },
+    "kindergarten": {
+      "count": 8,
+      "closest_distance_m": 600.2818337951516
+    },
+    "shop": {
+      "count": 31,
+      "closest_distance_m": 111.87836792000046
+    },
+    "parking": {
+      "count": 310,
+      "closest_distance_m": 23.79340872163335
+    },
+    "park_forest": {
+      "count": 36,
+      "closest_distance_m": 63.98923705132679
+    }
+  },
+  "zhiloi-raion-yaroslavskii": {
+    "school": {
+      "count": 24,
+      "closest_distance_m": 386.6676999668249
+    },
+    "shop": {
+      "count": 98,
+      "closest_distance_m": 148.12656124736426
+    },
+    "parking": {
+      "count": 265,
+      "closest_distance_m": 100.58772244655962
+    },
+    "park_forest": {
+      "count": 102,
+      "closest_distance_m": 220.63524175240963
+    },
+    "kindergarten": {
+      "count": 45,
+      "closest_distance_m": 183.0532222964209
+    }
+  },
+  "kvartal-yaroslavskii": {
+    "school": {
+      "count": 6,
+      "closest_distance_m": 701.311489111807
+    },
+    "kindergarten": {
+      "count": 15,
+      "closest_distance_m": 814.3664482491598
+    },
+    "shop": {
+      "count": 52,
+      "closest_distance_m": 473.2914392243143
+    },
+    "parking": {
+      "count": 134,
+      "closest_distance_m": 284.2289274539313
+    },
+    "park_forest": {
+      "count": 55,
+      "closest_distance_m": 633.7989545353506
+    }
+  },
+  "yauza": {
+    "school": {
+      "count": 12,
+      "closest_distance_m": 592.226288927239
+    },
+    "kindergarten": {
+      "count": 27,
+      "closest_distance_m": 503.7342054804495
+    },
+    "shop": {
+      "count": 67,
+      "closest_distance_m": 230.95952765911895
+    },
+    "parking": {
+      "count": 158,
+      "closest_distance_m": 219.36578094292275
+    },
+    "park_forest": {
+      "count": 97,
+      "closest_distance_m": 832.6685462963247
+    }
+  }
 }

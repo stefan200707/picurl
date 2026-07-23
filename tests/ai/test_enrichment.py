@@ -2,7 +2,9 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
+from app.ai.client import CircuitOpenError
 from app.ai.enrichment import (
+    _describe_unmet_ai_requirements,
     enrich,
     merge_enrichment,
     resolve_options,
@@ -251,16 +253,21 @@ async def test_enrich_gate1_allows_when_center_requested(mock_build, mock_log, m
 @patch("app.ai.enrichment.log_ai_call", new_callable=AsyncMock)
 @patch("app.ai.enrichment.call_option_resolver")
 @patch("app.ai.enrichment.build_candidate_shortlist", return_value=[])
-async def test_enrich_gate1_allows_when_only_option_candidates_present(
+async def test_enrich_gate1_blocks_option_only_request(
     mock_build, mock_resolver, mock_log, mock_settings
 ):
-    """Непустые option_candidates тоже приоткрывают гейт 1 (промпт 25): даже без
-    poi/center основной ИИ-путь (шорт-лист) не короткозамыкается раньше срока —
-    условие гейта обязано учитывать все три признака «есть что обогащать»."""
+    """Option-only запрос НЕ идёт в шорт-лист (Milestone AI-21).
+
+    resolve_options() отрабатывает ДО гейта (проверяем вызов резолвера), но
+    дальше в ИИ-пути опциям делать нечего: прежнее «option_candidates
+    приоткрывают гейт» приводило к vacuous truth в resolve_known_facts — при
+    пустых семантических требованиях совпавшими объявлялись ВСЕ кандидаты, и
+    включённый гейт 2 выливал весь шорт-лист в blocks (живой баг «в районе
+    Троицкой ветки» → 50 случайных ЖК в ссылке)."""
     mock_resolver.return_value = OptionResolutionAnswer(matches=[])
     criteria = Criteria()
 
-    await enrich(
+    result = await enrich(
         "квартира с отдельным санузлом",
         criteria,
         [],
@@ -268,7 +275,9 @@ async def test_enrich_gate1_allows_when_only_option_candidates_present(
         option_candidates=["отдельным санузлом"],
     )
 
-    mock_build.assert_called_once()
+    mock_resolver.assert_called_once()
+    mock_build.assert_not_called()
+    assert result.matched_complex_ids == []
 
 
 @pytest.mark.asyncio
@@ -396,10 +405,109 @@ async def test_enrich_api_error(mock_build, mock_lookup, mock_call, mock_setting
     assert result.ai_used is False
     assert result.ai_failed is True
     assert result.success is False
-    assert "не удалось обработать ИИ-обогащение (ошибка сервиса)" in warnings
+    # Предметная деградация (часть C): warning называет, ЧТО именно не
+    # применилось (фраза из poi_requirements), а не обезличенное «ошибка
+    # сервиса» — раньше эти два случая были неотличимы для пользователя.
+    assert any("«школа»" in w and "ИИ-слой недоступен" in w for w in warnings)
     # AIMeta (то, что реально уходит в ответ API) прокидывает оба поля.
     assert result.meta.ai_used is False
     assert result.meta.ai_failed is True
+
+
+@pytest.mark.asyncio
+@patch("app.ai.enrichment.log_ai_call", new_callable=AsyncMock)
+@patch("app.ai.enrichment.call_model")
+@patch("app.ai.enrichment.lookup_semantic", return_value=None)
+@patch("app.ai.enrichment.build_candidate_shortlist")
+async def test_enrich_circuit_breaker_open_gives_distinct_warning(
+    mock_build, mock_lookup, mock_call, mock_log, mock_settings
+):
+    """Открытый circuit breaker — деградация иным текстом, чем обычная ошибка
+    сервиса: пользователю нужно отличать «сервис временно недоступен, попробуй
+    позже» от «однократный сбой» (часть C требования)."""
+    mock_call.side_effect = CircuitOpenError("cooldown")
+    mock_build.return_value = [
+        ComplexCandidate(
+            id="1", name="ЖК", district=None, county=None, metro=[], is_center=None, known_poi={}
+        )
+    ]
+    criteria = Criteria(
+        poi_requirements=[POIRequirement(category=POICategory.SCHOOL, raw_phrase="школа")]
+    )
+    warnings = []
+
+    result = await enrich("хочу со школой", criteria, warnings, pool=None)
+
+    assert result.ai_used is False
+    assert result.ai_failed is True
+    assert result.success is False
+    degraded = [w for w in warnings if "«школа»" in w]
+    assert degraded, warnings
+    assert "временно" in degraded[0]
+    # Отличается от текста обычной ошибки сервиса — не просто «ошибка».
+    assert "ошибка сервиса" not in degraded[0]
+
+
+def test_describe_unmet_ai_requirements_single_poi():
+    criteria = Criteria(
+        poi_requirements=[POIRequirement(category=POICategory.SCHOOL, raw_phrase="школа рядом")]
+    )
+    assert _describe_unmet_ai_requirements(criteria) == "«школа рядом»"
+
+
+def test_describe_unmet_ai_requirements_includes_only_new_and_distance():
+    criteria = Criteria(
+        poi_requirements=[
+            POIRequirement(
+                category=POICategory.KINDERGARTEN,
+                raw_phrase="новые сады",
+                only_new=True,
+                max_distance_m=300,
+            )
+        ]
+    )
+    description = _describe_unmet_ai_requirements(criteria)
+    assert "«новые сады»" in description
+    assert "только новые" in description
+    assert "не дальше 300 м" in description
+
+
+def test_describe_unmet_ai_requirements_multiple_poi_and_center():
+    criteria = Criteria(
+        poi_requirements=[
+            POIRequirement(category=POICategory.SCHOOL, raw_phrase="школа"),
+            POIRequirement(category=POICategory.PARK_FOREST, raw_phrase="парк"),
+        ],
+        center_requested=True,
+    )
+    description = _describe_unmet_ai_requirements(criteria)
+    assert "«школа»" in description
+    assert "«парк»" in description
+    assert "«в центре»" in description
+
+
+def test_describe_unmet_ai_requirements_center_only():
+    criteria = Criteria(center_requested=True)
+    assert _describe_unmet_ai_requirements(criteria) == "«в центре»"
+
+
+@pytest.mark.asyncio
+@patch("app.ai.enrichment.build_candidate_shortlist", return_value=[])
+@patch("app.ai.enrichment.call_option_resolver")
+async def test_resolve_options_circuit_open_keeps_warning(
+    mock_resolver, _mock_build, mock_settings
+):
+    """Открытый circuit breaker в резолвинге опций деградирует так же мягко,
+    как любая другая ошибка модели — фраза остаётся в warnings, ничего не
+    выдумывается и процесс не падает."""
+    mock_resolver.side_effect = CircuitOpenError("cooldown")
+    criteria = Criteria()
+    warnings = ["«отдельным санузлом»: не удалось распознать, не попало в ссылку"]
+
+    await resolve_options(criteria, ["отдельным санузлом"], warnings, None)
+
+    assert criteria.option_groups == []
+    assert any("отдельным санузлом" in w for w in warnings)
 
 
 @pytest.mark.asyncio
@@ -655,11 +763,16 @@ async def test_enrich_landmark_warns_when_nothing_nearby(mock_build, mock_log, m
 @patch("app.ai.enrichment.call_model")
 @patch("app.ai.enrichment.lookup_semantic", return_value=None)
 @patch("app.ai.enrichment.build_candidate_shortlist")
-async def test_enrich_landmark_combined_with_poi_still_uses_ai_path(
+async def test_enrich_landmark_combined_with_poi_resolves_deterministically(
     mock_build, mock_lookup, mock_call, mock_log, mock_settings
 ):
-    """Landmark + POI вместе — короткого замыкания нет (POI всё ещё требует
-    ИИ), но кандидаты для ИИ уже учитывают расстояние до ориентира."""
+    """Landmark + POI с ИЗВЕСТНЫМИ фактами кэша — гейт 2 (Milestone AI-20)
+    решает детерминированно, ИИ не зовётся.
+
+    До включения гейта 2 тест закреплял обратное («POI всё ещё требует ИИ») —
+    это было следствием пустого poi_cache.json, а не архитектурным правилом:
+    теперь POI-факт known_poi[school]=True у всех кандидатов + дистанция до
+    ориентира — чистая математика."""
     mock_build.return_value = [
         ComplexCandidate(
             id="1",
@@ -687,8 +800,10 @@ async def test_enrich_landmark_combined_with_poi_still_uses_ai_path(
 
     result = await enrich("рядом с мгу со школой", criteria, [])
 
-    mock_call.assert_called_once()
-    assert result.ai_used is True
+    mock_call.assert_not_called()
+    assert result.ai_used is False
+    assert result.success is True
+    assert result.matched_complex_ids == ["1"]
 
 
 @pytest.mark.asyncio
@@ -934,3 +1049,72 @@ async def test_enrich_station_class_falls_back_to_nearest_when_default_radius_em
     assert result.matched_complex_ids == ["1"]
     assert any("показаны ближайшие" in w for w in warnings)
     mock_fallback.assert_called_once()
+
+
+# --- Гейт 2 (Milestone AI-20): детерминированное решение вместо ИИ -----------
+#
+# Включён по прецеденту гейта 1 (Milestone AI-14): формальный численный
+# критерий раздела 8.4 (fully_resolved ≥ 90% над N ≥ 500) был НЕДОСТИЖИМ в
+# принципе — poi_cache.json стоял пустым, и fully_resolved физически не мог
+# стать True (самозамыкающаяся петля: гейт ждал статистику, которая не могла
+# набраться). После полного сбора кэша (69 ЖК × 5 категорий) и живого
+# 429-инцидента (общая OAuth-квота) гейт включён по эксплуатационному сигналу.
+
+
+@pytest.mark.asyncio
+@patch("app.ai.enrichment.log_ai_call", new_callable=AsyncMock)
+@patch("app.ai.enrichment.call_model")
+async def test_enrich_gate2_skips_ai_when_fully_resolved(mock_model, mock_log, mock_settings):
+    """POI-факты известны у всех кандидатов → ИИ не вызывается вовсе."""
+    from app.ai.schema import ComplexCandidate
+
+    cand = ComplexCandidate(
+        id="c1",
+        name="ЖК с садиком",
+        district=None,
+        county=None,
+        metro=[],
+        is_center=None,
+        known_poi={"kindergarten": True},
+        poi_distances={"kindergarten": 400.0},
+    )
+    criteria = Criteria(
+        poi_requirements=[POIRequirement(category=POICategory.KINDERGARTEN, raw_phrase="садик")]
+    )
+    with patch("app.ai.enrichment.build_candidate_shortlist", return_value=[cand]):
+        result = await enrich("двушка с садиком", criteria, [], pool=None)
+
+    mock_model.assert_not_called()
+    assert result.ai_used is False
+    assert result.success is True
+    assert result.matched_complex_ids == ["c1"]
+
+
+@pytest.mark.asyncio
+@patch("app.ai.enrichment.log_ai_call", new_callable=AsyncMock)
+@patch("app.ai.enrichment.call_model", side_effect=ValueError("ответ модели не разобран"))
+async def test_enrich_gate2_only_new_still_goes_to_ai(mock_model, mock_log, mock_settings):
+    """only_new кэш не различает → факт не подтверждён, дорога в ИИ открыта."""
+    from app.ai.schema import ComplexCandidate
+
+    cand = ComplexCandidate(
+        id="c1",
+        name="ЖК с садиком",
+        district=None,
+        county=None,
+        metro=[],
+        is_center=None,
+        known_poi={"kindergarten": True},
+        poi_distances={"kindergarten": 400.0},
+    )
+    criteria = Criteria(
+        poi_requirements=[
+            POIRequirement(category=POICategory.KINDERGARTEN, raw_phrase="садик", only_new=True)
+        ]
+    )
+    with patch("app.ai.enrichment.build_candidate_shortlist", return_value=[cand]):
+        result = await enrich("двушка с новым садиком", criteria, [], pool=None)
+
+    # ИИ-путь был выбран (и упал на нашей заглушке) — гейт 2 его не перекрыл.
+    mock_model.assert_called_once()
+    assert result.ai_failed is True

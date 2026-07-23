@@ -199,3 +199,87 @@ class TestShortEntityFalsePositives:
         matches, _warnings = match_entities(text)
         names = {m.entity.name for m in matches}
         assert "САО" in names
+
+
+class TestProximityMarkerTriggerCoverage:
+    """Единый источник маркеров близости (Milestone AI-20, Фикс 1).
+
+    Раньше TRIGGERS в entity_match знал только «у метро»/«на метро»/«рядом с
+    метро»/«м.»/«м» — в отличие от rules/landmark.py, где список форм маркера
+    был полным. «недалеко от метро», «около метро» и т.п. триггер метро не
+    давали вовсе.
+    """
+
+    @pytest.mark.parametrize(
+        "prefix",
+        [
+            "квартира у метро ",
+            "квартира на метро ",
+            "квартира рядом с метро ",
+            "квартира недалеко от метро ",
+            "квартира неподалеку от метро ",
+            "квартира неподалёку от метро ",
+            "квартира около метро ",
+            "квартира возле метро ",
+            "квартира вблизи метро ",
+        ],
+    )
+    def test_get_trigger_type_recognizes_all_proximity_markers(self, prefix: str):
+        from app.parsing.entity_match import get_trigger_type
+
+        ttype, _start = get_trigger_type(prefix)
+        assert ttype == "metro"
+
+
+class TestProximityMarkerSpanAbsorption:
+    """Спан сущности поглощает прилегающий маркер близости независимо от типа
+    найденной сущности (Milestone AI-20, Фикс 3).
+
+    Раньше поглощение маркера в consumed span было завязано на
+    ``get_trigger_type`` (типоспецифичные TRIGGERS) — фразы вроде «недалеко от
+    метро X» матчили саму сущность X, но маркер «недалеко от» оставался
+    непонятым текстом и уходил в warnings.
+    """
+
+    def test_metro_marker_absorbed_into_entity_span(self):
+        text = "квартира недалеко от метро Сокол"
+        matches, _warnings = match_entities(text)
+        assert len(matches) == 1
+        start, end = matches[0].span
+        assert text[start:end] == "недалеко от метро Сокол"
+
+    def test_latin_homoglyph_metro_marker_absorbed_into_entity_span(self):
+        """Гомоглиф латинской 'e' в «метро» не мешает поглощению маркера
+        (Фикс 2 + Фикс 3 совместно)."""
+        latin_e = "e"
+        text = f"квартира у м{latin_e}тро Сокол"
+        matches, _warnings = match_entities(text)
+        assert len(matches) == 1
+        assert matches[0].entity.name == "Сокол"
+        start, end = matches[0].span
+        assert text[start:end] == f"у м{latin_e}тро Сокол"
+
+
+class TestSameNameDifferentTypeDisambiguation:
+    """«Коммунарка» существует и как метро, и как район (Milestone AI-20,
+    Фикс 5). Раньше ambiguity-warning был завязан на РАЗНОЕ ``entry.name`` —
+    для одноимённых сущностей разных типов проверка не срабатывала, и обе
+    молча добавлялись в результат разом.
+    """
+
+    def test_metro_trigger_resolves_to_metro_only(self):
+        matches, warnings = match_entities("квартира у метро Коммунарка")
+        assert len(matches) == 1
+        assert matches[0].type == "metro"
+        assert not warnings
+
+    def test_district_trigger_resolves_to_district_only(self):
+        matches, warnings = match_entities("квартира в районе Коммунарка")
+        assert len(matches) == 1
+        assert matches[0].type == "district"
+        assert not warnings
+
+    def test_no_trigger_gives_explicit_ambiguity_warning_not_both(self):
+        matches, warnings = match_entities("квартира в Коммунарке")
+        assert len(matches) == 1
+        assert any("Коммунарка" in w and "Неоднозначность" in w for w in warnings)

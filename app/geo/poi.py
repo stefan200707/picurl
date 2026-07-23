@@ -20,6 +20,23 @@ class POIResult(BaseModel):
 
 OVERPASS_URL = "https://overpass-api.de/api/interpreter"
 
+# Зеркала Overpass в порядке приоритета. Основной хост регулярно недоступен
+# (429/504 под нагрузкой, а из части сетей — вообще не резолвится), и это
+# единственная причина, по которой poi_cache.json годами оставался пустым:
+# при отказе одного хоста наполнение кэша срывалось целиком. Перебор зеркал
+# делает офлайн-сбор устойчивым.
+#
+# ВАЖНО: в список входят только зеркала с ПОЛНОЙ планетой. Региональные
+# (например overpass.osm.ch — только Швейцария) включать нельзя: на московские
+# координаты они честно отвечают HTTP 200 и count=0 — молчаливая ложь вместо
+# явного отказа. Проверено живым запросом 2026-07-23: osm.ch для Цюриха даёт
+# 57 садиков, для Саларьево — 0; maps.mail.ru для Саларьево — 10.
+OVERPASS_MIRRORS: tuple[str, ...] = (
+    "https://maps.mail.ru/osm/tools/overpass/api/interpreter",
+    OVERPASS_URL,
+    "https://overpass.kumi.systems/api/interpreter",
+)
+
 
 def get_overpass_query(lat: float, lon: float, category: POICategory, radius_m: int) -> str:
     tags = {
@@ -58,6 +75,26 @@ def get_overpass_query(lat: float, lon: float, category: POICategory, radius_m: 
 out center;"""
 
 
+async def _post_overpass(query: str) -> dict:
+    """Выполнить запрос к Overpass, перебирая зеркала до первого успеха.
+
+    Сетевые ошибки и временные отказы (429/5xx) одного зеркала не фатальны —
+    пробуем следующее. Если не ответило ни одно, поднимаем последнюю ошибку:
+    вызывающий код (refresh_poi) обязан увидеть отказ, а не пустой результат.
+    """
+    last_error: Exception | None = None
+    for mirror in OVERPASS_MIRRORS:
+        try:
+            async with httpx.AsyncClient(timeout=30) as client:
+                response = await client.post(mirror, data=query)
+                response.raise_for_status()
+                return response.json()
+        except (httpx.HTTPError, ValueError) as e:
+            last_error = e
+            continue
+    raise last_error if last_error else RuntimeError("нет доступных зеркал Overpass")
+
+
 async def fetch_poi(lat: float, lon: float, category: POICategory, radius_m: int) -> POIResult:
     """Fetch POI from Overpass API (OSM)."""
     if category == POICategory.OTHER:
@@ -67,10 +104,7 @@ async def fetch_poi(lat: float, lon: float, category: POICategory, radius_m: int
     if not query:
         return POIResult(count=0, closest_distance_m=None)
 
-    async with httpx.AsyncClient(timeout=30) as client:
-        response = await client.post(OVERPASS_URL, data=query)
-        response.raise_for_status()
-        data = response.json()
+    data = await _post_overpass(query)
 
     elements = data.get("elements", [])
     if not elements:

@@ -9,6 +9,12 @@ class ComplexCandidate(BaseModel):
     metro: list[str]
     is_center: bool | None
     known_poi: dict[str, bool | None]
+    #: Дистанция до ближайшего POI категории в метрах (closest_distance_m из
+    #: poi_cache.json; None — категория в кэше есть, но дистанция неизвестна).
+    #: Нужна детерминированной проверке пользовательского max_distance_m
+    #: («садик в 300 метрах», Milestone AI-20) — раньше поле кэша никем не
+    #: читалось и требование дистанции фактически игнорировалось.
+    poi_distances: dict[str, float | None] = {}
     # Координаты ЖК — объективный факт из справочника (complexes.json). Нужны
     # детерминированному слою (build_candidate_shortlist) для сужения/сортировки
     # кандидатов по дистанции до ориентира. Модель их не «прикидывает» — расчёт

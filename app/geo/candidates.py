@@ -187,9 +187,11 @@ def build_candidate_shortlist(criteria: Criteria) -> list[ComplexCandidate]:
                     continue
 
             known_poi = {}
+            poi_distances = {}
             if c.slug and c.slug in poi_cache:
                 for cat, data in poi_cache[c.slug].items():
                     known_poi[cat] = data.get("count", 0) > 0
+                    poi_distances[cat] = data.get("closest_distance_m")
 
             result.append(
                 ComplexCandidate(
@@ -200,6 +202,7 @@ def build_candidate_shortlist(criteria: Criteria) -> list[ComplexCandidate]:
                     metro=[c.metro] if c.metro else [],
                     is_center=center_by_district.get(normalize(c.district)) if c.district else None,
                     known_poi=known_poi,
+                    poi_distances=poi_distances,
                     lat=c.lat,
                     lon=c.lon,
                 )
@@ -373,6 +376,68 @@ def station_class_nearest_fallback(
     return [c for _dist, c in nearest], warning
 
 
+def block_ids_by_tag(field: str, name: str) -> list[str]:
+    """id ЖК, чья привязка (``district``/``county``/``metro``) совпадает с именем.
+
+    Точное совпадение после нормализации — не приближение «на глаз», а прямое
+    сопоставление по факту: привязка ЖК к району/округу/метро сама взята из
+    живых данных pik.ru (``block.district``/``block.metro``/
+    ``locations.child.name``, см. ``app.reference.refresh``), из тех же live-
+    данных, из которых взят и сам id ЖК (подтверждено живыми замерами: ``blocks``
+    — единственный локационный query-параметр, который ``api.pik.ru/v2/filter``
+    реально проверяет). Используется как первый (самый точный) шаг geo-фолбэка
+    для локационных сущностей без достоверного id (``app.pik.location_fallback``,
+    аудит validate()). ЖК без собственного id в выдачу не попадают — id нужен,
+    чтобы результат можно было положить в ``blocks=``.
+    """
+    ref_data = load_all()
+    needle = normalize(name)
+    return [
+        c.id for c in ref_data.complexes if c.id and normalize(getattr(c, field) or "") == needle
+    ]
+
+
+def nearby_block_ids(
+    lat: float,
+    lon: float,
+    radius_m: float = STATION_CLASS_DEFAULT_RADIUS_M,
+    limit: int = STATION_CLASS_FALLBACK_LIMIT,
+) -> tuple[list[str], float | None, bool]:
+    """id ЖК рядом с точкой: в радиусе, либо (фолбэк) N ближайших вне радиуса.
+
+    Второй шаг geo-фолбэка (после :func:`block_ids_by_tag`, когда тег-матч не
+    дал результата, но у сущности есть координаты) — та же чистая математика
+    (:func:`app.geo.distance.haversine`) и та же схема отсечки/фолбэка на
+    ближайшие, что уже применяется для класса станций
+    (:func:`station_class_nearest_fallback`, Milestone AI-18), просто
+    переиспользованная как самостоятельная функция от произвольной точки, а не
+    от ``Criteria``.
+
+    Возвращает ``(id ЖК по возрастанию дистанции, дистанция до ближайшего в
+    метрах, найдено ли что-то СТРОГО в радиусе)``. Если вообще нет ни одного ЖК
+    с известными координатами и id — ``([], None, False)``; вызывающий код
+    обязан явно отразить это в warning'е, а не смолчать.
+    """
+    ref_data = load_all()
+    scored = sorted(
+        (
+            (haversine(lat, lon, c.lat, c.lon), c.id)
+            for c in ref_data.complexes
+            if c.lat is not None and c.lon is not None and c.id
+        ),
+        key=lambda pair: pair[0],
+    )
+    if not scored:
+        return [], None, False
+
+    within = [cid for dist, cid in scored if dist <= radius_m]
+    if within:
+        return within, scored[0][0], True
+
+    nearest = scored[:limit]
+    return [cid for _dist, cid in nearest], nearest[0][0], False
+
+
 def resolve_known_facts(candidates: list[ComplexCandidate], criteria: Criteria) -> dict:
     ref_data = load_all()
     center_district_ids = [d.id for d in ref_data.districts if d.is_center and d.id]
@@ -395,6 +460,15 @@ def resolve_known_facts(candidates: list[ComplexCandidate], criteria: Criteria) 
                 ):
                     satisfies = False
                     break
+                # Пользовательская отсечка дистанции («садик в 300 метрах»,
+                # Milestone AI-20): closest_distance_m из poi_cache. Дистанция
+                # запрошена, но неизвестна — совпадением не считаем (не
+                # додумываем; тот же принцип, что у центра/ориентира ниже).
+                if req.max_distance_m is not None:
+                    dist = c.poi_distances.get(req.category.value)
+                    if dist is None or dist > req.max_distance_m:
+                        satisfies = False
+                        break
 
         # Центральность — статический факт справочника (район ЖК). Кандидат
         # подходит под «в центре», только если он заведомо в центральном районе.
@@ -462,6 +536,12 @@ def fully_resolved(
                 return False
 
     if criteria.poi_requirements:
+        # «Только новые» (only_new) кэш POI пока не различает: count схлопывает
+        # обычные и construction:/planned:-теги OSM в одно число. Факт
+        # новизны детерминированно не подтверждаем — решение уходит в ИИ
+        # (известное ограничение схемы кэша, Milestone AI-20).
+        if any(req.only_new for req in criteria.poi_requirements):
+            return False
         for _cid, findings in known.get("poi_findings", {}).items():
             for req in criteria.poi_requirements:
                 if req.category.value not in findings:

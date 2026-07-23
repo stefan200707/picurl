@@ -121,3 +121,13 @@ class TestNormalize:
     def test_normalize_rules(self) -> None:
         assert normalize("  Аэропорт   Внуково ") == "аэропорт внуково"
         assert normalize("Ёлки-Палки") == "елки-палки"
+
+    def test_normalize_maps_latin_confusables_to_cyrillic(self) -> None:
+        """Гомоглифы латиница→кириллица (Milestone AI-20, Фикс 2): пользователь
+        может случайно печатать смешанным алфавитом («Внуковa» — последняя
+        буква латинская «a», визуально неотличима от кириллической «а»).
+        normalize() должен свести оба написания к одной строке.
+        """
+        latin_a = "a"  # латинская 'a' — не путать с кириллической 'а' (а)
+        assert normalize(f"Внуков{latin_a}") == normalize("Внукова")
+        assert normalize(f"Внуков{latin_a}") == "внукова"

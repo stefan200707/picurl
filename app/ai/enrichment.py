@@ -3,7 +3,12 @@ import logging
 import asyncpg
 from pydantic import BaseModel
 
-from app.ai.client import call_model, call_option_resolver, resolve_claude_credentials
+from app.ai.client import (
+    CircuitOpenError,
+    call_model,
+    call_option_resolver,
+    resolve_claude_credentials,
+)
 from app.ai.embeddings import embed
 from app.ai.memory import (
     log_ai_call,
@@ -129,9 +134,13 @@ def merge_enrichment(criteria: Criteria, enrichment: EnrichmentResult) -> Criter
         complexes_data = load_complexes()
 
         new_complexes = []
-        for cid in enrichment.matched_complex_ids:
+        seen_ids: set[str] = set()
+        # dict.fromkeys — дедуп id с сохранением порядка (дубль id в шорт-листе
+        # раньше давал один и тот же ЖК дважды и в criteria, и в blocks= URL).
+        for cid in dict.fromkeys(enrichment.matched_complex_ids):
             for entry in complexes_data:
-                if entry.id == cid:
+                if entry.id == cid and cid not in seen_ids:
+                    seen_ids.add(cid)
                     new_complexes.append(
                         MatchedEntity(name=entry.name, slug=entry.slug, id=entry.id)
                     )
@@ -288,6 +297,13 @@ async def resolve_options(
     context = build_option_context(option_candidates, load_options(), load_option_groups())
     try:
         answer = await call_option_resolver(OPTION_SYSTEM_PROMPT, context)
+    except CircuitOpenError as e:
+        # Circuit breaker открыт — это ожидаемое временное состояние (часть B),
+        # а не баг: логируем мягче и без трейсбека. Фразы уже несут предметный
+        # warning («…: не удалось распознать, не попало в ссылку»), отдельный
+        # текст здесь не нужен — сохранять как есть достаточно.
+        logger.warning(f"AI option resolution skipped (circuit breaker open): {e}")
+        return
     except Exception as e:
         # Модель могла упасть (сеть/валидация) — деградируем мягко: фрагменты
         # остаются в warnings, ничего не выдумываем.
@@ -321,6 +337,35 @@ async def resolve_options(
                 )
             except Exception as e:
                 logger.warning(f"Failed to persist option alias: {e}")
+
+
+def _describe_unmet_ai_requirements(criteria: Criteria) -> str:
+    """Человекочитаемое перечисление того, что осталось необработанным при
+    провале ИИ-слоя (часть C: предметная деградация).
+
+    До этой правки провал POI-ветки давал один и тот же обезличенный текст
+    («не удалось обработать ИИ-обогащение (ошибка сервиса)») независимо от
+    того, что именно просил пользователь — в отличие от landmark/station-class
+    веток, которые всегда называют конкретный ориентир/линию. Пользователь не
+    мог отличить «садик учтён» от «садик проигнорирован». Собирается из
+    ``criteria.poi_requirements`` (категория через исходную фразу пользователя
+    ``raw_phrase`` — точнее перевода ``POICategory`` на русский) плюс флага
+    ``center_requested``; per-instance детали (``only_new``/``max_distance_m``)
+    добавляются в скобках, как и было решено в аудите
+    ``POIRequirement.max_distance_m`` (см. CLAUDE.md, «Аудит тихих потерь»).
+    """
+    parts: list[str] = []
+    for req in criteria.poi_requirements:
+        detail_bits: list[str] = []
+        if req.only_new:
+            detail_bits.append("только новые")
+        if req.max_distance_m is not None:
+            detail_bits.append(f"не дальше {req.max_distance_m} м")
+        detail = f" ({', '.join(detail_bits)})" if detail_bits else ""
+        parts.append(f"«{req.raw_phrase}»{detail}")
+    if criteria.center_requested:
+        parts.append("«в центре»")
+    return "; ".join(parts) if parts else "запрос"
 
 
 def _differs_from_deterministic(result: EnrichmentResult, known: dict) -> bool:
@@ -373,10 +418,13 @@ async def enrich(
     # poi_requirements, ни center_requested, ни непустых option_candidates.
     # resolve_options() выше уже отработал независимо от этого гейта (мутирует
     # criteria/warnings на месте до сюда) — его результат не теряется вне
-    # зависимости от исхода этой проверки. option_candidates включены в условие
-    # намеренно (промпт 25): без них узкая проверка только по poi/center была бы
-    # достаточна для этого early-return, но не отражала бы факт «у запроса есть
-    # что резолвить» так же явно для читателя/будущих правок этого гейта.
+    # зависимости от исхода этой проверки. option_candidates из условия
+    # ИСКЛЮЧЕНЫ (Milestone AI-21): раньше они «для читаемости» пропускали
+    # запрос дальше, и option-only запрос («…Троицкой ветки» с огрызком
+    # «ветки») доходил до шорт-листа, где resolve_known_facts при ПУСТЫХ
+    # семантических требованиях объявлял совпавшими ВСЕХ кандидатов (vacuous
+    # truth), а включённый гейт 2 выливал полкаталога в blocks. После
+    # resolve_options() опциям в ИИ-пути делать больше нечего.
     #
     # landmark_requirements — ОБЯЗАТЕЛЬНОЕ исключение, а не часть буквального
     # условия из ТЗ на этот гейт: сужение по ориентиру (Milestone AI-13,
@@ -398,7 +446,6 @@ async def enrich(
         and not criteria.center_requested
         and not criteria.landmark_requirements
         and not criteria.station_class_requirements
-        and not (option_candidates or [])
     ):
         return await _log(EnrichmentResult.noop())
 
@@ -505,9 +552,26 @@ async def enrich(
         )
         return await _log(result)
 
-    # Гейт 2 (пока выключен — см. docs/ai-enrichment-architecture.md):
-    # if log_fields["fully_resolved_deterministically"]:
-    #     return await _log(EnrichmentResult.from_deterministic(known))
+    # Гейт 2 ВКЛЮЧЁН (Milestone AI-20). Формальный критерий раздела 8.4
+    # (fully_resolved ≥ 90% над N ≥ 500) был недостижим в принципе:
+    # poi_cache.json стоял пустым (сбор срывался из-за недоступности
+    # overpass-api.de — починено зеркалами в app/geo/poi.py), и
+    # fully_resolved физически не мог стать True — самозамыкающаяся петля,
+    # гейт ждал статистику, которая не могла набраться. После полного сбора
+    # кэша (69 ЖК × 5 категорий) и живого 429-инцидента гейт включён по
+    # эксплуатационному сигналу — тот же осознанный прецедент, что и гейт 1
+    # (Milestone AI-14). fully_resolved остаётся консервативным: любой
+    # неизвестный факт (нет категории в кэше, only_new, неизвестный центр)
+    # по-прежнему уводит в ИИ, а не додумывается.
+    # Страховка от vacuous truth (Milestone AI-21): при ПУСТЫХ семантических
+    # требованиях resolve_known_facts объявляет совпавшими всех кандидатов, и
+    # «полностью решено детерминированно» означало бы «вылить весь шорт-лист в
+    # blocks». Гейт 1 такие запросы сюда уже не пускает, но защита обязана
+    # жить и здесь — на случай будущих правок порядка ветвей выше.
+    if log_fields["fully_resolved_deterministically"] and (
+        criteria.poi_requirements or criteria.center_requested
+    ):
+        return await _log(EnrichmentResult.from_deterministic(known))
 
     settings = get_settings()
     # .lower() — как в client.call_typed: AI_PROVIDER=Claude не должен
@@ -545,13 +609,33 @@ async def enrich(
     try:
         context = build_context(text, criteria, candidates, known)
         answer = await call_model(SYSTEM_PROMPT, context)
+    except CircuitOpenError as e:
+        # Circuit breaker открыт (часть B): серия транзиентных отказов подряд —
+        # ИИ-слой в эту попытку вовсе не звался (не разовый сбой, а осознанный
+        # cooldown-предохранитель). Текст намеренно отличается от «ошибка
+        # сервиса» ниже — пользователю нужно различать «сервис временно
+        # перегружен, попробуй позже» и «однократная ошибка».
+        logger.warning(f"AI enrichment skipped (circuit breaker open): {e}")
+        unmet = _describe_unmet_ai_requirements(criteria)
+        warnings.append(
+            f"требование {unmet} не удалось применить — ИИ-слой временно "
+            "деградирован (серия сбоев подряд), выдача не сужена"
+        )
+        return await _log(EnrichmentResult.failed())
     except Exception as e:
         from anthropic import APIStatusError, APITimeoutError
         from pydantic import ValidationError
 
         if isinstance(e, (APIStatusError, APITimeoutError, ValueError, ValidationError)):
             logger.error(f"AI enrichment failed: {e}", exc_info=True)
-            warnings.append("не удалось обработать ИИ-обогащение (ошибка сервиса)")
+            # Предметная деградация (часть C): называем, ЧТО именно не
+            # применилось (POI-требования/центр), а не обезличенное «ошибка
+            # сервиса» — по образцу landmark/station-class веток выше.
+            unmet = _describe_unmet_ai_requirements(criteria)
+            warnings.append(
+                f"требование {unmet} не удалось применить — ИИ-слой недоступен "
+                "(ошибка сервиса), выдача не сужена"
+            )
             return await _log(EnrichmentResult.failed())
         raise e
 
