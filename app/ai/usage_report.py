@@ -166,7 +166,7 @@ async def run_report(days: int | None = None) -> None:
 def main() -> int:
     logging.basicConfig(level=logging.INFO)
     parser = argparse.ArgumentParser(
-        description="Отчёт наблюдаемости вызовов ИИ (таблица ai_call_log).",
+        description="Отчёт наблюдаемости вызовов ИИ (таблица ai_call_log)."
     )
     parser.add_argument(
         "--days",
