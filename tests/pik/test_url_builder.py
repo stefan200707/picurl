@@ -8,7 +8,7 @@ def test_build_url_empty_criteria():
 
 def test_build_url_tz_example():
     # Эталон из ТЗ: two-room + priceTo=15000000 + метро «Аэропорт Внуково» + finish + price_asc
-    # -> https://www.pik.ru/search/two-room/finish/m-aeroport-vnukovo?priceFrom=0&priceTo=15000000&sortBy=price&orderBy=asc
+    # -> /search/two-room/finish/m-aeroport-vnukovo?priceFrom=0&priceTo=15000000&sortBy=price...
     criteria = Criteria(
         rooms=[Rooms.TWO],
         price_max=15000000,
@@ -17,10 +17,11 @@ def test_build_url_tz_example():
         sort=Sort.PRICE_ASC,
     )
     url = build_url(criteria)
-    assert (
-        url
-        == "https://www.pik.ru/search/two-room/finish/m-aeroport-vnukovo?priceFrom=0&priceTo=15000000&sortBy=price&orderBy=asc"
+    expected = (
+        "https://www.pik.ru/search/two-room/finish/m-aeroport-vnukovo"
+        "?priceFrom=0&priceTo=15000000&sortBy=price&orderBy=asc"
     )
+    assert url == expected
 
 
 def test_build_url_live_example():
@@ -34,10 +35,11 @@ def test_build_url_live_example():
         sort=Sort.AREA_DESC,
     )
     url = build_url(criteria)
-    assert (
-        url
-        == "https://www.pik.ru/search/two-room/m-aeroport-vnukovo?priceFrom=10000000&priceTo=15000000&sortBy=area&orderBy=desc"
+    expected = (
+        "https://www.pik.ru/search/two-room/m-aeroport-vnukovo"
+        "?priceFrom=10000000&priceTo=15000000&sortBy=area&orderBy=desc"
     )
+    assert url == expected
 
 
 def test_build_url_single_vs_multi_rooms():

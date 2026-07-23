@@ -1,9 +1,19 @@
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from app.ai.enrichment import enrich, sanitize_against_shortlist
-from app.ai.schema import AIEnrichmentAnswer, ComplexCandidate
+from app.ai.enrichment import (
+    enrich,
+    resolve_options,
+    sanitize_against_shortlist,
+    sanitize_option_resolution,
+)
+from app.ai.schema import (
+    AIEnrichmentAnswer,
+    ComplexCandidate,
+    OptionMatch,
+    OptionResolutionAnswer,
+)
 from app.config import get_settings
 from app.geo.poi import POICategory
 from app.parsing.schema import Criteria, POIRequirement
@@ -53,6 +63,126 @@ async def test_enrich_disabled(mock_build, mock_lookup, mock_settings):
     assert result.ai_used is False
     assert result.success is False
     assert "ИИ-обогащение выключено — часть запроса не обработана" in warnings
+
+
+@pytest.mark.asyncio
+@patch("app.ai.enrichment.log_ai_call", new_callable=AsyncMock)
+@patch("app.ai.enrichment.call_model")
+@patch("app.ai.enrichment.lookup_semantic", return_value=None)
+@patch("app.ai.enrichment.build_candidate_shortlist")
+async def test_enrich_logs_ai_call_row(mock_build, mock_lookup, mock_call, mock_log, mock_settings):
+    """Вызов enrich() с реальным обращением к ИИ пишет строку ai_call_log."""
+    mock_build.return_value = [
+        ComplexCandidate(
+            id="1",
+            name="ЖК",
+            district=None,
+            county=None,
+            metro=[],
+            is_center=None,
+            known_poi={},
+        )
+    ]
+    mock_call.return_value = AIEnrichmentAnswer(
+        matched_complex_ids=["1"],
+        center_district_ids=[],
+        poi_findings={},
+        explanation="x",
+        confidence=0.9,
+    )
+    criteria = Criteria(
+        poi_requirements=[POIRequirement(category=POICategory.SCHOOL, raw_phrase="школа")]
+    )
+
+    await enrich("хочу со школой", criteria, [], pool=None)
+
+    mock_log.assert_awaited_once()
+    fields = mock_log.await_args.kwargs
+    assert fields["had_poi_or_center"] is True
+    assert fields["fully_resolved_deterministically"] is False
+    assert fields["cache_hit"] is False
+    assert fields["ai_called"] is True
+    # ИИ вернул matched_complex_ids, которых не даёт детерминированный слой.
+    assert fields["criteria_changed_by_ai"] is True
+
+
+@pytest.mark.asyncio
+@patch("app.ai.enrichment.log_ai_call", new_callable=AsyncMock)
+@patch(
+    "app.ai.enrichment.build_candidate_shortlist",
+    return_value=[
+        ComplexCandidate(
+            id="1", name="ЖК", district=None, county=None, metro=[], is_center=None, known_poi={}
+        )
+    ],
+)
+async def test_enrich_logs_when_disabled(mock_build, mock_log, mock_settings):
+    """Даже при выключенном ИИ пишется строка ai_call_log (ai_called=False)."""
+    mock_settings.AI_ENRICHMENT_ENABLED = False
+    criteria = Criteria(
+        poi_requirements=[POIRequirement(category=POICategory.SCHOOL, raw_phrase="школа")]
+    )
+
+    await enrich("хочу со школой", criteria, [], pool=None)
+
+    mock_log.assert_awaited_once()
+    fields = mock_log.await_args.kwargs
+    assert fields["had_poi_or_center"] is True
+    assert fields["ai_called"] is False
+    assert fields["cache_hit"] is False
+    assert fields["criteria_changed_by_ai"] is False
+
+
+@pytest.mark.asyncio
+@patch("app.ai.enrichment.log_ai_call", new_callable=AsyncMock)
+@patch("app.ai.enrichment.build_candidate_shortlist", return_value=[])
+async def test_enrich_logs_when_no_candidates(mock_build, mock_log, mock_settings):
+    """Пустой шорт-лист тоже логируется (одна строка на каждый вызов enrich)."""
+    criteria = Criteria()
+
+    await enrich("что-то невнятное", criteria, [], pool=None)
+
+    mock_log.assert_awaited_once()
+    fields = mock_log.await_args.kwargs
+    assert fields["had_poi_or_center"] is False
+    assert fields["ai_called"] is False
+
+
+@pytest.mark.asyncio
+async def test_log_ai_call_writes_row_to_pool():
+    """log_ai_call выполняет INSERT в ai_call_log с переданными полями (мок БД)."""
+    from app.ai.memory import log_ai_call
+
+    pool = AsyncMock()
+    await log_ai_call(
+        pool,
+        had_poi_or_center=True,
+        fully_resolved_deterministically=False,
+        cache_hit=False,
+        ai_called=True,
+        criteria_changed_by_ai=True,
+    )
+
+    pool.execute.assert_awaited_once()
+    args = pool.execute.await_args.args
+    assert "ai_call_log" in args[0]
+    # (query, had_poi_or_center, fully_resolved, cache_hit, ai_called, changed)
+    assert args[1:] == (True, False, False, True, True)
+
+
+@pytest.mark.asyncio
+async def test_log_ai_call_noop_without_pool():
+    """pool=None — наблюдаемость best-effort, ничего не пишем и не падаем."""
+    from app.ai.memory import log_ai_call
+
+    await log_ai_call(
+        None,
+        had_poi_or_center=True,
+        fully_resolved_deterministically=True,
+        cache_hit=False,
+        ai_called=False,
+        criteria_changed_by_ai=False,
+    )
 
 
 def test_sanitize_against_shortlist():
@@ -122,3 +252,109 @@ async def test_enrich_api_error(mock_build, mock_lookup, mock_call, mock_setting
     assert result.ai_used is True
     assert result.success is False
     assert "не удалось обработать ИИ-обогащение (ошибка сервиса)" in warnings
+
+
+@pytest.mark.asyncio
+@patch("app.ai.enrichment.build_candidate_shortlist", return_value=[])
+@patch("app.ai.enrichment.call_option_resolver")
+async def test_resolve_options_applied_to_criteria(mock_resolver, _mock_build, mock_settings):
+    """«отдельный санузел» не сматчил rapidfuzz → фрагмент уходит в модель →
+    ответ (manybathrooms) применяется к criteria как группа опций."""
+    mock_resolver.return_value = OptionResolutionAnswer(
+        matches=[OptionMatch(phrase="отдельным санузлом", slug="manybathrooms")]
+    )
+
+    criteria = Criteria()
+    warnings = ["«отдельным санузлом»: не удалось распознать, не попало в ссылку"]
+
+    await enrich(
+        "квартира с отдельным санузлом",
+        criteria,
+        warnings,
+        option_candidates=["отдельным санузлом"],
+    )
+
+    # Slug применён так же, как если бы его сматчил rapidfuzz.
+    assert "manybathrooms" in criteria.option_groups
+    # Фраза больше не висит как нераспознанная.
+    assert not any("отдельным санузлом" in w for w in warnings)
+    # Фрагменты реально ушли в контекст модели.
+    context = mock_resolver.call_args.args[1]
+    assert "отдельным санузлом" in context["fragments"]
+    # Полный список опций/групп уходит в модель (не шорт-лист).
+    assert any(o["slug"] == "manybathrooms" for o in context["option_groups"])
+
+
+@pytest.mark.asyncio
+@patch("app.ai.enrichment.build_candidate_shortlist", return_value=[])
+@patch("app.ai.enrichment.call_option_resolver")
+async def test_resolve_options_writes_to_options_list(mock_resolver, _mock_build, mock_settings):
+    """slug из options.json применяется именно к criteria.options."""
+    mock_resolver.return_value = OptionResolutionAnswer(
+        matches=[OptionMatch(phrase="окна выходят в город", slug="vidNaGorod")]
+    )
+    criteria = Criteria()
+    warnings: list[str] = []
+
+    await enrich(
+        "квартира где окна выходят в город",
+        criteria,
+        warnings,
+        option_candidates=["окна выходят в город"],
+    )
+
+    assert "vidNaGorod" in criteria.options
+
+
+@pytest.mark.asyncio
+@patch("app.ai.enrichment.build_candidate_shortlist", return_value=[])
+@patch("app.ai.enrichment.call_option_resolver")
+async def test_resolve_options_logs_alias(mock_resolver, _mock_build, mock_settings):
+    """Сопоставление «фраза → slug» логируется в карту памяти как option_alias."""
+    mock_resolver.return_value = OptionResolutionAnswer(
+        matches=[OptionMatch(phrase="отдельным санузлом", slug="manybathrooms", confidence=0.7)]
+    )
+    criteria = Criteria()
+    pool = AsyncMock()
+
+    with patch("app.ai.enrichment.store_structured_fact") as mock_store:
+        mock_store.return_value = None
+        await resolve_options(criteria, ["отдельным санузлом"], [], pool)
+
+    mock_store.assert_awaited_once()
+    args = mock_store.await_args.args
+    # (pool, subject_type, subject_id=slug, fact_type, value, source, confidence)
+    assert args[1] == "option_group"
+    assert args[2] == "manybathrooms"
+    assert args[3] == "option_alias"
+    assert args[4] == {"phrase": "отдельным санузлом"}
+
+
+def test_sanitize_option_resolution_rejects_hallucination():
+    """slug вне справочника отбрасывается, null-фразы игнорируются."""
+    answer = OptionResolutionAnswer(
+        matches=[
+            OptionMatch(phrase="отдельным санузлом", slug="manybathrooms"),
+            OptionMatch(phrase="что-то", slug="totally_made_up_slug"),
+            OptionMatch(phrase="без совпадения", slug=None),
+        ]
+    )
+    resolved = sanitize_option_resolution(answer)
+    slugs = {slug for _phrase, slug, _stype, _conf in resolved}
+    assert slugs == {"manybathrooms"}
+
+
+@pytest.mark.asyncio
+@patch("app.ai.enrichment.build_candidate_shortlist", return_value=[])
+@patch("app.ai.enrichment.call_option_resolver")
+async def test_resolve_options_disabled_keeps_warning(mock_resolver, _mock_build, mock_settings):
+    """При выключенном ИИ фрагмент остаётся в warnings, модель не дёргается."""
+    mock_settings.AI_ENRICHMENT_ENABLED = False
+    criteria = Criteria()
+    warnings = ["«отдельным санузлом»: не удалось распознать, не попало в ссылку"]
+
+    await resolve_options(criteria, ["отдельным санузлом"], warnings, None)
+
+    mock_resolver.assert_not_called()
+    assert criteria.option_groups == []
+    assert any("отдельным санузлом" in w for w in warnings)

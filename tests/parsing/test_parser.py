@@ -39,7 +39,7 @@ def test_parse_unsupported_secondary() -> None:
     result = parse(text)
     assert result.criteria.counties[0].slug == "zao"
     assert len(result.warnings) == 1
-    assert "фильтр не поддерживается сайтом ПИК" in result.warnings[0]
+    assert "не поддерживается pik.ru" in result.warnings[0]
 
 
 def test_parse_stop_words_ignored():

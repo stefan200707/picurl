@@ -23,8 +23,8 @@ AI_PROVIDER=antigravity
 # Per-user подключения НЕТ: оператор один раз руками логинится в agy на этой машине.
 # пусто = искать agy на PATH
 ANTIGRAVITY_CLI_PATH=
-# опционально, модель для agy
-ANTIGRAVITY_MODEL=
+# модель для agy задаётся общим полем AI_MODEL_NAME (по умолчанию gemini-3.5-flash)
+AI_MODEL_NAME=gemini-3.5-flash
 
 # 4. Подключение к базе данных PostgreSQL (для семантического кэша и фактов)
 # (Данные соответствуют настройкам из docker-compose.yml проекта)
@@ -48,7 +48,7 @@ docker compose up -d postgres
 
 ## Шаг 3. Накатывание миграций БД
 
-Чтобы создать необходимые таблицы (`semantic_cache`, `ai_facts`, `district_facts`), выполните SQL-миграцию. 
+Чтобы создать необходимые таблицы (`ai_semantic_cache`, `ai_structured_facts`), выполните SQL-миграцию. 
 Самый надежный способ (если у вас локально не установлен `psql`) — выполнить скрипт внутри контейнера:
 
 ```bash

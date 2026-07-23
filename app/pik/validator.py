@@ -33,30 +33,13 @@ async def validate(criteria: Criteria, client: httpx.AsyncClient) -> ValidationR
     if criteria.ready is True:
         params["ready"] = "1"
 
-    # 3. Локации (для API всегда в query параметрах, в отличие от URL)
-    if criteria.counties:
-        ids = [c.id for c in criteria.counties if c.id]
-        if ids:
-            params["districtCounties"] = ",".join(ids)
-    if criteria.metro:
-        ids = [m.id for m in criteria.metro if m.id]
-        if ids:
-            params["metroStations"] = ",".join(ids)
-    if criteria.districts:
-        ids = [d.id for d in criteria.districts if d.id]
-        if ids:
-            params["districtLocations"] = ",".join(ids)
-    if criteria.complexes:
-        ids = [c.id for c in criteria.complexes if c.id]
-        if ids:
-            params["blocks"] = ",".join(ids)
+    # 3. Локации (для API всегда в query параметрах, в отличие от URL) —
+    # общая сборка id (AUDIT_REPORT 2.3)
+    params.update(criteria.location_query_dict())
 
-    # Сортировка не влияет на количество результатов (count),
-    # поэтому её можно не передавать в backend-API,
-    # но передадим для полной аутентичности если нужно.
-    if criteria.sort is not None:
-        params["sortBy"] = criteria.sort.field
-        params["orderBy"] = criteria.sort.order
+    # Сортировка (sortBy/orderBy) уже добавлена в params через
+    # criteria.to_query_dict() выше — повторный расчёт здесь был мёртвым
+    # кодом (AUDIT_REPORT 2.1).
 
     url = f"https://api.pik.ru/v2/filter?{urlencode(params)}"
 

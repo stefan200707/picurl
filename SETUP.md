@@ -51,12 +51,12 @@ AI_MODEL_NAME=gemini-3.5-flash
 
 # Настройки Antigravity (требуются если AI_PROVIDER=antigravity)
 # ANTIGRAVITY_CLI_PATH=/path/to/agy
-# ANTIGRAVITY_MODEL=
+# Модель задаётся общим полем AI_MODEL_NAME выше (используется обоими провайдерами).
 
 # -----------------------------------------------------------------------------
 # 3. База данных PostgreSQL + pgvector (Карта памяти и векторный кэш)
 # -----------------------------------------------------------------------------
-DATABASE_URL=postgresql+asyncpg://postgres:password@localhost:5432/picurl_ai
+DATABASE_URL=postgresql://postgres:password@localhost:5432/picurl_ai
 
 # -----------------------------------------------------------------------------
 # 4. Пороги промоушена знаний ИИ в детерминированные справочники
@@ -77,7 +77,7 @@ docker compose up -d postgres
 ```
 
 ### 4.2. Накатывание миграций БД
-Создайте необходимые таблицы (`semantic_cache`, `ai_facts`, `district_facts`). 
+Создайте необходимые таблицы (`ai_semantic_cache`, `ai_structured_facts`). 
 
 Выполните миграцию через Docker-контейнер (не требует установленного утилиты `psql` на вашей системе):
 ```bash

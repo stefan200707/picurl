@@ -491,13 +491,36 @@ def test_extract_only_available(text: str, expected: bool) -> None:
     assert bool(spans) == expected
 
 
+_SECONDARY = "вторичное жильё не поддерживается pik.ru (только новостройки) — пропущено"
+_SIDE_OF_LIGHT = "фильтр по стороне света не поддерживается pik.ru — пропущен"
+_SPLIT_BATHROOM = "фильтр «раздельный санузел» не поддерживается pik.ru — пропущен"
+_HOUSE_MATERIAL = "фильтр по материалу дома не поддерживается pik.ru — пропущен"
+
+
 @pytest.mark.parametrize(
     ("text", "fragments"),
     [
-        ("вторичка", [("вторичка", "фильтр не поддерживается сайтом ПИК")]),
-        ("вторичный рынок", [("вторичный рынок", "фильтр не поддерживается сайтом ПИК")]),
-        ("на вторичном рынке", [("вторичном рынке", "фильтр не поддерживается сайтом ПИК")]),
-        ("вторичное жильё", [("вторичное жильё", "фильтр не поддерживается сайтом ПИК")]),
+        # --- Вторичка (только новостройки) ---
+        ("вторичка", [("вторичка", _SECONDARY)]),
+        ("вторичный рынок", [("вторичный рынок", _SECONDARY)]),
+        ("на вторичном рынке", [("вторичном рынке", _SECONDARY)]),
+        ("вторичное жильё", [("вторичное жильё", _SECONDARY)]),
+        # --- Сторона света / вид «на светлую сторону» (эталон милстоуна) ---
+        ("вид на светлую сторону", [("светлую сторону", _SIDE_OF_LIGHT)]),
+        ("на солнечную сторону", [("солнечную сторону", _SIDE_OF_LIGHT)]),
+        ("окна на южную сторону", [("южную сторону", _SIDE_OF_LIGHT)]),
+        ("на северную сторону", [("северную сторону", _SIDE_OF_LIGHT)]),
+        ("выходит на сторону света", [("сторону света", _SIDE_OF_LIGHT)]),
+        # --- Раздельный санузел (в схеме нет) ---
+        ("раздельный санузел", [("раздельный санузел", _SPLIT_BATHROOM)]),
+        ("с раздельным санузлом", [("раздельным санузлом", _SPLIT_BATHROOM)]),
+        # --- Материал дома (в схеме нет) ---
+        ("кирпичный дом", [("кирпичный дом", _HOUSE_MATERIAL)]),
+        ("монолитный дом", [("монолитный дом", _HOUSE_MATERIAL)]),
+        ("панельный дом", [("панельный дом", _HOUSE_MATERIAL)]),
+        # --- Поддерживается под другим именем → НЕ в каталоге ---
+        ("панорамные окна", []),  # «Большие окна» (bigwindows)
+        ("окна во двор", []),  # «Вид во двор» (vidVoDvor)
         ("новостройка", []),
         ("", []),
     ],
@@ -511,7 +534,7 @@ def test_extract_unsupported(text: str, fragments: list[tuple[str, str]]) -> Non
 def test_extract_unsupported_returns_original_case() -> None:
     """Фрагмент для warning берётся из исходного текста (с регистром)."""
     found, _ = extract_unsupported("рассмотрю Вторичку")
-    assert found == [("Вторичку", "фильтр не поддерживается сайтом ПИК")]
+    assert found == [("Вторичку", _SECONDARY)]
 
 
 # ---------------------------------------------------------------------------
@@ -560,7 +583,7 @@ def test_apply_rules_unsupported_secondary_market() -> None:
     outcome = apply_rules("двушка на вторичном рынке до 10 млн")
     assert outcome.criteria.rooms == [Rooms.TWO]
     assert outcome.criteria.price_max == 10_000_000
-    assert outcome.unsupported == [("вторичном рынке", "фильтр не поддерживается сайтом ПИК")]
+    assert outcome.unsupported == [("вторичном рынке", _SECONDARY)]
 
 
 def test_apply_rules_empty_and_unrecognized_text() -> None:
@@ -619,3 +642,86 @@ def test_extract_poi_requirements():
     assert len(poi_reqs) == 2
     assert poi_reqs[0].category == POICategory.SHOP
     assert poi_reqs[1].category == POICategory.PARKING
+
+
+def test_poi_only_new_flag():
+    """«нов-» перед POI → only_new=True (per-instance), иначе False."""
+    from app.geo.poi import POICategory
+    from app.parsing.rules.poi import extract_poi_requirements
+
+    poi_reqs, _center, _spans = extract_poi_requirements("новые детские сады рядом")
+    assert len(poi_reqs) == 1
+    assert poi_reqs[0].category == POICategory.KINDERGARTEN
+    assert poi_reqs[0].only_new is True
+
+    poi_reqs, _center, _spans = extract_poi_requirements("детские сады рядом")
+    assert len(poi_reqs) == 1
+    assert poi_reqs[0].only_new is False
+
+
+def test_poi_only_new_is_per_instance():
+    """Один текст: «новые сады» → only_new, «школы» → нет (флаг per-instance)."""
+    from app.geo.poi import POICategory
+    from app.parsing.rules.poi import extract_poi_requirements
+
+    poi_reqs, _center, _spans = extract_poi_requirements("новые детские сады и школы рядом")
+    by_cat = {req.category: req for req in poi_reqs}
+    assert by_cat[POICategory.KINDERGARTEN].only_new is True
+    assert by_cat[POICategory.SCHOOL].only_new is False
+
+
+def test_poi_max_distance_parsed():
+    """Дистанция рядом с POI пишется в max_distance_m (закрытие AUDIT 2.11)."""
+    from app.parsing.rules.poi import extract_poi_requirements
+
+    poi_reqs, _center, _spans = extract_poi_requirements("школа в 300 метрах")
+    assert poi_reqs[0].max_distance_m == 300
+
+    poi_reqs, _center, _spans = extract_poi_requirements("детский сад не дальше 500 м")
+    assert poi_reqs[0].max_distance_m == 500
+
+    poi_reqs, _center, _spans = extract_poi_requirements("школа рядом")
+    assert poi_reqs[0].max_distance_m is None
+
+
+def test_extract_landmark_near_mgu():
+    """«рядом с МГУ» → LandmarkRequirement с координатами ориентира."""
+    from app.parsing.rules.landmark import extract_landmark_requirements
+
+    reqs, spans = extract_landmark_requirements("трёшку самую ближайшую к МГУ")
+    assert len(reqs) == 1
+    assert reqs[0].name == "МГУ им. Ломоносова"
+    assert reqs[0].category == "university"
+    assert reqs[0].lat is not None and reqs[0].lon is not None
+    assert spans  # маркер+имя засчитаны «понятыми»
+
+
+def test_extract_landmark_markers_and_declension():
+    """Разные маркеры близости и склонения имени распознаются."""
+    from app.parsing.rules.landmark import extract_landmark_requirements
+
+    reqs, _ = extract_landmark_requirements("квартира у Кремля")
+    assert [r.name for r in reqs] == ["Московский Кремль"]
+
+    reqs, _ = extract_landmark_requirements("хочу жильё поближе к Сколково")
+    assert [r.name for r in reqs] == ["Инновационный центр Сколково"]
+
+    reqs, _ = extract_landmark_requirements("недалеко от ВДНХ")
+    assert [r.name for r in reqs] == ["ВДНХ"]
+
+
+def test_extract_landmark_no_false_positive():
+    """Маркер-предлог без ориентира не порождает ложное требование."""
+    from app.parsing.rules.landmark import extract_landmark_requirements
+
+    reqs, _ = extract_landmark_requirements("хочу двушку у метро до 15 млн")
+    assert reqs == []
+
+
+def test_landmark_flows_into_criteria():
+    """apply_rules прокидывает ориентир в Criteria.landmark_requirements."""
+    from app.parsing.rules import apply_rules
+
+    outcome = apply_rules("двушка рядом с МГУ")
+    assert len(outcome.criteria.landmark_requirements) == 1
+    assert outcome.criteria.landmark_requirements[0].name == "МГУ им. Ломоносова"

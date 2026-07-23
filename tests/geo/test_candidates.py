@@ -14,7 +14,7 @@ from app.geo.candidates import (
     fully_resolved,
     resolve_known_facts,
 )
-from app.parsing.schema import Criteria, MatchedEntity
+from app.parsing.schema import Criteria, LandmarkRequirement, MatchedEntity
 
 
 @pytest.fixture
@@ -47,7 +47,7 @@ def ref_dir(tmp_path, monkeypatch):
         ),
         "utf-8",
     )
-    for name in ("metro", "counties", "benefits", "option_groups", "options"):
+    for name in ("metro", "counties", "benefits", "option_groups", "options", "landmarks"):
         (tmp_path / f"{name}.json").write_text("[]", "utf-8")
     (tmp_path / "poi_cache.json").write_text("{}", "utf-8")
 
@@ -99,6 +99,67 @@ def test_center_resolved_deterministically(ref_dir):
     assert known["matched_complex_ids"] == ["1"]
     # is_center известен не у всех (Западный=None) → детерминизм невозможен.
     assert fully_resolved(known, criteria, candidates) is False
+
+
+@pytest.fixture
+def geo_ref_dir(tmp_path, monkeypatch):
+    """Справочник ЖК с координатами (для ранжирования по дистанции)."""
+    (tmp_path / "complexes.json").write_text(
+        json.dumps(
+            [
+                # Рядом с МГУ (координаты 55.7033, 37.5308).
+                {"name": "У МГУ", "slug": "near", "id": "1", "lat": 55.7050, "lon": 37.5320},
+                # В центре Москвы — заметно дальше от МГУ.
+                {"name": "В центре", "slug": "mid", "id": "2", "lat": 55.7520, "lon": 37.6175},
+                # На севере — дальше всех.
+                {"name": "Далеко", "slug": "far", "id": "3", "lat": 55.9000, "lon": 37.4000},
+                # Без координат — близость неизвестна.
+                {"name": "Без координат", "slug": "nogeo", "id": "4"},
+            ],
+            ensure_ascii=False,
+        ),
+        "utf-8",
+    )
+    for name in ("metro", "counties", "districts", "benefits", "option_groups", "options"):
+        (tmp_path / f"{name}.json").write_text("[]", "utf-8")
+    (tmp_path / "landmarks.json").write_text("[]", "utf-8")
+    (tmp_path / "poi_cache.json").write_text("{}", "utf-8")
+
+    monkeypatch.setattr("app.reference.loader.DATA_DIR", tmp_path)
+    monkeypatch.setattr("app.geo.candidates.DATA_DIR", tmp_path)
+    from app.reference.loader import clear_cache
+
+    clear_cache()
+    yield tmp_path
+    clear_cache()
+
+
+#: Координаты МГУ (как в landmarks.json).
+_MGU = LandmarkRequirement(name="МГУ им. Ломоносова", lat=55.703326, lon=37.530762)
+
+
+def test_shortlist_ranked_by_landmark_distance(geo_ref_dir):
+    """«рядом с МГУ» → шорт-лист отсортирован по дистанции, детерминированно."""
+    criteria = Criteria(landmark_requirements=[_MGU])
+    candidates = build_candidate_shortlist(criteria)
+
+    ranked = [c.name for c in candidates]
+    # Ближайший к МГУ — первым, далёкий — позже; ЖК без координат — в конце.
+    assert ranked.index("У МГУ") < ranked.index("В центре")
+    assert ranked.index("В центре") < ranked.index("Далеко")
+    assert ranked[-1] == "Без координат"
+    # Координаты прокинуты в кандидатов (объективный факт для расчёта).
+    assert candidates[0].lat is not None
+
+
+def test_shortlist_landmark_max_distance_filters(geo_ref_dir):
+    """Жёсткая отсечка по max_distance_m убирает далёкие ЖК и ЖК без координат."""
+    near_mgu = LandmarkRequirement(
+        name="МГУ им. Ломоносова", lat=55.703326, lon=37.530762, max_distance_m=3000
+    )
+    criteria = Criteria(landmark_requirements=[near_mgu])
+    names = {c.name for c in build_candidate_shortlist(criteria)}
+    assert names == {"У МГУ"}
 
 
 def test_center_fully_resolved_when_all_known(ref_dir):

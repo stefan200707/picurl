@@ -53,10 +53,15 @@ async def build_url(
     warnings = parse_result.warnings.copy()
 
     # 1.5. ИИ-обогащение (теперь для всех запросов)
-    from app.ai.enrichment import AIMeta, enrich, merge_enrichment
+    from app.ai.enrichment import enrich, merge_enrichment
 
-    ai_meta = AIMeta()  # ai_used=False, cache_hit=False, explanation=None по умолчанию
-    enrichment = await enrich(text, criteria, warnings, pool=pool)
+    enrichment = await enrich(
+        text,
+        criteria,
+        warnings,
+        pool=pool,
+        option_candidates=parse_result.option_candidates,
+    )
     criteria = merge_enrichment(criteria, enrichment)
     ai_meta = enrichment.meta
 

@@ -123,10 +123,44 @@ class HousingType(StrEnum):
 
 
 class POIRequirement(BaseModel):
-    """Требование к окружению (школа, парк и т.д.), извлечённое из текста."""
+    """Требование к окружению (школа, парк и т.д.), извлечённое из текста.
+
+    - ``only_new`` — пользователь попросил именно **новый** POI («новые сады»);
+      флаг per-instance: одна фраза может смешивать «новые сады»
+      (``only_new=True``) и просто «школы» (``only_new=False``).
+    - ``max_distance_m`` — верхняя граница расстояния до POI в метрах («школа
+      в 300 метрах», «садик не дальше 500 м»). ``None`` = дистанция не указана.
+      Парсинг реализован в :func:`app.parsing.rules.poi.extract_poi_requirements`
+      (закрывает находку AUDIT_REPORT 2.11 — поле больше не «висит» без записи).
+    """
 
     category: POICategory
     raw_phrase: str
+    only_new: bool = False
+    max_distance_m: int | None = None
+
+
+class LandmarkRequirement(BaseModel):
+    """Требование «рядом с ориентиром» (вуз/работодатель/достопримечательность).
+
+    У pik.ru нет URL-фильтра «рядом с МГУ» — такой запрос обслуживается сужением
+    списка ЖК по расстоянию до координат ориентира (см.
+    :func:`app.geo.candidates.build_candidate_shortlist`). Поэтому здесь хранятся
+    именно ``lat``/``lon`` ориентира: ранжирование ЖК по дистанции — чистая
+    математика (:func:`app.geo.distance.haversine`), без обращения к ИИ.
+
+    - ``max_distance_m`` — верхняя граница расстояния (по аналогии с
+      :class:`POIRequirement`); ``None`` = дистанция не указана, тогда кандидаты
+      только сортируются по близости, без жёсткой отсечки.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: str
+    lat: float
+    lon: float
+    category: str | None = None
+    raw_phrase: str = ""
     max_distance_m: int | None = None
 
 
@@ -203,6 +237,11 @@ class Criteria(BaseModel):
     poi_requirements: list[POIRequirement] = Field(default_factory=list)
     center_requested: bool = False
 
+    # --- Именованные ориентиры (промпт 23) -------------------------------------
+    # «рядом с МГУ», «у Кремля» — сужают complexes по дистанции до координат
+    # ориентира детерминированно (см. app/geo/candidates.py), без похода в ИИ.
+    landmark_requirements: list[LandmarkRequirement] = Field(default_factory=list)
+
     # --- Расширяемость: слаги «как есть» (см. docs/pik-url-schema.md) --------
     current_benefit: str | None = None
     option_groups: list[str] = Field(default_factory=list)
@@ -273,6 +312,13 @@ class Criteria(BaseModel):
                 req.model_dump(exclude_none=True, mode="json") for req in self.poi_requirements
             ]
 
+        if self.landmark_requirements:
+            public["landmark_requirements"] = [
+                req.model_dump(exclude_none=True, mode="json") for req in self.landmark_requirements
+            ]
+        else:
+            public.pop("landmark_requirements", None)
+
         if not self.center_requested:
             public.pop("center_requested", None)
 
@@ -336,7 +382,7 @@ class Criteria(BaseModel):
             query_params["optionGroups"] = ",".join(self.option_groups)
         if self.options:
             query_params["options"] = ",".join(self.options)
-        if getattr(self, "required_tags", None):
+        if self.required_tags:
             query_params["requiredTags"] = ",".join(self.required_tags)
 
         # 10. Тип и статус
@@ -345,19 +391,31 @@ class Criteria(BaseModel):
         if self.only_available:
             query_params["status"] = "free"
 
-        # 11. Сортировка
+        # 11. Сортировка (используем собственные свойства Sort.field/order,
+        # AUDIT_REPORT 2.2 — вместо ручного if/elif по значению)
         if self.sort:
-            if self.sort == Sort.PRICE_ASC:
-                query_params["sortBy"] = "price"
-                query_params["orderBy"] = "asc"
-            elif self.sort == Sort.PRICE_DESC:
-                query_params["sortBy"] = "price"
-                query_params["orderBy"] = "desc"
-            elif self.sort == Sort.AREA_ASC:
-                query_params["sortBy"] = "area"
-                query_params["orderBy"] = "asc"
-            elif self.sort == Sort.AREA_DESC:
-                query_params["sortBy"] = "area"
-                query_params["orderBy"] = "desc"
+            query_params["sortBy"] = self.sort.field
+            query_params["orderBy"] = self.sort.order
 
         return query_params
+
+    def location_query_dict(self) -> dict[str, str]:
+        """Собирает multi-query id локаций (AUDIT_REPORT 2.3).
+
+        Возвращает ``{districtCounties, metroStations, districtLocations,
+        blocks}`` из id всех локационных сущностей (через запятую). Общий
+        источник правды для `validator` (всегда query) и multi-query ветки
+        `url_builder`.
+        """
+        location_params: dict[str, str] = {}
+        mapping = (
+            ("districtCounties", self.counties),
+            ("metroStations", self.metro),
+            ("districtLocations", self.districts),
+            ("blocks", self.complexes),
+        )
+        for key, entities in mapping:
+            ids = [e.id for e in entities if e.id]
+            if ids:
+                location_params[key] = ",".join(ids)
+        return location_params
