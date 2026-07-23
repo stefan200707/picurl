@@ -1013,3 +1013,253 @@ def test_station_class_numbered_line_does_not_leak_into_price_e2e():
     assert result.criteria.price_max == 12_000_000
     assert [req.line_prefix for req in result.criteria.station_class_requirements] == ["МЦД-3"]
     assert result.warnings == []
+
+
+# --- Разговорные названия линий: цвета/номера/прозвища (Milestone AI-17) ----
+#
+# Живой баг: «Нужна двушка в районе коричневой ветки» терял локационную часть
+# целиком в warnings и зря уходил в ИИ (упавший на 429), хотя задача решается
+# полностью детерминированно — не хватало только словаря разговорных названий
+# линий (см. docstring app/parsing/rules/station_class.py).
+
+
+@pytest.mark.parametrize(
+    ("text", "expected_lines"),
+    [
+        ("двушка в районе коричневой ветки", ["Кольцевая"]),
+        ("у зелёной ветки", ["Замоскворецкая"]),
+        ("рядом с оранжевой линией", ["Калужско-Рижская"]),
+        ("квартира у синей ветки", ["Арбатско-Покровская"]),
+        ("квартира у голубой ветки", ["Филёвская"]),
+        ("квартира рядом с красной веткой", ["Сокольническая"]),
+        ("квартира у фиолетовой линии", ["Таганско-Краснопресненская"]),
+        ("квартира у серой ветки", ["Серпуховско-Тимирязевская"]),
+        ("квартира у салатовой ветки", ["Люблинско-Дмитровская"]),
+        ("квартира у розовой ветки", ["Некрасовская"]),
+        ("квартира у тёмно-зелёной ветки", ["Троицкая"]),
+        ("квартира у светло-зелёной линии", ["Люблинско-Дмитровская"]),
+        # Обратный порядок слов («носитель + прилагательное»).
+        ("квартира у ветки коричневой", ["Кольцевая"]),
+    ],
+)
+def test_extract_station_class_colors(text: str, expected_lines: list[str]):
+    """Цвета линий (и их склонения) со словом-носителем «ветка»/«линия»."""
+    from app.parsing.rules.station_class import extract_station_class_requirements
+
+    reqs, spans = extract_station_class_requirements(text)
+    assert [r.line_prefix for r in reqs] == expected_lines
+    assert spans
+
+
+def test_extract_station_class_yellow_covers_both_lines():
+    """«жёлтая ветка» — разговорное имя бывшей Калининско-Солнцевской, в
+    metro.json разложенной на «Калининская» и «Солнцевская» — покрывает обе
+    линии (OR), одним «понятым» фрагментом.
+    """
+    from app.parsing.rules.station_class import extract_station_class_requirements
+
+    reqs, spans = extract_station_class_requirements("однушка у жёлтой ветки")
+    assert {r.line_prefix for r in reqs} == {"Калининская", "Солнцевская"}
+    assert len(reqs) == 2
+    assert len(spans) == 1
+
+
+@pytest.mark.parametrize(
+    ("text", "expected_lines"),
+    [
+        ("квартира у первой ветки", ["Сокольническая"]),
+        ("квартира у второй линии", ["Замоскворецкая"]),
+        ("квартира у третьей ветки", ["Арбатско-Покровская"]),
+        ("квартира у четвёртой ветки", ["Филёвская"]),
+        ("квартира у пятой ветки", ["Кольцевая"]),
+        ("квартира у шестой линии", ["Калужско-Рижская"]),
+        ("квартира у седьмой ветки", ["Таганско-Краснопресненская"]),
+        ("квартира у девятой ветки", ["Серпуховско-Тимирязевская"]),
+        ("квартира у десятой ветки", ["Люблинско-Дмитровская"]),
+    ],
+)
+def test_extract_station_class_ordinals(text: str, expected_lines: list[str]):
+    """Порядковые номера линий словами («первая», «пятая» и т.д.)."""
+    from app.parsing.rules.station_class import extract_station_class_requirements
+
+    reqs, _ = extract_station_class_requirements(text)
+    assert [r.line_prefix for r in reqs] == expected_lines
+
+
+def test_extract_station_class_eighth_covers_both_lines():
+    """«восьмая ветка» — номерной синоним «жёлтой» — тоже покрывает обе линии."""
+    from app.parsing.rules.station_class import extract_station_class_requirements
+
+    reqs, _ = extract_station_class_requirements("квартира у восьмой ветки")
+    assert {r.line_prefix for r in reqs} == {"Калининская", "Солнцевская"}
+
+
+@pytest.mark.parametrize(
+    ("text", "expected_lines"),
+    [
+        ("квартира на кольце до 20 млн", ["Кольцевая"]),
+        ("квартира у кольцевой", ["Кольцевая"]),
+        ("квартира на большом кольце", ["Большая кольцевая"]),
+        ("квартира у большой кольцевой", ["Большая кольцевая"]),
+        ("квартира у БКЛ", ["Большая кольцевая"]),
+        ("рядом с центральным кольцом", ["МЦК"]),
+        ("квартира у диаметров", ["МЦД"]),
+    ],
+)
+def test_extract_station_class_nicknames(text: str, expected_lines: list[str]):
+    """Прозвища («кольцо», «БКЛ», «центральное кольцо», «диаметры»)."""
+    from app.parsing.rules.station_class import extract_station_class_requirements
+
+    reqs, spans = extract_station_class_requirements(text)
+    assert [r.line_prefix for r in reqs] == expected_lines
+    assert spans
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "зелёный двор",
+        "зелёная зона",
+        "коричневый дом",
+        "у синего дома",
+        "жёлтые окна",
+        "квартира в зелёном районе",
+        "квартира у кольцевой дороги",
+        "квартира у большой кольцевой автодороги",
+    ],
+)
+def test_extract_station_class_no_false_positive_color_without_carrier(text: str):
+    """Цвет/прозвище без слова-носителя «ветка/линия» (или МКАД-контекст
+    «кольцевая дорога») ничего не даёт — не додумываем линию по одному цвету.
+    """
+    from app.parsing.rules.station_class import extract_station_class_requirements
+
+    reqs, spans = extract_station_class_requirements(text)
+    assert reqs == []
+    assert spans == []
+
+
+def test_station_class_bug_regression_brown_line_e2e():
+    """Регрессия исходного бага: «Нужна двушка в районе коричневой ветки»
+    больше не теряет локационную часть в warnings, комнатность сохраняется.
+    """
+    from app.parsing.parser import parse
+
+    result = parse("Нужна двушка в районе коричневой ветки")
+    assert result.criteria.rooms == [Rooms.TWO]
+    assert [r.line_prefix for r in result.criteria.station_class_requirements] == ["Кольцевая"]
+    assert result.warnings == []
+
+
+# --- Дистанция до станции класса (Milestone AI-19) --------------------------
+#
+# «Предохранитель без провода»: StationClassRequirement.max_distance_m было
+# объявлено и уже учитывалось в app/geo/candidates.py (жёсткая отсечка,
+# отключение фолбэка AI-18), но regex-парсинг дистанции не был написан — живой
+# прогон «квартира у МЦД в 500 метрах» терял «в 500 метрах» в warnings и
+# сужал выдачу по дефолтному радиусу 1500 м вместо заданных 500. Тот же класс
+# дефекта, что уже разбирался у POIRequirement.max_distance_m (см. CLAUDE.md,
+# «Аудит тихих потерь»).
+
+
+@pytest.mark.parametrize(
+    ("text", "expected_line", "expected_distance_m"),
+    [
+        ("у МЦД в 500 метрах", "МЦД", 500),
+        ("рядом с МЦД не дальше 800 м", "МЦД", 800),
+        ("у коричневой ветки в 1 км", "Кольцевая", 1000),
+        ("в пределах 700 метров от МЦД-3", "МЦД-3", 700),
+    ],
+)
+def test_extract_station_class_distance_parsed(
+    text: str, expected_line: str, expected_distance_m: int
+):
+    """Явная дистанция после/до линии заполняет max_distance_m (закрытие бага
+    «предохранитель без провода», по аналогии с POIRequirement)."""
+    from app.parsing.rules.station_class import extract_station_class_requirements
+
+    reqs, spans = extract_station_class_requirements(text)
+    assert [r.line_prefix for r in reqs] == [expected_line]
+    assert reqs[0].max_distance_m == expected_distance_m
+    assert spans
+
+
+def test_extract_station_class_walking_distance_no_hard_cutoff():
+    """«в пешей доступности» — мягкое пожелание, не жёсткая отсечка: фраза
+    консьюмится (не остаётся в warnings), но max_distance_m НЕ заполняется —
+    иначе это сломало бы фолбэк на ближайшие ЖК (Milestone AI-18), который
+    отключается только при явной пользовательской дистанции.
+    """
+    from app.parsing.rules.station_class import extract_station_class_requirements
+
+    text = "у зелёной ветки в пешей доступности"
+    reqs, spans = extract_station_class_requirements(text)
+    assert [r.line_prefix for r in reqs] == ["Замоскворецкая"]
+    assert reqs[0].max_distance_m is None
+    consumed = "".join(text[s:e] for s, e in spans)
+    assert "в пешей доступности" in consumed
+
+
+def test_station_class_distance_bug_regression_e2e():
+    """Ровно кейс из описания бага: «квартира у МЦД в 500 метрах» больше не
+    теряет дистанцию и не оставляет фрагмент в warnings."""
+    from app.parsing.parser import parse
+
+    result = parse("квартира у МЦД в 500 метрах")
+    assert len(result.criteria.station_class_requirements) == 1
+    assert result.criteria.station_class_requirements[0].line_prefix == "МЦД"
+    assert result.criteria.station_class_requirements[0].max_distance_m == 500
+    assert result.warnings == []
+
+
+def test_extract_station_class_distance_does_not_steal_price():
+    """«двушка у МЦД до 15 млн» — «15 млн» это цена, не дистанция: у станции
+    класса дистанция не указана, а ценовое правило должно сохранить свой спан
+    (регрессия многократно проверяемого в проекте класса багов «одно число —
+    два смысла», см. Milestone AI-16)."""
+    from app.parsing.parser import parse
+    from app.parsing.rules.station_class import extract_station_class_requirements
+
+    reqs, _spans = extract_station_class_requirements("двушка у МЦД до 15 млн")
+    assert [r.line_prefix for r in reqs] == ["МЦД"]
+    assert reqs[0].max_distance_m is None
+
+    result = parse("двушка у МЦД до 15 млн")
+    assert result.criteria.price_max == 15_000_000
+    assert result.warnings == []
+
+
+def test_extract_station_class_distance_does_not_steal_area():
+    """«однушка у МЦД от 60 метров» — это ПЛОЩАДЬ (area_min=60), а не радиус:
+    синтаксис расстояния требует «в X метрах»/«не дальше X м», а не голое
+    «от X метров» (это синтаксис area.py). Самый опасный случай — обе величины
+    измеряются в метрах, поэтому проверяем оба направления явно."""
+    from app.parsing.parser import parse
+    from app.parsing.rules.station_class import extract_station_class_requirements
+
+    reqs, _spans = extract_station_class_requirements("однушка у МЦД от 60 метров")
+    assert [r.line_prefix for r in reqs] == ["МЦД"]
+    assert reqs[0].max_distance_m is None
+
+    result = parse("однушка у МЦД от 60 метров")
+    assert result.criteria.area_min == 60
+    assert result.criteria.station_class_requirements[0].max_distance_m is None
+    assert result.warnings == []
+
+
+def test_extract_station_class_distance_does_not_steal_floor():
+    """«квартира у МЦД-3 на 5 этаже» — этаж не должен становиться дистанцией.
+
+    ``extract_floor`` не разбирает голое «на N этаже» без ключевого слова
+    диапазона/границы (известное, отдельное от этой задачи ограничение — не
+    относится к дистанции станций), поэтому здесь проверяем только то, что
+    касается самой находки: линия распознана без дистанции, «5» не попало
+    в ``max_distance_m``, а спан станции не поглотил «на 5 этаже».
+    """
+    from app.parsing.rules.station_class import extract_station_class_requirements
+
+    text = "квартира у МЦД-3 на 5 этаже"
+    reqs, spans = extract_station_class_requirements(text)
+    assert [r.line_prefix for r in reqs] == ["МЦД-3"]
+    assert reqs[0].max_distance_m is None
+    assert "на 5 этаже" not in "".join(text[s:e] for s, e in spans)

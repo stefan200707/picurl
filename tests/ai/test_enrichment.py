@@ -864,12 +864,16 @@ async def test_enrich_station_class_warns_when_no_complex_coordinates(
 
 @pytest.mark.asyncio
 @patch("app.ai.enrichment.log_ai_call", new_callable=AsyncMock)
+@patch("app.ai.enrichment.station_class_nearest_fallback", return_value=([], None))
 @patch("app.ai.enrichment.station_class_points", return_value=[(55.8000, 37.6000)])
 @patch("app.ai.enrichment.build_candidate_shortlist")
-async def test_enrich_station_class_warns_when_nothing_nearby(
-    mock_build, mock_points, mock_log, mock_settings
+async def test_enrich_station_class_warns_when_nothing_nearby_and_fallback_unavailable(
+    mock_build, mock_points, mock_fallback, mock_log, mock_settings
 ):
-    """Координаты есть, но в радиусе «рядом» ничего не найдено — предупреждаем."""
+    """Координаты есть, но в радиусе «рядом» ничего не найдено, а фолбэк
+    (Milestone AI-18) сам ничего предложить не смог (например, явная дистанция
+    от пользователя не позволяет деградировать) — сохраняется прежний честный
+    warning, пустой результат остаётся пустым, а не подменяется молча."""
     mock_settings.AI_ENRICHMENT_ENABLED = False
     mock_build.return_value = [
         ComplexCandidate(
@@ -891,3 +895,42 @@ async def test_enrich_station_class_warns_when_nothing_nearby(
 
     assert result.matched_complex_ids == []
     assert any("не найдено" in w for w in warnings)
+    assert not any("показаны ближайшие" in w for w in warnings)
+
+
+@pytest.mark.asyncio
+@patch("app.ai.enrichment.log_ai_call", new_callable=AsyncMock)
+@patch("app.ai.enrichment.station_class_nearest_fallback")
+@patch("app.ai.enrichment.station_class_points", return_value=[(55.8000, 37.6000)])
+@patch("app.ai.enrichment.build_candidate_shortlist")
+async def test_enrich_station_class_falls_back_to_nearest_when_default_radius_empty(
+    mock_build, mock_points, mock_fallback, mock_log, mock_settings
+):
+    """Milestone AI-18: если в радиусе по умолчанию пусто, вместо тишины
+    задействуется фолбэк на ближайшие ЖК (осмысленная деградация вместо пустой
+    выдачи — живой баг «в районе коричневой ветки»/«на кольце»)."""
+    mock_settings.AI_ENRICHMENT_ENABLED = False
+    far_candidate = ComplexCandidate(
+        id="1",
+        name="Далеко",
+        district=None,
+        county=None,
+        metro=[],
+        is_center=None,
+        known_poi={},
+        lat=56.2000,
+        lon=37.0000,
+    )
+    mock_build.return_value = [far_candidate]
+    mock_fallback.return_value = (
+        [far_candidate],
+        "в радиусе 1.5 км от станций класса «МЦД» ЖК нет; показаны ближайшие — от 44.30 км",
+    )
+    criteria = Criteria(station_class_requirements=[_MCD])
+    warnings = []
+
+    result = await enrich("рядом с мцд не важно какой станции", criteria, warnings)
+
+    assert result.matched_complex_ids == ["1"]
+    assert any("показаны ближайшие" in w for w in warnings)
+    mock_fallback.assert_called_once()

@@ -94,3 +94,6 @@ temp/
 
 # Custom documentation
 docs_untracked/
+
+# Generated code graph
+graphify-out/

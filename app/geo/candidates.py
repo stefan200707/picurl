@@ -41,6 +41,23 @@ LANDMARK_DEFAULT_RADIUS_M = CENTER_RADIUS_M
 #: приближение, требующее калибровки на реальных данных, а не точная величина.
 STATION_CLASS_DEFAULT_RADIUS_M = 1500.0
 
+#: Сколько ближайших ЖК показывать, если в радиусе по умолчанию
+#: (``STATION_CLASS_DEFAULT_RADIUS_M``) не нашлось ни одного (Milestone AI-18).
+#: Живой прогон «в районе коричневой ветки»/«на кольце» показал: это не баг
+#: парсинга и не ложное срабатывание, а факт портфеля ПИК — внутри Садового
+#: кольца (где ходит Кольцевая линия) новостроек у застройщика нет, ближайший
+#: ЖК оказывается в 2.5+ км. Молчаливо возвращать пустую выдачу в такой
+#: ситуации формально верно (инвариант «ничего не теряется» соблюдён — есть
+#: warning), но бесполезно пользователю: сайт вполне может показать ближайшие
+#: варианты. N=8 — компромисс: достаточно, чтобы пользователь мог дальше сам
+#: отсеять по цене/комнатности несколько вариантов (в реальных данных для
+#: Кольцевой линии это Первый Дубровский ~2.51 км, Руставели 14 ~3.56 км,
+#: Барклая 6 ~3.74 км, Волжский парк ~5.24 км и, возможно, ещё несколько), но
+#: не настолько много, чтобы под видом «ближайших» подсунуть половину каталога
+#: ПИК без всякой связи с запрошенной линией. Как и другие калибруемые пороги
+#: проекта — эвристика, не точная величина.
+STATION_CLASS_FALLBACK_LIMIT = 8
+
 
 def _landmark_radius(landmarks: list[LandmarkRequirement]) -> float:
     """Действующий радиус «рядом» для списка требований-ориентиров.
@@ -288,6 +305,72 @@ def _rank_by_station_class(
     if max_distance is None:
         ranked.extend(unknown)
     return ranked
+
+
+def _station_class_distances(
+    candidates: list[ComplexCandidate], requirements: list[StationClassRequirement]
+) -> list[tuple[float, ComplexCandidate]]:
+    """Дистанции (метры) до БЛИЖАЙШЕЙ станции класса для кандидатов с координатами.
+
+    Кандидаты без ``lat``/``lon`` в расчёт не берутся (близость для них
+    недоказуема — это уже отражено отдельным warning'ом выше по стеку, здесь
+    не дублируем). Отсортировано по возрастанию дистанции.
+    """
+    points = station_class_points(Criteria(station_class_requirements=requirements))
+    if not points:
+        return []
+
+    scored = [
+        (min(haversine(lat, lon, c.lat, c.lon) for lat, lon in points), c)
+        for c in candidates
+        if c.lat is not None and c.lon is not None
+    ]
+    scored.sort(key=lambda pair: pair[0])
+    return scored
+
+
+def station_class_nearest_fallback(
+    candidates: list[ComplexCandidate],
+    requirements: list[StationClassRequirement],
+    class_names: str,
+) -> tuple[list[ComplexCandidate], str | None]:
+    """N ближайших ЖК, когда в радиусе по умолчанию не нашлось ни одного (AI-18).
+
+    Осмысленная деградация вместо пустой выдачи: если станции класса физически
+    существуют дальше, чем ``STATION_CLASS_DEFAULT_RADIUS_M``, показываем
+    ``STATION_CLASS_FALLBACK_LIMIT`` ближайших ЖК вместо тишины — но **только**
+    когда радиус дефолтный. Явная пользовательская дистанция
+    (``StationClassRequirement.max_distance_m`` задан хотя бы у одного
+    требования) — жёсткая отсечка, а не «примерно рядом»: в этом случае фолбэк
+    не применяется вообще, и функция возвращает ``([], None)``, оставляя
+    вызывающий код (``app.ai.enrichment.enrich``) с прежним поведением (пустой
+    результат + честный warning).
+
+    ``class_names`` — уже отформатированная строка вида ``"«Кольцевая»"``
+    (несколько классов — через запятую), используется для текста warning в том
+    же виде, что и остальные warning'и этой ветки в ``app.ai.enrichment``.
+
+    Возвращает ``(кандидаты, warning)``: кандидаты отсортированы по дистанции,
+    усечение до лимита — ПОСЛЕ сортировки (как и весь остальной ранжирующий
+    код в этом модуле). Если фолбэк неприменим (явная дистанция задана) или
+    показать вообще нечего (нет ни одной подходящей станции с координатами, ни
+    одного кандидата с координатами) — ``([], None)``.
+    """
+    if any(r.max_distance_m is not None for r in requirements):
+        return [], None
+
+    scored = _station_class_distances(candidates, requirements)
+    if not scored:
+        return [], None
+
+    nearest = scored[:STATION_CLASS_FALLBACK_LIMIT]
+    radius_km = STATION_CLASS_DEFAULT_RADIUS_M / 1000
+    nearest_km = nearest[0][0] / 1000
+    warning = (
+        f"в радиусе {radius_km:g} км от станций класса {class_names} ЖК нет; "
+        f"показаны ближайшие — от {nearest_km:.2f} км"
+    )
+    return [c for _dist, c in nearest], warning
 
 
 def resolve_known_facts(candidates: list[ComplexCandidate], criteria: Criteria) -> dict:

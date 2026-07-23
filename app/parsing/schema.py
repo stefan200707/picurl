@@ -183,10 +183,11 @@ class StationClassRequirement(BaseModel):
       важна, без указания конкретного класса).
     - ``raw`` — исходный распознанный фрагмент текста (для читаемости/логов).
     - ``max_distance_m`` — верхняя граница расстояния (по аналогии с
-      :class:`LandmarkRequirement`/:class:`POIRequirement`); явный парсинг
-      дистанции для этого правила пока не реализован (в текущих примерах её
-      никто не называет), поле зарезервировано на будущее — не «висит» без
-      документации, а не «забыто».
+      :class:`LandmarkRequirement`/:class:`POIRequirement`); «у МЦД в 500
+      метрах», «в пределах 700 метров от МЦД-3». Парсинг реализован в
+      :func:`app.parsing.rules.station_class.extract_station_class_requirements`
+      (закрывает находку Milestone AI-19 — поле больше не «висит» без записи,
+      см. CLAUDE.md).
     """
 
     model_config = ConfigDict(extra="forbid")

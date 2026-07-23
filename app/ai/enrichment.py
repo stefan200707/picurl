@@ -19,6 +19,7 @@ from app.geo.candidates import (
     build_query_signature,
     fully_resolved,
     resolve_known_facts,
+    station_class_nearest_fallback,
     station_class_points,
 )
 from app.parsing.schema import Criteria
@@ -480,14 +481,27 @@ async def enrich(
             )
             return await _log(EnrichmentResult.noop())
 
-        if not known["matched_complex_ids"]:
-            warnings.append(f"рядом со станциями класса {names} подходящих ЖК не найдено")
+        matched_complex_ids = known["matched_complex_ids"]
+        if not matched_complex_ids:
+            # Осмысленная деградация (Milestone AI-18): пустая выдача в радиусе
+            # по умолчанию — не повод молчать, если сайт может показать
+            # ближайшие варианты. Фолбэк сам возвращает ([], None), если
+            # пользователь задал явную дистанцию (max_distance_m) — тогда это
+            # жёсткая отсечка, и прежнее поведение (пустой warning) правильное.
+            fallback_candidates, fallback_warning = station_class_nearest_fallback(
+                candidates, criteria.station_class_requirements, names
+            )
+            if fallback_warning:
+                warnings.append(fallback_warning)
+                matched_complex_ids = [c.id for c in fallback_candidates]
+            else:
+                warnings.append(f"рядом со станциями класса {names} подходящих ЖК не найдено")
 
         result = EnrichmentResult(
             ai_used=False,
             cache_hit=False,
             success=True,
-            matched_complex_ids=known["matched_complex_ids"],
+            matched_complex_ids=matched_complex_ids,
         )
         return await _log(result)
 

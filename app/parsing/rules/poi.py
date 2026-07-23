@@ -1,7 +1,15 @@
 import re
 
 from app.geo.poi import POICategory
-from app.parsing.rules.core import Span, _iter_free, _normalize
+from app.parsing.rules.core import (
+    _DIST_MARKER,
+    _DIST_NUM,
+    _DIST_UNIT,
+    Span,
+    _iter_free,
+    _normalize,
+    _parse_distance_meters,
+)
 from app.parsing.schema import POIRequirement
 
 #: Префикс перед POI-категорией. Захватываем «нов-» именованной группой ``new``
@@ -11,12 +19,11 @@ from app.parsing.schema import POIRequirement
 PREFIX = r"(?:(?:с|со)\s+)?(?P<new>\bнов\w+\s+)?"
 #: Хвост после POI-категории. Слова «поблизости/рядом/близко» намеренно НЕ
 #: сохраняются: близость к POI — это и есть суть POI-требования, отдельного
-#: факта тут нет. Дистанцию («в 300 метрах», «не дальше 500 м») захватываем
-#: группой ``dist`` → :attr:`POIRequirement.max_distance_m`.
-_DISTANCE = (
-    r"(?:\s+(?:в|не\s+дальше|не\s+более|не\s+далее|в\s+пределах|максимум)?\s*"
-    r"(?P<dist>\d{2,4})\s*(?:м\b|метр\w*))?"
-)
+#: факта тут нет. Дистанцию («в 300 метрах», «не дальше 500 м», «в 1.5 км»)
+#: захватываем группами ``dist``/``dist_unit`` (общий фрагмент
+#: ``app.parsing.rules.core``, переиспользуемый и в ``station_class.py``) →
+#: :attr:`POIRequirement.max_distance_m`.
+_DISTANCE = rf"(?:\s+(?:{_DIST_MARKER}\s*)?(?P<dist>{_DIST_NUM})\s*(?P<dist_unit>{_DIST_UNIT}))?"
 SUFFIX = r"(?:\s+(?:поблизости|неподалеку|неподалёку|рядом\s+с\s+ним|близко))?" + _DISTANCE
 
 #: Разговорное голое «сад» (без слова «детский») тоже означает детсад
@@ -105,7 +112,11 @@ def extract_poi_requirements(text: str) -> tuple[list[POIRequirement], bool, lis
             phrase = text[match.start() : match.end()]
             only_new = match.group("new") is not None
             dist_raw = match.group("dist")
-            max_distance_m = int(dist_raw) if dist_raw is not None else None
+            max_distance_m = (
+                _parse_distance_meters(dist_raw, match.group("dist_unit"))
+                if dist_raw is not None
+                else None
+            )
             poi_reqs.append(
                 POIRequirement(
                     category=category,
