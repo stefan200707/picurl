@@ -107,10 +107,15 @@ async def validate(criteria: Criteria, client: httpx.AsyncClient) -> ValidationR
             location_filters_not_verified=location_filters_not_verified,
         )
     except httpx.RequestError as e:
-        logging.warning("Ошибка запроса при валидации: %s", e, exc_info=True)
+        # Сеть недоступна/таймаут — ожидаемый best-effort исход, не падение
+        # сервиса: одна внятная строка без traceback (шум в логах вводил в
+        # заблуждение). Контракт ответа не меняется.
+        logging.warning("Валидация: сетевая ошибка (%s), выдача не проверена", type(e).__name__)
         return ValidationResult(result_count=None, ok=True, warning="выдача не проверена")
     except httpx.HTTPStatusError as e:
-        logging.warning("Ошибка статуса при валидации: %s", e, exc_info=True)
+        # 5xx/4xx приходят со стороны api.pik.ru (их сервер), ошибка уже
+        # обработана — traceback здесь только шумел. Логируем код статуса.
+        logging.warning("Валидация: pik.ru вернул %s, выдача не проверена", e.response.status_code)
         return ValidationResult(result_count=None, ok=True, warning="выдача не проверена")
     except (ValueError, TypeError) as e:
         logging.warning("Ошибка парсинга ответа при валидации: %s", e, exc_info=True)
