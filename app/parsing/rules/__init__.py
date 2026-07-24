@@ -19,6 +19,7 @@ from .misc import (
     extract_settlement_year,
     extract_sort,
     extract_unsupported,
+    extract_within_mkad,
 )
 from .poi import extract_poi_requirements as extract_poi_requirements
 from .price import PriceFacts as PriceFacts
@@ -76,7 +77,9 @@ def apply_rules(text: str) -> RulesOutcome:
         criteria.time_on_transport = time.time_on_transport
     consumed.extend(spans)
 
-    floor, spans = extract_floor(norm)
+    # Передаём уже съеденные спаны (цена/площадь/время/комнаты выше): голый паттерн
+    # диапазона этажа «от X до Y» иначе повторно матчит эти числа (см. floor.py).
+    floor, spans = extract_floor(norm, consumed)
     if floor.floor_min is not None:
         criteria.floor_min = floor.floor_min
     if floor.floor_max is not None:
@@ -124,6 +127,11 @@ def apply_rules(text: str) -> RulesOutcome:
     only_avail, spans = extract_only_available(norm)
     if only_avail:
         criteria.only_available = True
+        consumed.extend(spans)
+
+    within_mkad, spans = extract_within_mkad(norm)
+    if within_mkad is not None:
+        criteria.within_mkad = within_mkad
         consumed.extend(spans)
 
     unsupported, spans = extract_unsupported(norm)

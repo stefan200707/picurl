@@ -11,16 +11,29 @@ _ROOMS_WORD_PATTERNS: list[tuple[re.Pattern[str], Rooms]] = [
     (re.compile(r"\bоднушк\w*|\bоднокомнатн\w*"), Rooms.ONE),
     (re.compile(r"\bдвушк\w*|\bдвухкомнатн\w*"), Rooms.TWO),
     (
-        re.compile(r"\bтрешк\w*|\bтрехкомнатн\w*|\bчетырехкомнатн\w*|\bмногокомнатн\w*"),
+        # «трех[ауи]» — разговорное «трёха/трёху/трёхи» (ё→е после нормализации);
+        # граница \b защищает от числительного «трёх» в «у трёх подъездов» и от
+        # «трёхкомнатн»/«трёхэтажн» (после «трех» там к/э, а не а/у/и).
+        re.compile(
+            r"\bтрешк\w*|\bтрех[ауи]\b|\bтрехкомнатн\w*|\bчетырехкомнатн\w*|\bмногокомнатн\w*"
+        ),
         Rooms.THREE_PLUS,
     ),
 ]
+
+#: Числительные прописью для комнатности («одна/две/три/четыре/пять …комнат…»).
+#: В отличие от слэнга («двушка») и «N-комнатн» это голые количественные
+#: числительные перед словом «комнат» — раньше ловились только внутри идиомы
+#: «от N комнат» (``_ROOMS_WORD_RANGES``), а формы вроде «одна или две комнаты»
+#: терялись.
+_CARD_WORD = r"(?:одн[аоу]|дв(?:е|ух)|тр(?:и|ех)|четыр(?:е|ех)|пят[иь])"
 
 #: Отрицания комнатности, например "кроме студии" или "точно не двушку"
 _ROOMS_NEGATION = re.compile(
     r"\b(?:не|кроме|без|точно\s+не)\s+"
     r"(?:студи\w*|однушк\w*|однокомнатн\w*|двушк\w*|двухкомнатн\w*|трешк\w*"
-    r"|трехкомнатн\w*|четырехкомнатн\w*|многокомнатн\w*"
+    r"|трех[ауи]\b|трехкомнатн\w*|четырехкомнатн\w*|многокомнатн\w*"
+    rf"|{_CARD_WORD}\s+комнат\w*"
     r"|\d\s*[-–—]?\s*(?:комнат\w*|комн\.|к\b))"
 )
 
@@ -30,7 +43,7 @@ _ROOMS_NEGATION = re.compile(
 #: количество комнат; Milestone AI-16).
 _ROOMS_NUM = re.compile(
     r"(?:\bдаже\s+)?"  # учитываем слово «даже» (из задания 2)
-    rf"\b{_NOT_LINE_NUMBER}(\d(?:\s*[-–—,/]\s*\d|\s+и(?:ли)?\s+\d)*)"
+    rf"\b{_NOT_LINE_NUMBER}(\d(?:\s*[-–—,/]\s*\d|\s+(?:и(?:ли)?|либо)\s+\d)*)"
     r"(?:\s*\+)?"
     r"(?:\s*[-–—]?\s*х)?"
     r"\s*[-–—]?\s*"
@@ -60,6 +73,22 @@ def _plus_rooms(digit: int) -> list[Rooms]:
 
 
 _ROOMS_WORD_RANGES = re.compile(r"\bот\s+(одн\w+|двух|трех|четырех|пяти)\s+комнат\w*")
+
+#: «одна или две комнаты», «две-три комнаты», «одну комнату» — количественные
+#: числительные прописью с цепочкой союзов (симметрично цифровому ``_ROOMS_NUM``).
+#: Обязательный хвост «комнат…» защищает от ложняков на «одна остановка»/«две минуты».
+_ROOMS_CARD = re.compile(
+    rf"\b({_CARD_WORD}(?:\s*[-–—,/]\s*{_CARD_WORD}|\s+(?:и(?:ли)?|либо)\s+{_CARD_WORD})*)"
+    r"\s+(?:комнат\w*|комн\.)"
+)
+
+
+def _card_to_digit(word: str) -> int:
+    """Числительное прописью → цифра (5 схлопнется в three_plus через ``_digit_rooms``)."""
+    for stem, digit in (("одн", 1), ("дв", 2), ("тр", 3), ("четыр", 4), ("пят", 5)):
+        if word.startswith(stem):
+            return digit
+    return 1
 
 
 def _word_to_digit(word: str) -> int:
@@ -93,6 +122,16 @@ def extract_rooms(text: str) -> tuple[list[Rooms], list[Span]]:
     for match in _iter_free(_ROOMS_WORD_RANGES, norm, spans):
         digit = _word_to_digit(match.group(1))
         rooms = _plus_rooms(digit)
+        for room in rooms:
+            found.append((match.start(), order, room))
+            order += 1
+        spans.append(match.span())
+
+    for match in _iter_free(_ROOMS_CARD, norm, spans):
+        words = re.findall(_CARD_WORD, match.group(1))
+        rooms = [room for w in words if (room := _digit_rooms(_card_to_digit(w))) is not None]
+        if not rooms:
+            continue
         for room in rooms:
             found.append((match.start(), order, room))
             order += 1

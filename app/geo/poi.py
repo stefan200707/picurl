@@ -10,6 +10,7 @@ class POICategory(StrEnum):
     SHOP = "shop"
     PARKING = "parking"
     PARK_FOREST = "park_forest"
+    MEDICAL = "medical"
     OTHER = "other"
 
 
@@ -54,6 +55,8 @@ def get_overpass_query(lat: float, lon: float, category: POICategory, radius_m: 
         ],
         POICategory.SHOP: ['"shop"~"supermarket|convenience"'],
         POICategory.PARKING: ['"amenity"="parking"'],
+        # поликлиника/клиника=clinic/doctors, больница/роддом=hospital, аптека=pharmacy
+        POICategory.MEDICAL: ['"amenity"~"clinic|hospital|doctors|pharmacy"'],
     }
 
     if category == POICategory.PARK_FOREST:

@@ -1,5 +1,7 @@
 from pydantic import BaseModel
 
+from app.parsing.schema import HousingType, Rooms, Sort
+
 
 class ComplexCandidate(BaseModel):
     id: str
@@ -50,3 +52,48 @@ class OptionResolutionAnswer(BaseModel):
     """Ответ модели на резолвинг фраз-синонимов фильтров под опции."""
 
     matches: list[OptionMatch] = []
+
+
+class FreeTextCriteriaAnswer(BaseModel):
+    """Извлечение недостающих СКАЛЯРНЫХ фильтров из свободного текста (ведро C).
+
+    Новый путь (ослабление гейтов): если детерминированный парсер оставил
+    значимый остаток («не удалось распознать»), модель пытается достать из текста
+    только безопасные скаляры/энумы Criteria, НЕ требующие резолвинга справочника
+    (метро/районы/округа/ЖК/опции остаются на детерминированных путях +
+    ``sanitize_*``, модель их не трогает).
+
+    Инвариант «ИИ не выдумывает фильтры» соблюдён двумя рубежами: (1) значения
+    ограничены схемой (энумы Rooms/Sort/HousingType, границы Criteria при
+    присваивании); (2) детерминированный слой всегда выигрывает — заполняются
+    лишь ПУСТЫЕ поля (см. :func:`app.ai.enrichment.resolve_free_text_criteria`).
+    ``consumed_fragments`` — фрагменты из ``unresolved_fragments``, которые модель
+    сопоставила с полем; по ним снимаются warning'и, как в option-резолвинге.
+    """
+
+    rooms: list[Rooms] = []
+    price_min: int | None = None
+    price_max: int | None = None
+    area_min: float | None = None
+    area_max: float | None = None
+    area_kitchen_min: float | None = None
+    area_kitchen_max: float | None = None
+    floor_min: int | None = None
+    floor_max: int | None = None
+    not_first_floor: bool = False
+    last_floor: bool = False
+    not_last_floor: bool = False
+    ready: bool | None = None
+    sort: Sort | None = None
+    housing_type: HousingType | None = None
+    settlement_year_from: int | None = None
+    settlement_year_to: int | None = None
+    #: Время до метро, минуты (реальные URL-фильтры timeOnFoot/timeOnTransport).
+    #: ИИ-страховка: детерминированное правило rules/time.py может промахнуться по
+    #: идиоме («в шаговой доступности»), тогда поле заполнит модель.
+    time_on_foot: int | None = None
+    time_on_transport: int | None = None
+    only_available: bool = False
+    consumed_fragments: list[str] = []
+    explanation: str = ""
+    confidence: float = 0.0

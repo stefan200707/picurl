@@ -358,6 +358,24 @@ _SPECIFIC_NICKNAME_PATTERNS: list[tuple[re.Pattern[str], list[str]]] = [
 #: см. докстринг модуля про остаточный риск.
 _GENERIC_RING_PATTERN = re.compile(r"\bкольц\w+\b" + _NOT_ROAD_TAIL + _DISTANCE_AFTER)
 
+#: Маркеры дорог/транспортных колец (НЕ метро): если матч линии/кольца окружён
+#: ими, речь про автодорогу, а не про станцию. В отличие от _NOT_ROAD_TAIL
+#: (lookahead только ВПЕРЁД, пропускавший «МКАД кольца», где дорога ПЕРЕД словом),
+#: _is_road_context смотрит по ОБЕ стороны матча.
+_ROAD_RING_MARKERS = re.compile(
+    r"\b(?:мкад|цкад|ттк|садов\w*|бульварн\w*|транспортн\w*|шоссе|"
+    r"трасс\w*|магистрал\w*|(?:авто)?дорог\w*)\b"
+)
+#: Окно контекста в символах по каждую сторону (~3-4 слова).
+_ROAD_CONTEXT_WINDOW = 22
+
+
+def _is_road_context(norm: str, start: int, end: int) -> bool:
+    """Стоит ли матч линии/кольца в контексте автодороги (МКАД/ЦКАД/ТТК/шоссе…)."""
+    before = norm[max(0, start - _ROAD_CONTEXT_WINDOW) : start]
+    after = norm[end : end + _ROAD_CONTEXT_WINDOW]
+    return bool(_ROAD_RING_MARKERS.search(before) or _ROAD_RING_MARKERS.search(after))
+
 
 def _canonical_line(token: str) -> str:
     """Каноническая форма распознанного класса линии («мцд-2» -> «МЦД-2»)."""
@@ -399,6 +417,10 @@ def _add_matches(
     for match in pattern.finditer(norm):
         span = match.span()
         if _overlaps(span, spans):
+            continue
+        # Ложное срабатывание: «МКАД кольца», «Садовое кольцо», «ТТК» — это дороги,
+        # а не станции. Проверяем контекст по обе стороны (см. _is_road_context).
+        if _is_road_context(norm, span[0], span[1]):
             continue
         raw = text[span[0] : span[1]]
         max_distance_m = _extract_distance(match)

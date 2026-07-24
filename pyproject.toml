@@ -12,7 +12,7 @@ dependencies = [
     "uvicorn>=0.30",
     "setuptools<70",
     "pydantic-settings>=2.14.2",
-    "anthropic>=0.117.0",
+    "claude-agent-sdk>=0.2.100",
     "psycopg[binary]>=3.3.4",
     "pgvector>=0.5.0",
     "torch>=2.12.1",

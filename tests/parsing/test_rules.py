@@ -72,6 +72,12 @@ from app.parsing.schema import Finish, HousingType, Rooms, Sort
         ("1, 2 и 3 комнатные", [Rooms.ONE, Rooms.TWO, Rooms.THREE_PLUS]),
         ("1 или 2 комнатную", [Rooms.ONE, Rooms.TWO]),
         ("студию или однушку", [Rooms.STUDIO, Rooms.ONE]),
+        # Числительные прописью
+        ("одна или две комнаты", [Rooms.ONE, Rooms.TWO]),
+        ("две или три комнаты", [Rooms.TWO, Rooms.THREE_PLUS]),
+        ("одну комнату", [Rooms.ONE]),
+        ("три-четыре комнаты", [Rooms.THREE_PLUS]),
+        ("пять комнат", [Rooms.THREE_PLUS]),
         # Регистр и ё/е
         ("СТУДИЯ", [Rooms.STUDIO]),
         ("ТРЁШКА", [Rooms.THREE_PLUS]),
@@ -95,6 +101,7 @@ def test_extract_rooms(text: str, expected: list[Rooms]) -> None:
         ("точно не двушку", 1),
         ("кроме однушки", 1),
         ("без студий", 1),
+        ("кроме двух комнат", 1),
     ],
 )
 def test_extract_rooms_negation(text: str, expected_spans_len: int) -> None:
@@ -422,6 +429,15 @@ def test_extract_floor(text: str, expected: FloorFacts) -> None:
         ("без ремонта", [0]),
         ("черновая", [0]),
         ("черновая отделка", [0]),
+        # Предчистовая / whitebox (WHITE_BOX=2). Латиница проходит через
+        # гомоглиф-нормализацию, но матчер её ловит; паразитного READY нет.
+        ("предчистовая отделка", [Finish.WHITE_BOX]),
+        ("whitebox", [Finish.WHITE_BOX]),
+        ("white box", [Finish.WHITE_BOX]),
+        ("с отделкой whitebox", [Finish.WHITE_BOX]),
+        ("с whitebox отделкой", [Finish.WHITE_BOX]),
+        ("вайтбокс", [Finish.WHITE_BOX]),
+        ("вайт-бокс", [Finish.WHITE_BOX]),
         ("какая отделка есть в вариантах", []),
         ("ремонт делать сами не хотим", []),
         ("у метро", []),
@@ -712,6 +728,33 @@ def test_apply_rules_price_area_floor_do_not_collide() -> None:
     assert criteria.price_max == 15_000_000
 
 
+def test_apply_rules_range_idiom_does_not_leak_into_floor() -> None:
+    """«от X до Y» у площади/цены не создаёт паразитный диапазон этажей.
+
+    Регресс: голый паттерн диапазона этажа (_FLOOR_RANGE_E, без слова «этаж»)
+    повторно матчил число, уже съеденное площадью/ценой, и подставлял
+    floorFrom/floorTo (для площади 35–45 это обнуляло выдачу).
+    """
+    area = apply_rules("однушка площадью от 35 до 45 метров").criteria
+    assert area.area_min == 35
+    assert area.area_max == 45
+    assert area.floor_min is None
+    assert area.floor_max is None
+
+    price = apply_rules("двушка ценой от 15 до 22 миллионов").criteria
+    assert price.price_min == 15_000_000
+    assert price.price_max == 22_000_000
+    assert price.floor_min is None
+    assert price.floor_max is None
+
+
+def test_apply_rules_bare_floor_range_still_works() -> None:
+    """Голый «от X до Y» без площади/цены по-прежнему трактуется как этаж."""
+    criteria = apply_rules("квартира от 5 до 10").criteria
+    assert criteria.floor_min == 5
+    assert criteria.floor_max == 10
+
+
 def test_extract_required_tags():
     from app.parsing.rules import extract_required_tags
 
@@ -744,6 +787,37 @@ def test_extract_poi_requirements():
     assert len(poi_reqs) == 2
     assert poi_reqs[0].category == POICategory.SHOP
     assert poi_reqs[1].category == POICategory.PARKING
+
+
+def test_poi_school_does_not_match_shkolnik():
+    """«школьник» — человек, не объект: открытый стем «школ\\w+» не должен ловить его."""
+    from app.geo.poi import POICategory
+    from app.parsing.rules.poi import extract_poi_requirements
+
+    poi_reqs, _center, _spans = extract_poi_requirements("живу со школьником рядом со школой")
+    # только «школа», не «школьник»
+    assert [req.category for req in poi_reqs] == [POICategory.SCHOOL]
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "рядом с поликлиникой",
+        "около больницы",
+        "рядом с аптекой",
+        "рядом с роддомом",
+        "недалеко медцентр",
+        "рядом с клиникой",
+    ],
+)
+def test_extract_poi_medical(text: str):
+    """Медицинские POI (поликлиника/больница/аптека/роддом/медцентр/клиника)."""
+    from app.geo.poi import POICategory
+    from app.parsing.rules.poi import extract_poi_requirements
+
+    poi_reqs, _center, _spans = extract_poi_requirements(text)
+    assert len(poi_reqs) == 1
+    assert poi_reqs[0].category == POICategory.MEDICAL
 
 
 def test_poi_only_new_flag():

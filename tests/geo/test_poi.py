@@ -2,7 +2,15 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from app.geo.poi import POICategory, fetch_poi
+from app.geo.poi import POICategory, fetch_poi, get_overpass_query
+
+
+def test_medical_overpass_query_has_medical_tags():
+    """Категория MEDICAL строит Overpass-запрос по amenity clinic/hospital/doctors/pharmacy."""
+    query = get_overpass_query(55.75, 37.61, POICategory.MEDICAL, 2000)
+    assert query, "MEDICAL должна давать непустой запрос"
+    assert "clinic|hospital|doctors|pharmacy" in query
+    assert "around:2000" in query
 
 
 @pytest.mark.asyncio

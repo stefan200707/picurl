@@ -5,6 +5,7 @@ from app.parsing.rules.core import (
     _DIST_MARKER,
     _DIST_NUM,
     _DIST_UNIT,
+    _PROXIMITY_MARKER,
     Span,
     _iter_free,
     _normalize,
@@ -57,7 +58,10 @@ _SAD_BARE_SINGULAR_WITH_MARKER = re.compile(r"(?:(?:с|со)\s+)?(?P<new>\bно�
 
 _POI_PATTERNS: list[tuple[re.Pattern[str], POICategory]] = [
     (
-        re.compile(PREFIX + r"(?<!вид на )(?<!видом на )\bшкол\w+" + SUFFIX),
+        # ``(?!ьник)`` отсекает «школьник/школьником/школьника» (человек, не объект):
+        # открытый стем ``\bшкол\w+`` иначе ловит «со школьником» как school-POI.
+        # Формы объекта «школа/школы/школьная» сохраняются.
+        re.compile(PREFIX + r"(?<!вид на )(?<!видом на )\bшкол(?!ьник)\w+" + SUFFIX),
         POICategory.SCHOOL,
     ),
     (
@@ -84,11 +88,29 @@ _POI_PATTERNS: list[tuple[re.Pattern[str], POICategory]] = [
         re.compile(PREFIX + r"(?<!вид на )(?<!видом на )\b(?:лес\w*|парк\w*|зелен\w+)" + SUFFIX),
         POICategory.PARK_FOREST,
     ),
+    (
+        # Медицина: поликлиника/больница/аптека/роддом/медцентр/клиника/госпиталь.
+        # Голое «медицина» намеренно НЕ ловим — избегаем ложных пересечений.
+        re.compile(
+            PREFIX + r"(?:\bполиклиник\w*|\bбольниц\w*|\bаптек\w*|\bроддом\w*"
+            r"|\bмедцентр\w*|\bмед\.?\s*центр\w*|\bклиник\w*|\bгоспитал\w*)" + SUFFIX
+        ),
+        POICategory.MEDICAL,
+    ),
 ]
 
 _CENTER_PATTERN = re.compile(
     r"\b(?:в\s+центре|к\s+центру|близко\s+к\s+центру|ближе\s+к\s+центру|"
     r"вблизи\s+центра|около\s+центра)(?:\s+москв\w*)?\b"
+)
+
+#: ВЕДУЩАЯ дистанция: проксимити-маркер + дистанция ДО категорий («рядом вблизи
+#: до 18 минут должны быть школы и сады»). Суффиксный ``_DISTANCE`` такое не
+#: ловит — там дистанция идёт ПОСЛЕ категории. Применяется к POI-требованиям без
+#: собственной дистанции (см. extract_poi_requirements).
+_LEADING_DISTANCE = re.compile(
+    _PROXIMITY_MARKER
+    + rf"[\s\w]{{0,25}}?(?:{_DIST_MARKER}\s*)?(?P<dist>{_DIST_NUM})\s*(?P<dist_unit>{_DIST_UNIT})"
 )
 
 
@@ -140,5 +162,21 @@ def extract_poi_requirements(text: str) -> tuple[list[POIRequirement], bool, lis
                 )
             )
             spans.append(match.span())
+
+    # Ведущая дистанция ДО категорий («до 18 минут ... школы и сады») —
+    # применяем к POI-требованиям, у которых нет собственной (суффиксной)
+    # дистанции. «метро»/«станция» в сегменте пропускаем: это время до метро
+    # (URL-фильтр timeOnFoot, rules/time.py), а не дистанция до POI.
+    if any(req.max_distance_m is None for req in poi_reqs):
+        for match in _iter_free(_LEADING_DISTANCE, norm, spans):
+            segment = match.group(0)
+            if "метро" in segment or "станц" in segment:
+                continue
+            meters = _parse_distance_meters(match.group("dist"), match.group("dist_unit"))
+            for req in poi_reqs:
+                if req.max_distance_m is None:
+                    req.max_distance_m = meters
+            spans.append(match.span())
+            break  # одной ведущей дистанции на фрагмент достаточно
 
     return poi_reqs, center_requested, sorted(spans)

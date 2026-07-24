@@ -1,5 +1,4 @@
 import asyncio
-import functools
 import json
 import logging
 import platform
@@ -7,40 +6,50 @@ import random
 import subprocess
 import time
 from collections.abc import Awaitable, Callable
-from typing import Literal, NamedTuple
+from contextlib import aclosing
 
-import httpx
-from anthropic import APIStatusError, APITimeoutError, AsyncAnthropic
+from claude_agent_sdk import (
+    ClaudeAgentOptions,
+    CLIConnectionError,
+    CLIJSONDecodeError,
+    CLINotFoundError,
+    ProcessError,
+    ResultMessage,
+    query,
+)
 from pydantic import BaseModel
 
-from app.ai.schema import AIEnrichmentAnswer, OptionResolutionAnswer
+from app.ai.schema import AIEnrichmentAnswer, FreeTextCriteriaAnswer, OptionResolutionAnswer
 from app.config import get_settings
 
 logger = logging.getLogger(__name__)
 
-# Заголовок, разрешающий OAuth-токену ходить в Messages API. Без него токен
-# сессии отвергается (для API-ключа заголовок не нужен и не отправляется).
-_OAUTH_BETA = "oauth-2025-04-20"
 # Имя записи в keychain macOS, куда Claude Code кладёт учётные данные логина.
 _KEYCHAIN_SERVICE = "Claude Code-credentials"
 # Токен в keychain обновляется самим CLI, поэтому перечитываем его, а не берём
 # один раз на старте процесса. Короткий TTL — компромисс: не дёргаем keychain
 # (блокирующий subprocess) на каждый запрос, но подхватываем refresh за минуту.
+# Внимание: этот токен здесь НЕ передаётся в модель — он нужен лишь как дешёвый
+# признак «пользователь залогинен в Claude Code» для гейта в enrich(). Сам вызов
+# модели идёт через Claude Agent SDK → локальный CLI, который берёт авторизацию
+# из того же логина сам (см. call_claude).
 _TOKEN_TTL_SECONDS = 60.0
 
 _token_cache: tuple[float, str | None] = (0.0, None)
 
-
-class ClaudeCredentials(NamedTuple):
-    """Чем аутентифицируемся в Anthropic API.
-
-    ``kind="api_key"`` → заголовок ``x-api-key``; ``kind="oauth"`` →
-    ``Authorization: Bearer`` + бета-заголовок. Одновременно отправлять оба
-    нельзя — API отвергает такой запрос, поэтому это именно выбор одного из.
-    """
-
-    kind: Literal["api_key", "oauth"]
-    secret: str
+# Подстроки в тексте ошибки результата, помечающие сбой как временный (ретраим),
+# а не фатальный. Используются как фолбэк, когда CLI не отдал числовой
+# api_error_status.
+_TRANSIENT_MARKERS = (
+    "rate limit",
+    "rate_limit",
+    "overloaded",
+    "timed out",
+    "timeout",
+    "connection",
+    "temporarily unavailable",
+    "error_during_execution",
+)
 
 
 def _read_keychain_token() -> str | None:
@@ -86,70 +95,18 @@ def _read_oauth_token() -> str | None:
     return token
 
 
-def resolve_claude_credentials(settings) -> ClaudeCredentials | None:
-    """Как аутентифицироваться в Anthropic: ключ, OAuth-сессия или никак.
+def claude_credentials_available(settings) -> bool:
+    """Настроен ли доступ к Claude — дешёвый признак для гейта в enrich().
 
-    API-ключ имеет приоритет (явная конфигурация сильнее неявной сессии).
-    ``None`` означает «учётных данных нет» — не ошибка, а сигнал выключить
-    ИИ-слой; базовый пайплайн от этого не страдает.
+    ``True``, если задан ``ANTHROPIC_API_KEY`` (своя квота) ИЛИ есть OAuth-логин
+    Claude Code (переменная окружения либо keychain macOS). ``False`` — не
+    ошибка, а сигнал выключить ИИ-слой: базовый детерминированный пайплайн
+    самодостаточен. Сам вызов модели авторизуется не этим — CLI/SDK берёт логин
+    сам; здесь мы лишь не дёргаем модель, когда заведомо нечем.
     """
     if settings.ANTHROPIC_API_KEY:
-        return ClaudeCredentials("api_key", settings.ANTHROPIC_API_KEY)
-    token = _read_oauth_token()
-    if token:
-        return ClaudeCredentials("oauth", token)
-    return None
-
-
-@functools.cache
-def _get_claude_client(kind: str, secret: str) -> AsyncAnthropic:
-    """Переиспользуемый Anthropic-клиент (кэш по учётным данным) — не создаём
-    httpx-пул на каждый запрос."""
-    if kind == "oauth":
-        return AsyncAnthropic(
-            auth_token=secret,
-            default_headers={"anthropic-beta": _OAUTH_BETA},
-            timeout=httpx.Timeout(15.0),
-        )
-    return AsyncAnthropic(api_key=secret, timeout=httpx.Timeout(15.0))
-
-
-def _is_transient(exc: Exception) -> bool:
-    """Стоит ли повторять запрос: только таймаут и 429/5xx (не 4xx-ошибки клиента)."""
-    if isinstance(exc, APITimeoutError):
         return True
-    if isinstance(exc, APIStatusError):
-        return exc.status_code == 429 or exc.status_code >= 500
-    return False
-
-
-def _is_transient_antigravity(exc: Exception) -> bool:
-    """Транзиентный сбой agy CLI: ненулевой код возврата (см. RuntimeError,
-    которым мы оборачиваем такой выход ниже) или ошибка запуска процесса
-    (``OSError`` — бинарник временно недоступен). Ошибка валидации JSON-ответа
-    модели (``pydantic.ValidationError``) НЕ транзиентна: тот же промпт почти
-    наверняка даст тот же брак, повтор только тратит бюджет задержки впустую.
-    """
-    return isinstance(exc, RuntimeError | OSError)
-
-
-def _extract_retry_after(exc: Exception) -> float | None:
-    """Уважить заголовок ``Retry-After`` ответа API, если он есть — сервер лучше
-    нас знает, когда квота освободится, чем наша собственная экспонента.
-    Поддерживается только числовой формат (секунды) — единственный, который
-    реально отдаёт Anthropic API; HTTP-date формат не встречался на практике,
-    его парсинг не реализован (некорректное значение просто игнорируется, и
-    вызывающий код падает обратно на экспоненциальный backoff)."""
-    response = getattr(exc, "response", None)
-    if response is None:
-        return None
-    raw = response.headers.get("retry-after")
-    if raw is None:
-        return None
-    try:
-        return max(0.0, float(raw))
-    except ValueError:
-        return None
+    return _read_oauth_token() is not None
 
 
 class CircuitOpenError(RuntimeError):
@@ -158,6 +115,25 @@ class CircuitOpenError(RuntimeError):
     Поднимается ДО сетевого вызова — в этом весь смысл предохранителя: не
     увеличивать нагрузку на провайдера ровно тогда, когда его квота уже
     исчерпана (самоусиливающийся отказ, живой инцидент — см. CLAUDE.md)."""
+
+
+class ClaudeSDKCallError(RuntimeError):
+    """Вызов Claude через Agent SDK вернул ошибочный результат.
+
+    ``status`` — HTTP-код провалившегося вызова API (``ResultMessage.
+    api_error_status``, напр. 429/500/529), если CLI его сообщил; иначе
+    ``None``. ``detail`` — текст для логов/классификации по маркерам. По этим
+    полям :func:`_is_transient_claude_sdk` решает, ретраить ли."""
+
+    def __init__(self, detail: str, status: int | None = None) -> None:
+        super().__init__(detail)
+        self.detail = detail
+        self.status = status
+
+
+class ClaudeStreamError(RuntimeError):
+    """Поток SDK завершился без ``ResultMessage`` — временный инфраструктурный
+    сбой CLI (обрыв стрима), ретраится."""
 
 
 # Состояние circuit breaker — уровень процесса (модульные переменные), общее
@@ -283,12 +259,42 @@ async def _execute_with_retry[T](
     raise AssertionError("unreachable: retry loop must return or raise")
 
 
+def _is_transient_claude_sdk(exc: Exception) -> bool:
+    """Стоит ли повторять вызов Claude через Agent SDK.
+
+    Транзиентны инфраструктурные сбои локального CLI (обрыв связи/процесса,
+    битый JSON стрима, оборванный стрим) и ошибочный результат API с кодом
+    429/5xx либо текстом-маркером временного отказа. НЕ транзиентны: отсутствие
+    CLI (проблема установки — ретрай не поможет) и ошибки валидации ответа
+    модели (тот же промпт даст тот же брак)."""
+    if isinstance(exc, CLINotFoundError):
+        return False
+    if isinstance(exc, CLIConnectionError | ProcessError | CLIJSONDecodeError | ClaudeStreamError):
+        return True
+    if isinstance(exc, ClaudeSDKCallError):
+        if exc.status is not None:
+            return exc.status == 429 or exc.status >= 500
+        detail = exc.detail.lower()
+        return any(marker in detail for marker in _TRANSIENT_MARKERS)
+    return False
+
+
+def _is_transient_antigravity(exc: Exception) -> bool:
+    """Транзиентный сбой agy CLI: ненулевой код возврата (см. RuntimeError,
+    которым мы оборачиваем такой выход ниже) или ошибка запуска процесса
+    (``OSError`` — бинарник временно недоступен). Ошибка валидации JSON-ответа
+    модели (``pydantic.ValidationError``) НЕ транзиентна: тот же промпт почти
+    наверняка даст тот же брак, повтор только тратит бюджет задержки впустую.
+    """
+    return isinstance(exc, RuntimeError | OSError)
+
+
 async def call_typed[T: BaseModel](
     system_prompt: str, user_payload: dict, answer_model: type[T]
 ) -> T:
     """Единая точка вызова модели, параметризованная схемой ответа.
 
-    Позволяет переиспользовать один транспорт (Anthropic tool-use / Antigravity
+    Позволяет переиспользовать один транспорт (Claude Agent SDK / Antigravity
     CLI) для разных задач: обогащение ЖК (:class:`AIEnrichmentAnswer`) и
     резолвинг фраз под опции (:class:`OptionResolutionAnswer`).
     """
@@ -313,6 +319,13 @@ async def call_model(system_prompt: str, user_payload: dict) -> AIEnrichmentAnsw
 async def call_option_resolver(system_prompt: str, user_payload: dict) -> OptionResolutionAnswer:
     """Вызов модели для резолвинга нераспознанных фраз под опции/группы опций."""
     return await call_typed(system_prompt, user_payload, OptionResolutionAnswer)
+
+
+async def call_free_text_extractor(
+    system_prompt: str, user_payload: dict
+) -> FreeTextCriteriaAnswer:
+    """Вызов модели для извлечения недостающих скалярных фильтров из свободного текста."""
+    return await call_typed(system_prompt, user_payload, FreeTextCriteriaAnswer)
 
 
 async def call_antigravity[T: BaseModel](
@@ -378,51 +391,118 @@ async def call_antigravity[T: BaseModel](
     )
 
 
+def _claude_sdk_env(settings) -> dict[str, str]:
+    """Переменные окружения для дочернего CLI-процесса Claude.
+
+    По умолчанию — пусто: на macOS SDK/CLI берёт логин Claude Code из keychain
+    сам. Явный ``ANTHROPIC_API_KEY`` (своя квота, устраняет 429 общей сессии)
+    прокидывается в env; ``CLAUDE_OAUTH_TOKEN`` — для сред без keychain
+    (Linux/CI), под именем, которое ждёт CLI.
+    """
+    if settings.ANTHROPIC_API_KEY:
+        return {"ANTHROPIC_API_KEY": settings.ANTHROPIC_API_KEY}
+    if settings.CLAUDE_OAUTH_TOKEN:
+        return {"CLAUDE_CODE_OAUTH_TOKEN": settings.CLAUDE_OAUTH_TOKEN}
+    return {}
+
+
+async def _run_claude_query(prompt: str, options: ClaudeAgentOptions) -> ResultMessage:
+    """Один headless-прогон Claude через Agent SDK → локальный CLI.
+
+    Возвращает финальный ``ResultMessage``. Инфраструктурные сбои CLI
+    (``CLIConnectionError``/``ProcessError``/``CLIJSONDecodeError``/
+    ``CLINotFoundError``) поднимаются как есть — их классифицирует
+    :func:`_is_transient_claude_sdk`. Оборвавшийся без результата стрим —
+    :class:`ClaudeStreamError` (транзиент).
+
+    ``aclosing`` обязателен: мы выходим по первому ``ResultMessage`` через
+    ``return``, не досматривая стрим. Без явного закрытия недоеденный
+    async-генератор SDK добивается сборщиком мусора уже на живом event loop —
+    отсюда ``RuntimeError: aclose(): asynchronous generator is already running``
+    и риск утечки дочернего процесса CLI. ``aclosing`` закрывает его детерминированно
+    в момент выхода, когда генератор приостановлен."""
+    async with aclosing(query(prompt=prompt, options=options)) as stream:
+        async for message in stream:
+            if isinstance(message, ResultMessage):
+                return message
+    raise ClaudeStreamError("поток Claude SDK завершился без ResultMessage")
+
+
+def _parse_claude_result[T: BaseModel](rm: ResultMessage, answer_model: type[T]) -> T:
+    """Разобрать ``ResultMessage`` в типизированный ответ.
+
+    Приоритет — нативный ``structured_output`` (валиден по переданной схеме);
+    фолбэк — распарсить JSON из текстового ``result`` (на случай CLI без
+    поддержки ``output_format``). Ошибочный результат API поднимается как
+    :class:`ClaudeSDKCallError` (с HTTP-кодом, если CLI его сообщил)."""
+    if rm.is_error:
+        detail = rm.result or ("; ".join(rm.errors or [])) or rm.subtype or "unknown error"
+        raise ClaudeSDKCallError(detail, status=rm.api_error_status)
+
+    if rm.structured_output is not None:
+        return answer_model.model_validate(rm.structured_output)
+
+    text = (rm.result or "").strip()
+    if text.startswith("```json"):
+        text = text[7:]
+    if text.startswith("```"):
+        text = text[3:]
+    if text.endswith("```"):
+        text = text[:-3]
+    return answer_model.model_validate_json(text.strip())
+
+
 async def call_claude[T: BaseModel](
     system_prompt: str,
     user_payload: dict,
     settings,
     answer_model: type[T] = AIEnrichmentAnswer,
 ) -> T:
-    credentials = resolve_claude_credentials(settings)
-    if credentials is None:
+    """Вызов Claude через Claude Agent SDK поверх локального Claude Code CLI.
+
+    Транспорт по образцу соседнего проекта workflow-ai: SDK сам запускает
+    установленный CLI (``claude``) и берёт авторизацию из логина Claude Code —
+    без ручного OAuth-токена в заголовках. Структурный ответ модели приходит
+    нативно (``output_format`` json-schema → ``structured_output``). Один ход,
+    без тул-лупа (``tools=[]``).
+
+    Оговорка про квоту: локальный логин делит лимит с самим Claude Code — под
+    нагрузкой возможен 429; для своей квоты задайте ``ANTHROPIC_API_KEY``.
+    Транзиентные сбои гасит общий :func:`_execute_with_retry` (backoff +
+    circuit breaker).
+    """
+    if not claude_credentials_available(settings):
         raise ValueError(
             "Нет учётных данных Claude: задайте ANTHROPIC_API_KEY либо "
             "залогиньтесь в терминале командой `claude` (пункт /login)"
         )
 
-    client = _get_claude_client(*credentials)
+    prompt = json.dumps(user_payload, ensure_ascii=False)
+    options = ClaudeAgentOptions(
+        model=settings.AI_MODEL_NAME or None,
+        cli_path=settings.CLAUDE_CLI_PATH or None,
+        max_turns=settings.CLAUDE_MAX_TURNS,
+        # Никогда не подгружаем пользовательские/проектные настройки и CLAUDE.md
+        # хоста — модель видит только свой системный промпт и вход запроса.
+        setting_sources=[],
+        system_prompt=system_prompt,
+        # tools= — жёсткое ограничение: без него у модели остаются доступны
+        # Read/Bash/итд. Пустой список => одношаговый структурный ответ.
+        tools=[],
+        allowed_tools=[],
+        output_format={"type": "json_schema", "schema": answer_model.model_json_schema()},
+        env=_claude_sdk_env(settings),
+    )
 
-    user_message = json.dumps(user_payload, ensure_ascii=False)
+    async def _invoke() -> T:
+        result_msg = await _run_claude_query(prompt, options)
+        return _parse_claude_result(result_msg, answer_model)
 
-    tool = {
-        "name": "provide_enrichment_answer",
-        "description": "Provide the AI enrichment answer.",
-        "input_schema": answer_model.model_json_schema(),
-    }
-
-    async def _create() -> T:
-        response = await client.messages.create(
-            model=settings.AI_MODEL_NAME,
-            max_tokens=1024,
-            system=system_prompt,
-            messages=[{"role": "user", "content": user_message}],
-            tools=[tool],
-            tool_choice={"type": "tool", "name": "provide_enrichment_answer"},
-        )
-        for block in response.content:
-            if block.type == "tool_use" and block.name == "provide_enrichment_answer":
-                return answer_model.model_validate(block.input)
-        # Не транзиентный сбой (ответ пришёл, но без ожидаемого tool-use блока) —
-        # ретраить бессмысленно, `_is_transient` его и не сочтёт временным.
-        raise ValueError("Model did not return tool use block")
-
-    # Ретрай (экспоненциальный backoff + Retry-After) и circuit breaker —
-    # повторяем только временные сбои (таймаут, 429/5xx); 4xx (неверный
-    # запрос/ключ) не ретраим — это лишь удвоит ошибку и задержку.
+    # Ретрай (экспоненциальный backoff) и circuit breaker — повторяем только
+    # временные сбои (обрыв CLI, 429/5xx); фатальное (нет CLI, брак валидации)
+    # не ретраим — это лишь удвоит ошибку и задержку.
     return await _execute_with_retry(
-        _create,
-        is_transient=_is_transient,
-        extract_retry_after=_extract_retry_after,
+        _invoke,
+        is_transient=_is_transient_claude_sdk,
         settings=settings,
     )

@@ -5,9 +5,10 @@ from pydantic import BaseModel
 
 from app.ai.client import (
     CircuitOpenError,
+    call_free_text_extractor,
     call_model,
     call_option_resolver,
-    resolve_claude_credentials,
+    claude_credentials_available,
 )
 from app.ai.embeddings import embed
 from app.ai.memory import (
@@ -16,8 +17,20 @@ from app.ai.memory import (
     store_semantic,
     store_structured_fact,
 )
-from app.ai.prompts import OPTION_SYSTEM_PROMPT, SYSTEM_PROMPT, build_context, build_option_context
-from app.ai.schema import AIEnrichmentAnswer, ComplexCandidate, OptionResolutionAnswer
+from app.ai.prompts import (
+    FREE_TEXT_SYSTEM_PROMPT,
+    OPTION_SYSTEM_PROMPT,
+    SYSTEM_PROMPT,
+    build_context,
+    build_free_text_context,
+    build_option_context,
+)
+from app.ai.schema import (
+    AIEnrichmentAnswer,
+    ComplexCandidate,
+    FreeTextCriteriaAnswer,
+    OptionResolutionAnswer,
+)
 from app.config import get_settings
 from app.geo.candidates import (
     build_candidate_shortlist,
@@ -35,7 +48,47 @@ from app.reference.loader import load_option_groups, load_options, normalize
 #: наблюдений в aliases справочников делает app/ai/promotion.py.
 OPTION_ALIAS_FACT_TYPE = "option_alias"
 
+#: Хвост warning'а «не удалось распознать» (шаблон из parser.py). По нему
+#: восстанавливаем реальный остаток текста для экстрактора свободного текста и
+#: снимаем warning'и по consumed_fragments (как option-резолвинг по phrase).
+_UNRECOGNIZED_SUFFIX = "»: не удалось распознать, не попало в ссылку"
+
+#: Скалярные поля Criteria, которые экстрактор свободного текста вправе заполнять
+#: (None = «не задано»). БЕЗ метро/районов/округов/ЖК/опций — те требуют
+#: резолвинга справочника и остаются на детерминированных путях + sanitize_*.
+_FREE_TEXT_SCALAR_FIELDS = (
+    "price_min",
+    "price_max",
+    "area_min",
+    "area_max",
+    "area_kitchen_min",
+    "area_kitchen_max",
+    "floor_min",
+    "floor_max",
+    "ready",
+    "sort",
+    "housing_type",
+    "settlement_year_from",
+    "settlement_year_to",
+    "time_on_foot",
+    "time_on_transport",
+)
+#: Булевы пожелания (дефолт False = «не задано»): включаем только True поверх False.
+_FREE_TEXT_BOOL_FIELDS = ("not_first_floor", "last_floor", "not_last_floor", "only_available")
+
 logger = logging.getLogger(__name__)
+
+
+class FreeTextOutcome(BaseModel):
+    """Итог работы экстрактора свободного текста (ведро C).
+
+    ``called`` — попытка реально дошла до модели (для ai_call_log). ``changed`` —
+    модель заполнила хоть одно пустое поле criteria (для ai_used/criteria_changed).
+    """
+
+    called: bool = False
+    changed: bool = False
+    explanation: str = ""
 
 
 class AIMeta(BaseModel):
@@ -286,9 +339,9 @@ async def resolve_options(
     # .lower() — как в client.call_typed: AI_PROVIDER=Claude не должен
     # проскакивать гейт и падать уже внутри клиента. Учётными данными
     # считается и API-ключ, и OAuth-сессия Claude Code
-    # (см. app.ai.client.resolve_claude_credentials).
-    is_claude_missing = (
-        settings.AI_PROVIDER.lower() == "claude" and resolve_claude_credentials(settings) is None
+    # (см. app.ai.client.claude_credentials_available).
+    is_claude_missing = settings.AI_PROVIDER.lower() == "claude" and not (
+        claude_credentials_available(settings)
     )
     if not settings.AI_ENRICHMENT_ENABLED or is_claude_missing:
         # ИИ выключен — фрагменты остаются в warnings как есть, ничего не теряем.
@@ -337,6 +390,118 @@ async def resolve_options(
                 )
             except Exception as e:
                 logger.warning(f"Failed to persist option alias: {e}")
+
+
+def _residual_fragments(warnings: list[str]) -> list[str]:
+    """Восстановить неразобранные фрагменты из warning'ов «не удалось распознать».
+
+    Реальный остаток (ведро C) отличаем от «не поддерживается pik.ru» (ведро B):
+    в ИИ уходит только первое — по фильтрам ведра B строить нечего, вызов был бы
+    сожжён впустую (инвариант «в ИИ не летит мусор»).
+    """
+    fragments: list[str] = []
+    for w in warnings:
+        if w.startswith("«") and w.endswith(_UNRECOGNIZED_SUFFIX):
+            fragments.append(w[1 : -len(_UNRECOGNIZED_SUFFIX)])
+    return fragments
+
+
+def _apply_free_text_answer(
+    criteria: Criteria,
+    answer: FreeTextCriteriaAnswer,
+    fragments: list[str],
+    warnings: list[str],
+) -> bool:
+    """Применить ответ экстрактора к criteria. Детерминированный слой выигрывает:
+    заполняем ТОЛЬКО пустые поля; невалидное значение отбрасывает pydantic
+    (validate_assignment у Criteria) — молча не выдумываем. Возвращает, изменилось
+    ли criteria."""
+    changed = False
+
+    # rooms — только если детерминированный слой ничего не нашёл.
+    if answer.rooms and not criteria.rooms:
+        try:
+            criteria.rooms = list(dict.fromkeys(answer.rooms))
+            changed = True
+        except Exception as e:
+            logger.warning(f"free-text rooms rejected: {e}")
+
+    # Скаляры — заполняем, только если поле не задано (None).
+    for field in _FREE_TEXT_SCALAR_FIELDS:
+        value = getattr(answer, field)
+        if value is not None and getattr(criteria, field) is None:
+            try:
+                setattr(criteria, field, value)
+                changed = True
+            except Exception as e:
+                logger.warning(f"free-text {field}={value!r} rejected: {e}")
+
+    # Булевы флаги — включаем только True поверх дефолтного False.
+    for field in _FREE_TEXT_BOOL_FIELDS:
+        if getattr(answer, field) and not getattr(criteria, field):
+            try:
+                setattr(criteria, field, True)
+                changed = True
+            except Exception as e:
+                logger.warning(f"free-text {field} rejected: {e}")
+
+    # Снимаем warning'и по фрагментам, которые модель заявила разобранными —
+    # но только среди реально переданных ей fragments (не доверяем строке слепо).
+    if changed:
+        for frag in answer.consumed_fragments:
+            if frag in fragments:
+                stale = f"«{frag}{_UNRECOGNIZED_SUFFIX}"
+                if stale in warnings:
+                    warnings.remove(stale)
+
+    return changed
+
+
+async def resolve_free_text_criteria(
+    criteria: Criteria,
+    text: str,
+    warnings: list[str],
+    pool: asyncpg.Pool | None,
+) -> FreeTextOutcome:
+    """Новая способность (ведро C): достать недостающие СКАЛЯРНЫЕ фильтры из
+    свободного текста через модель, когда детерминированный парсер оставил
+    значимый остаток. Независимо от гейтов и до них (мутирует criteria/warnings
+    на месте) — это и есть «ослабление гейтов»: запрос без структурных сигналов
+    (poi/center/landmark/station), но с непонятым текстом теперь доходит до ИИ.
+
+    Локации/опции модель не трогает (см. FREE_TEXT_SYSTEM_PROMPT); значения
+    ограничены схемой, детерминированное всегда выигрывает. Мягкая деградация:
+    любой сбой — фрагменты остаются в warnings как есть.
+    """
+    fragments = _residual_fragments(warnings)
+    if not fragments:
+        # Нет реального остатка (либо всё разобрано, либо остаток — только
+        # «не поддерживается pik.ru»/шум) — модель не зовём.
+        return FreeTextOutcome()
+
+    settings = get_settings()
+    is_claude_missing = settings.AI_PROVIDER.lower() == "claude" and not (
+        claude_credentials_available(settings)
+    )
+    if not settings.AI_ENRICHMENT_ENABLED or is_claude_missing:
+        return FreeTextOutcome()
+
+    context = build_free_text_context(text, criteria, fragments)
+    try:
+        answer = await call_free_text_extractor(FREE_TEXT_SYSTEM_PROMPT, context)
+    except CircuitOpenError as e:
+        logger.warning(f"AI free-text extraction skipped (circuit breaker open): {e}")
+        return FreeTextOutcome(called=False)
+    except Exception as e:
+        logger.error(f"AI free-text extraction failed: {e}", exc_info=True)
+        return FreeTextOutcome(called=True)
+
+    changed = _apply_free_text_answer(criteria, answer, fragments, warnings)
+    return FreeTextOutcome(
+        called=True,
+        changed=changed,
+        explanation=answer.explanation if changed else "",
+    )
 
 
 def _describe_unmet_ai_requirements(criteria: Criteria) -> str:
@@ -392,19 +557,40 @@ async def enrich(
     # warnings на месте.
     await resolve_options(criteria, option_candidates or [], warnings, pool)
 
+    # Экстрактор свободного текста (ведро C) — ДО гейта 1 и независимо от него:
+    # достаёт недостающие СКАЛЯРНЫЕ фильтры из непонятого парсером текста. Это
+    # ослабление гейтов: запрос без структурных сигналов, но с остатком
+    # «не удалось распознать», теперь доходит до ИИ. Мутирует criteria/warnings
+    # на месте; результат учитываем в ai_used/логах ниже (free_text).
+    free_text = await resolve_free_text_criteria(criteria, text, warnings, pool)
+
     # Наблюдаемость (Milestone AI-11): собираем поля для ai_call_log по мере
     # прохождения пайплайна и пишем ОДНУ строку на каждый вызов enrich() —
     # вне зависимости от исхода — через _log() ниже. had_poi_or_center = сработал
-    # бы старый гейт 1 (см. закомментированный if ниже).
+    # бы старый гейт 1 (см. закомментированный if ниже). ai_called/
+    # criteria_changed_by_ai инициализируются исходом экстрактора свободного
+    # текста (он тоже вызов ИИ) — при POI-пути ниже они уточняются повторно.
     log_fields = {
         "had_poi_or_center": bool(criteria.poi_requirements or criteria.center_requested),
         "fully_resolved_deterministically": False,
         "cache_hit": False,
-        "ai_called": False,
-        "criteria_changed_by_ai": False,
+        "ai_called": free_text.called,
+        "criteria_changed_by_ai": free_text.changed,
     }
 
     async def _log(result: EnrichmentResult) -> EnrichmentResult:
+        # Экстрактор свободного текста реально повлиял на criteria (мутировал его
+        # ДО гейтов) — отражаем это в ai_used честно, даже если путь ниже вернул
+        # noop()/from_deterministic (у которых ai_used=False по конструкции).
+        if free_text.changed:
+            log_fields["criteria_changed_by_ai"] = True
+            if not result.ai_used:
+                result.ai_used = True
+                result.explanation = (
+                    f"{result.explanation} {free_text.explanation}".strip()
+                    if result.explanation
+                    else free_text.explanation or None
+                )
         try:
             await log_ai_call(pool, **log_fields)
         except Exception as e:
@@ -577,9 +763,9 @@ async def enrich(
     # .lower() — как в client.call_typed: AI_PROVIDER=Claude не должен
     # проскакивать гейт и падать уже внутри клиента. Учётными данными
     # считается и API-ключ, и OAuth-сессия Claude Code
-    # (см. app.ai.client.resolve_claude_credentials).
-    is_claude_missing = (
-        settings.AI_PROVIDER.lower() == "claude" and resolve_claude_credentials(settings) is None
+    # (см. app.ai.client.claude_credentials_available).
+    is_claude_missing = settings.AI_PROVIDER.lower() == "claude" and not (
+        claude_credentials_available(settings)
     )
 
     if not settings.AI_ENRICHMENT_ENABLED or is_claude_missing:
@@ -623,10 +809,16 @@ async def enrich(
         )
         return await _log(EnrichmentResult.failed())
     except Exception as e:
-        from anthropic import APIStatusError, APITimeoutError
+        from claude_agent_sdk import ClaudeSDKError
         from pydantic import ValidationError
 
-        if isinstance(e, (APIStatusError, APITimeoutError, ValueError, ValidationError)):
+        # Транзиентность и ретраи уже инкапсулированы в client (backoff +
+        # circuit breaker); сюда долетает лишь исчерпавший ретраи/фатальный
+        # сбой. Ловим ошибки транспорта Claude (ClaudeSDKError — сбои CLI;
+        # RuntimeError — наши ClaudeSDKCallError/ClaudeStreamError и agy;
+        # OSError — запуск agy), нет учётных данных/выключено (ValueError) и
+        # брак ответа модели (ValidationError). Прочее (баг в коде) — пробросить.
+        if isinstance(e, (ClaudeSDKError, RuntimeError, OSError, ValueError, ValidationError)):
             logger.error(f"AI enrichment failed: {e}", exc_info=True)
             # Предметная деградация (часть C): называем, ЧТО именно не
             # применилось (POI-требования/центр), а не обезличенное «ошибка

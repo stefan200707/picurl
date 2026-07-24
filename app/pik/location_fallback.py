@@ -56,6 +56,7 @@ from app.geo.candidates import (
     STATION_CLASS_DEFAULT_RADIUS_M,
     STATION_CLASS_FALLBACK_LIMIT,
     block_ids_by_tag,
+    complexes_in_mkad,
     nearby_block_ids,
 )
 from app.parsing.schema import Criteria, MatchedEntity
@@ -199,5 +200,32 @@ def resolve_fallback_block_ids(criteria: Criteria) -> LocationFallback:
         ids, note = _describe_tag_only_fallback("район", entity, "district")
         _extend(ids)
         result.notes.append(note)
+
+    # «внутри/за МКАД»: у pik.ru нет такого URL-фильтра — сужаем по blocks
+    # (app.geo.mkad.point_in_mkad). Если выше уже собрано сужение по другим
+    # локациям — ПЕРЕСЕКАЕМ (AND: «рядом с X И внутри МКАД»); иначе берём весь
+    # набор ЖК нужной стороны. Приближённый полигон (см. mkad_ring.json) —
+    # честно помечаем как приближение.
+    if criteria.within_mkad is not None:
+        side = "внутри МКАД" if criteria.within_mkad else "за МКАД"
+        mkad_ids = complexes_in_mkad(criteria.within_mkad)
+        if result.block_ids:
+            mkad_set = set(mkad_ids)
+            kept = [cid for cid in result.block_ids if cid in mkad_set]
+            result.block_ids = kept
+            result.notes.append(
+                f"«{side}»: сужение пересечено с полигоном МКАД (приближение) — "
+                f"осталось {len(kept)} ЖК"
+            )
+        elif mkad_ids:
+            _extend(mkad_ids)
+            result.notes.append(
+                f"«{side}»: применено гео-сужение по полигону МКАД (приближение) — "
+                f"{len(mkad_ids)} ЖК с координатами нужной стороны"
+            )
+        else:
+            result.notes.append(
+                f"«{side}»: ни одного ЖК с координатами нужной стороны — фильтр пропущен"
+            )
 
     return result

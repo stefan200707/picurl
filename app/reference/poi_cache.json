@@ -19,6 +19,10 @@
     "park_forest": {
       "count": 122,
       "closest_distance_m": 582.8744981356018
+    },
+    "medical": {
+      "count": 63,
+      "closest_distance_m": 576.372033923792
     }
   },
   "alt53": {
@@ -41,6 +45,10 @@
     "park_forest": {
       "count": 104,
       "closest_distance_m": 172.69859852035273
+    },
+    "medical": {
+      "count": 124,
+      "closest_distance_m": 410.0723368726118
     }
   },
   "amur": {
@@ -63,6 +71,10 @@
     "park_forest": {
       "count": 278,
       "closest_distance_m": 459.9403993731021
+    },
+    "medical": {
+      "count": 82,
+      "closest_distance_m": 26.859397057979244
     }
   },
   "barclay6": {
@@ -85,6 +97,10 @@
     "park_forest": {
       "count": 180,
       "closest_distance_m": 220.09032325400656
+    },
+    "medical": {
+      "count": 109,
+      "closest_distance_m": 86.07351099681573
     }
   },
   "bd": {
@@ -107,6 +123,10 @@
     "park_forest": {
       "count": 34,
       "closest_distance_m": 484.5495257157494
+    },
+    "medical": {
+      "count": 65,
+      "closest_distance_m": 42.78225465882169
     }
   },
   "ba85": {
@@ -129,6 +149,10 @@
     "park_forest": {
       "count": 248,
       "closest_distance_m": 206.9208230834998
+    },
+    "medical": {
+      "count": 79,
+      "closest_distance_m": 122.30549970231401
     }
   },
   "vladivostok/borisenko": {
@@ -151,6 +175,10 @@
     "park_forest": {
       "count": 817,
       "closest_distance_m": 77.54471428165597
+    },
+    "medical": {
+      "count": 73,
+      "closest_distance_m": 194.6827186827035
     }
   },
   "vladivostok/bosforskiypark": {
@@ -173,6 +201,10 @@
     "park_forest": {
       "count": 506,
       "closest_distance_m": 136.6825651038409
+    },
+    "medical": {
+      "count": 35,
+      "closest_distance_m": 489.41845536939434
     }
   },
   "kazan/botanicheskaya": {
@@ -195,6 +227,10 @@
     "park_forest": {
       "count": 54,
       "closest_distance_m": 116.26086599540008
+    },
+    "medical": {
+      "count": 86,
+      "closest_distance_m": 171.7668676100269
     }
   },
   "bnab": {
@@ -217,6 +253,10 @@
     "park_forest": {
       "count": 73,
       "closest_distance_m": 315.3401823854104
+    },
+    "medical": {
+      "count": 49,
+      "closest_distance_m": 373.6229126164458
     }
   },
   "bpark": {
@@ -239,6 +279,10 @@
     "park_forest": {
       "count": 135,
       "closest_distance_m": 270.6911537325355
+    },
+    "medical": {
+      "count": 78,
+      "closest_distance_m": 91.4175114131678
     }
   },
   "spb/vitpark": {
@@ -261,6 +305,10 @@
     "shop": {
       "count": 106,
       "closest_distance_m": 180.207934989177
+    },
+    "medical": {
+      "count": 121,
+      "closest_distance_m": 156.63838941784613
     }
   },
   "yaroslavl/volgapark": {
@@ -283,6 +331,10 @@
     "park_forest": {
       "count": 137,
       "closest_distance_m": 184.13189586374722
+    },
+    "medical": {
+      "count": 19,
+      "closest_distance_m": 243.6040920665327
     }
   },
   "volp": {
@@ -305,6 +357,10 @@
     "park_forest": {
       "count": 72,
       "closest_distance_m": 87.31412584003203
+    },
+    "medical": {
+      "count": 88,
+      "closest_distance_m": 120.04355560491392
     }
   },
   "spb/volta": {
@@ -327,6 +383,10 @@
     "park_forest": {
       "count": 107,
       "closest_distance_m": 548.276320185515
+    },
+    "medical": {
+      "count": 77,
+      "closest_distance_m": 108.21201090757145
     }
   },
   "mkr-vostochnoe-butovo": {
@@ -349,6 +409,10 @@
     "park_forest": {
       "count": 35,
       "closest_distance_m": 324.29448622308206
+    },
+    "medical": {
+      "count": 22,
+      "closest_distance_m": 141.81726950244203
     }
   },
   "2ngt": {
@@ -371,6 +435,10 @@
     "park_forest": {
       "count": 198,
       "closest_distance_m": 442.71749036854055
+    },
+    "medical": {
+      "count": 81,
+      "closest_distance_m": 40.91845721244983
     }
   },
   "spb/zpark": {
@@ -393,6 +461,10 @@
     "park_forest": {
       "count": 102,
       "closest_distance_m": 128.13576966493392
+    },
+    "medical": {
+      "count": 77,
+      "closest_distance_m": 500.48404318055225
     }
   },
   "zelpark": {
@@ -415,6 +487,10 @@
     "park_forest": {
       "count": 155,
       "closest_distance_m": 410.97985604987775
+    },
+    "medical": {
+      "count": 67,
+      "closest_distance_m": 255.17459338785093
     }
   },
   "blagoveshchensk/zeyapark": {
@@ -437,6 +513,10 @@
     "park_forest": {
       "count": 6,
       "closest_distance_m": 503.4303893609297
+    },
+    "medical": {
+      "count": 3,
+      "closest_distance_m": 801.5730942362208
     }
   },
   "il-luga": {
@@ -459,6 +539,10 @@
     "park_forest": {
       "count": 62,
       "closest_distance_m": 294.2472683613126
+    },
+    "medical": {
+      "count": 21,
+      "closest_distance_m": 162.29528407343375
     }
   },
   "ekb/ip": {
@@ -481,6 +565,10 @@
     "park_forest": {
       "count": 140,
       "closest_distance_m": 111.1181368187937
+    },
+    "medical": {
+      "count": 90,
+      "closest_distance_m": 83.25337283645996
     }
   },
   "kvb51": {
@@ -503,6 +591,10 @@
     "park_forest": {
       "count": 110,
       "closest_distance_m": 460.20104919250946
+    },
+    "medical": {
+      "count": 52,
+      "closest_distance_m": 50.522959881170046
     }
   },
   "spb/k11": {
@@ -525,6 +617,10 @@
     "park_forest": {
       "count": 200,
       "closest_distance_m": 163.79639429583804
+    },
+    "medical": {
+      "count": 115,
+      "closest_distance_m": 57.86089669841699
     }
   },
   "kvartalmit": {
@@ -547,6 +643,10 @@
     "shop": {
       "count": 58,
       "closest_distance_m": 221.25059325130704
+    },
+    "medical": {
+      "count": 44,
+      "closest_distance_m": 260.94101282229866
     }
   },
   "kolskaya8": {
@@ -569,6 +669,10 @@
     "park_forest": {
       "count": 346,
       "closest_distance_m": 177.15724324485134
+    },
+    "medical": {
+      "count": 131,
+      "closest_distance_m": 148.3075052136628
     }
   },
   "kron9": {
@@ -591,6 +695,10 @@
     "park_forest": {
       "count": 203,
       "closest_distance_m": 291.3724195193848
+    },
+    "medical": {
+      "count": 85,
+      "closest_distance_m": 42.0382577447379
     }
   },
   "kuzminskyles": {
@@ -613,6 +721,10 @@
     "park_forest": {
       "count": 26,
       "closest_distance_m": 190.4141787341572
+    },
+    "medical": {
+      "count": 73,
+      "closest_distance_m": 78.46257217746127
     }
   },
   "kutuzovskiy": {
@@ -635,6 +747,10 @@
     "park_forest": {
       "count": 117,
       "closest_distance_m": 300.8216651913481
+    },
+    "medical": {
+      "count": 120,
+      "closest_distance_m": 284.6482602517959
     }
   },
   "spb/lermontovskiy": {
@@ -657,6 +773,10 @@
     "park_forest": {
       "count": 258,
       "closest_distance_m": 142.6244793057817
+    },
+    "medical": {
+      "count": 254,
+      "closest_distance_m": 127.31043422453112
     }
   },
   "lospark": {
@@ -679,6 +799,10 @@
     "park_forest": {
       "count": 137,
       "closest_distance_m": 341.0038152533018
+    },
+    "medical": {
+      "count": 58,
+      "closest_distance_m": 111.84604068557555
     }
   },
   "lublinpark": {
@@ -701,6 +825,10 @@
     "park_forest": {
       "count": 144,
       "closest_distance_m": 36.55668584572469
+    },
+    "medical": {
+      "count": 116,
+      "closest_distance_m": 101.90266492678688
     }
   },
   "mtvpark": {
@@ -723,6 +851,10 @@
     "shop": {
       "count": 50,
       "closest_distance_m": 246.3939897293824
+    },
+    "medical": {
+      "count": 59,
+      "closest_distance_m": 51.01894744659569
     }
   },
   "kazan/matyushino": {
@@ -745,6 +877,10 @@
     "park_forest": {
       "count": 38,
       "closest_distance_m": 506.7589769753458
+    },
+    "medical": {
+      "count": 6,
+      "closest_distance_m": 925.7091637901946
     }
   },
   "mles": {
@@ -767,6 +903,10 @@
     "park_forest": {
       "count": 163,
       "closest_distance_m": 78.28549863410994
+    },
+    "medical": {
+      "count": 96,
+      "closest_distance_m": 215.83469866754442
     }
   },
   "mpark": {
@@ -789,6 +929,10 @@
     "park_forest": {
       "count": 224,
       "closest_distance_m": 233.049116402355
+    },
+    "medical": {
+      "count": 44,
+      "closest_distance_m": 81.00520889682615
     }
   },
   "moskvorechye": {
@@ -811,6 +955,10 @@
     "school": {
       "count": 27,
       "closest_distance_m": 752.3589088487682
+    },
+    "medical": {
+      "count": 81,
+      "closest_distance_m": 773.9641169544575
     }
   },
   "myakinino": {
@@ -833,6 +981,10 @@
     "shop": {
       "count": 66,
       "closest_distance_m": 867.9006820966662
+    },
+    "medical": {
+      "count": 52,
+      "closest_distance_m": 71.84868989930114
     }
   },
   "narvin": {
@@ -855,6 +1007,10 @@
     "park_forest": {
       "count": 134,
       "closest_distance_m": 190.3609010220058
+    },
+    "medical": {
+      "count": 98,
+      "closest_distance_m": 398.3822277591771
     }
   },
   "nluga": {
@@ -877,6 +1033,10 @@
     "park_forest": {
       "count": 32,
       "closest_distance_m": 361.23290875365
+    },
+    "medical": {
+      "count": 40,
+      "closest_distance_m": 413.35616388945385
     }
   },
   "ochakovo": {
@@ -899,6 +1059,10 @@
     "park_forest": {
       "count": 310,
       "closest_distance_m": 443.34288623780066
+    },
+    "medical": {
+      "count": 48,
+      "closest_distance_m": 130.59060036730463
     }
   },
   "raion-novokurkino": {
@@ -921,6 +1085,10 @@
     "park_forest": {
       "count": 127,
       "closest_distance_m": 313.7058601884465
+    },
+    "medical": {
+      "count": 81,
+      "closest_distance_m": 44.498856610470376
     }
   },
   "kazan/noksapark": {
@@ -943,6 +1111,10 @@
     "park_forest": {
       "count": 56,
       "closest_distance_m": 237.28498061703974
+    },
+    "medical": {
+      "count": 40,
+      "closest_distance_m": 248.04835851395447
     }
   },
   "onezhskiy": {
@@ -965,6 +1137,10 @@
     "park_forest": {
       "count": 96,
       "closest_distance_m": 618.2812345536283
+    },
+    "medical": {
+      "count": 108,
+      "closest_distance_m": 275.3174630229789
     }
   },
   "1dubr": {
@@ -987,6 +1163,10 @@
     "parking": {
       "count": 203,
       "closest_distance_m": 107.03813971231594
+    },
+    "medical": {
+      "count": 132,
+      "closest_distance_m": 285.4665415183785
     }
   },
   "plehanova11": {
@@ -1009,6 +1189,10 @@
     "shop": {
       "count": 111,
       "closest_distance_m": 516.6793101876805
+    },
+    "medical": {
+      "count": 96,
+      "closest_distance_m": 544.4399243689123
     }
   },
   "plr": {
@@ -1031,6 +1215,10 @@
     "park_forest": {
       "count": 94,
       "closest_distance_m": 297.3815894815987
+    },
+    "medical": {
+      "count": 61,
+      "closest_distance_m": 533.0545414401922
     }
   },
   "rustaveli": {
@@ -1053,6 +1241,10 @@
     "park_forest": {
       "count": 340,
       "closest_distance_m": 435.0222884996494
+    },
+    "medical": {
+      "count": 127,
+      "closest_distance_m": 106.55508288745416
     }
   },
   "nn/savinp": {
@@ -1075,6 +1267,10 @@
     "park_forest": {
       "count": 154,
       "closest_distance_m": 127.9165735749362
+    },
+    "medical": {
+      "count": 3,
+      "closest_distance_m": 1694.4226493761198
     }
   },
   "sp": {
@@ -1097,6 +1293,10 @@
     "park_forest": {
       "count": 30,
       "closest_distance_m": 521.1583595342936
+    },
+    "medical": {
+      "count": 23,
+      "closest_distance_m": 110.71828527208234
     }
   },
   "khabarovsk/sevpark": {
@@ -1119,6 +1319,10 @@
     "park_forest": {
       "count": 57,
       "closest_distance_m": 395.75471643373754
+    },
+    "medical": {
+      "count": 16,
+      "closest_distance_m": 1390.3173875887387
     }
   },
   "sles": {
@@ -1141,6 +1345,10 @@
     "park_forest": {
       "count": 27,
       "closest_distance_m": 508.67858352269104
+    },
+    "medical": {
+      "count": 4,
+      "closest_distance_m": 114.55876222565315
     }
   },
   "kazan/siberovo": {
@@ -1163,6 +1371,10 @@
     "park_forest": {
       "count": 66,
       "closest_distance_m": 504.1401015720112
+    },
+    "medical": {
+      "count": 62,
+      "closest_distance_m": 379.7192034854442
     }
   },
   "s16": {
@@ -1185,6 +1397,10 @@
     "park_forest": {
       "count": 426,
       "closest_distance_m": 319.09159252650693
+    },
+    "medical": {
+      "count": 89,
+      "closest_distance_m": 16.164583718931468
     }
   },
   "vladivostok/snezhnyipark": {
@@ -1207,6 +1423,10 @@
     "park_forest": {
       "count": 189,
       "closest_distance_m": 353.9611839944153
+    },
+    "medical": {
+      "count": 21,
+      "closest_distance_m": 360.0022424475475
     }
   },
   "strogino-360": {
@@ -1229,6 +1449,10 @@
     "park_forest": {
       "count": 65,
       "closest_distance_m": 170.80212763217637
+    },
+    "medical": {
+      "count": 40,
+      "closest_distance_m": 388.66231349573013
     }
   },
   "spb/tallinskiypark": {
@@ -1251,6 +1475,10 @@
     "park_forest": {
       "count": 80,
       "closest_distance_m": 856.8801365938315
+    },
+    "medical": {
+      "count": 21,
+      "closest_distance_m": 25.17483256396132
     }
   },
   "kazan/taular": {
@@ -1273,6 +1501,10 @@
     "park_forest": {
       "count": 46,
       "closest_distance_m": 94.83116219341704
+    },
+    "medical": {
+      "count": 52,
+      "closest_distance_m": 324.3745632822095
     }
   },
   "tbulvar": {
@@ -1295,6 +1527,10 @@
     "park_forest": {
       "count": 29,
       "closest_distance_m": 98.77799692689092
+    },
+    "medical": {
+      "count": 75,
+      "closest_distance_m": 170.6228395468936
     }
   },
   "ulan-ude/ulaankhoto": {
@@ -1317,6 +1553,10 @@
     "school": {
       "count": 15,
       "closest_distance_m": 110.64855377918893
+    },
+    "medical": {
+      "count": 31,
+      "closest_distance_m": 138.61824362044888
     }
   },
   "ekb/utes": {
@@ -1339,6 +1579,10 @@
     "park_forest": {
       "count": 91,
       "closest_distance_m": 164.1686401737163
+    },
+    "medical": {
+      "count": 34,
+      "closest_distance_m": 317.65788053449927
     }
   },
   "yuzhno-sakhalinsk/yunpark": {
@@ -1361,6 +1605,10 @@
     "park_forest": {
       "count": 13,
       "closest_distance_m": 639.2773593033351
+    },
+    "medical": {
+      "count": 3,
+      "closest_distance_m": 332.89467830204285
     }
   },
   "spb/shkiperskiy": {
@@ -1383,6 +1631,10 @@
     "park_forest": {
       "count": 332,
       "closest_distance_m": 286.7325700767049
+    },
+    "medical": {
+      "count": 100,
+      "closest_distance_m": 268.1688395257243
     }
   },
   "yunino": {
@@ -1405,6 +1657,10 @@
     "park_forest": {
       "count": 34,
       "closest_distance_m": 299.10839277456176
+    },
+    "medical": {
+      "count": 48,
+      "closest_distance_m": 254.8281025842767
     }
   },
   "ytnv": {
@@ -1427,6 +1683,10 @@
     "park_forest": {
       "count": 90,
       "closest_distance_m": 240.4672492726048
+    },
+    "medical": {
+      "count": 53,
+      "closest_distance_m": 184.3653310663632
     }
   },
   "spb/yanles": {
@@ -1449,6 +1709,10 @@
     "park_forest": {
       "count": 36,
       "closest_distance_m": 63.98923705132679
+    },
+    "medical": {
+      "count": 20,
+      "closest_distance_m": 194.18003899324142
     }
   },
   "zhiloi-raion-yaroslavskii": {
@@ -1471,6 +1735,10 @@
     "kindergarten": {
       "count": 45,
       "closest_distance_m": 183.0532222964209
+    },
+    "medical": {
+      "count": 80,
+      "closest_distance_m": 163.82568196611496
     }
   },
   "kvartal-yaroslavskii": {
@@ -1493,6 +1761,10 @@
     "park_forest": {
       "count": 55,
       "closest_distance_m": 633.7989545353506
+    },
+    "medical": {
+      "count": 36,
+      "closest_distance_m": 790.5729373482787
     }
   },
   "yauza": {
@@ -1515,6 +1787,10 @@
     "park_forest": {
       "count": 97,
       "closest_distance_m": 832.6685462963247
+    },
+    "medical": {
+      "count": 53,
+      "closest_distance_m": 291.5850664335112
     }
   }
 }

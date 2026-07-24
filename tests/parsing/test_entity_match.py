@@ -127,6 +127,19 @@ class TestOptionEntityMatching:
         assert "manybathrooms" not in slugs
         assert "bigwindows" in slugs
 
+    def test_vid_vo_dvor_does_not_also_match_vid_na_vodu(self):
+        # Регресс: «панорамными окнами и видом во двор» давал ДВЕ опции вида —
+        # верную «Вид во двор» (vidVoDvor) и ложную «Вид на воду» (vidNaVodu).
+        # Причина: окно «панорамными окнами и видом» матчилось на алиас
+        # «с видом на воду» с WRatio≈85.5 (partial_ratio: «видом»→«с видом»),
+        # хотя token_set_ratio всего 50 — общих токенов почти нет.
+        text = "квартира с панорамными окнами и видом во двор"
+        matches, _warnings = match_entities(text)
+        slugs = {m.entity.slug for m in matches}
+        assert "vidVoDvor" in slugs
+        assert "bigwindows" in slugs
+        assert "vidNaVodu" not in slugs
+
     def test_otdelnyj_sanuzel_alone_matches_nothing(self):
         text = "квартира с отдельным санузлом"
         matches, _warnings = match_entities(text)
@@ -199,6 +212,52 @@ class TestShortEntityFalsePositives:
         matches, _warnings = match_entities(text)
         names = {m.entity.name for m in matches}
         assert "САО" in names
+
+
+class TestUntriggeredToponymFalsePositives:
+    """Регресс: обиходное слово БЕЗ анкера не должно матчиться на станцию/район.
+
+    Класс ложняков из живых прогонов: однословное окно без триггера
+    («метро»/«район»/«у…») морфологически близко к названию топонима, но это
+    НЕ упоминание топонима, а прилагательное/существительное соседней фразы:
+    «хорошей» школой → Хорошево, «первое/первом» → Перово, «спортивным»
+    комплексом → Спортивная, «для внуков» → Внуково. Строковая близость тут
+    НЕОТЛИЧИМА от законных склонений (QRatio 80-92 у обоих, а у «химках»→Химки
+    вообще 73 — ниже ложных), поэтому порогом класс не режется: разделяет только
+    лексика. Закрыто точечными стоп-словами (как «молодая»/«хорошая»), см.
+    app/parsing/stopwords.py. Истинные упоминания с анкером/точные — не задеты.
+    """
+
+    def test_horoshej_not_horoshevo(self):
+        matches, _w = match_entities("квартира рядом с хорошей школой")
+        assert "Хорошево" not in {m.entity.name for m in matches}
+
+    def test_pervoe_zhile_not_perovo(self):
+        matches, _w = match_entities("ищу первое жильё")
+        assert "Перово" not in {m.entity.name for m in matches}
+
+    def test_pervom_etazhe_not_perovo(self):
+        matches, _w = match_entities("квартира на первом или втором этаже")
+        assert "Перово" not in {m.entity.name for m in matches}
+
+    def test_sportivnym_kompleksom_not_sportivnaya(self):
+        matches, _w = match_entities("рядом со спортивным комплексом")
+        assert "Спортивная" not in {m.entity.name for m in matches}
+
+    def test_vnukov_not_vnukovo(self):
+        matches, _w = match_entities("садик для внуков")
+        names = {m.entity.name for m in matches}
+        assert "Внуково" not in names
+        assert "Аэропорт Внуково" not in names
+
+    def test_triggered_toponym_still_matches(self):
+        # С явным анкером «метро …»/«район …» близкое склонение обязано ловиться.
+        assert "Перово" in {m.entity.name for m in match_entities("район Перово")[0]}
+        assert "Хорошево" in {m.entity.name for m in match_entities("у метро Хорошёво")[0]}
+
+    def test_exact_bare_toponym_still_matches(self):
+        # Точное имя без триггера (QRatio=100) — проходит.
+        assert "Перово" in {m.entity.name for m in match_entities("Перово")[0]}
 
 
 class TestProximityMarkerTriggerCoverage:

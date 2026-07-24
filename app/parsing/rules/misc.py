@@ -56,7 +56,9 @@ def extract_settlement_year(text: str) -> tuple[int | None, int | None, list[Spa
 _SORT_PATTERNS: list[tuple[re.Pattern[str], Sort]] = [
     (
         re.compile(
-            r"\bподешевле\b|\bсначала\s+(?:по)?дешев\w+|\bдешевле\s+сначала\b"
+            # «п[оа]дешевле» — терпимость к частой опечатке «падешевле» (о→а):
+            # нормализация гомоглифов не трогает кириллицу, поэтому ловим альтернацией.
+            r"\bп[оа]дешевле\b|\bсначала\s+(?:по)?дешев\w+|\bдешевле\s+сначала\b"
             r"|\bсначала\s+недорог\w+|\bпо\s+возрастанию\s+цены\b"
             r"|\bот\s+дешев\w+\s+к\s+дорог\w+"
         ),
@@ -64,7 +66,7 @@ _SORT_PATTERNS: list[tuple[re.Pattern[str], Sort]] = [
     ),
     (
         re.compile(
-            r"\bподороже\b|\bсначала\s+(?:по)?дорог\w+|\bдороже\s+сначала\b"
+            r"\bп[оа]дороже\b|\bсначала\s+(?:по)?дорог\w+|\bдороже\s+сначала\b"
             r"|\bпо\s+убыванию\s+цены\b"
         ),
         Sort.PRICE_DESC,
@@ -187,10 +189,16 @@ _UNSUPPORTED_CATALOG: list[tuple[re.Pattern[str], str]] = [
         ),
         "фильтр по стороне света не поддерживается pik.ru — пропущен",
     ),
-    # «Раздельный санузел» — в схеме есть только «Два и более санузла»
-    # (manybathrooms) и «Сквозной санузел» (throughbathroom), «раздельного» нет.
+    # «Раздельный санузел» (ЕД. ч.) — планировка одного санузла (ванна отдельно
+    # от туалета); в схеме pik такого фильтра нет (есть только «Два и более
+    # санузла»=manybathrooms и «Сквозной санузел»=throughbathroom — это про
+    # КОЛИЧЕСТВО, а не планировку). Паттерн намеренно ловит только единственное
+    # число: разговорное МН. ч. «раздельные санузлы» = «их несколько» и маппится
+    # на manybathrooms через alias (option_groups.json) — поэтому мн. ч. здесь НЕ
+    # консюмится, чтобы дойти до entity-matching (см. apply_rules: unsupported до
+    # матчинга).
     (
-        re.compile(r"\bраздельн\w+\s+сануз\w*"),
+        re.compile(r"\bраздельн\w+\s+(?:санузел|санузл[ауе]|санузлом)\b"),
         "фильтр «раздельный санузел» не поддерживается pik.ru — пропущен",
     ),
     # Материал дома (кирпичный/монолитный/панельный/блочный) — в схеме pik.ru
@@ -219,6 +227,29 @@ def extract_unsupported(text: str) -> tuple[list[tuple[str, str]], list[Span]]:
     fragments = [fragment for _span, fragment in found]
     spans = [span for span, _fragment in found]
     return fragments, spans
+
+
+#: «внутри/за МКАД» → гео-сужение по blocks (app/pik/location_fallback +
+#: app/geo/mkad). Захватываем и хвост «кольцо/кольца» («внутри МКАД кольца»),
+#: чтобы он не остался мусором и не дал ложную Кольцевую линию.
+_WITHIN_MKAD = re.compile(r"\b(?:внутри|в\s+пределах|в\s+черте)\s+мкад\w*(?:\s+кольц\w*)?\b")
+_BEYOND_MKAD = re.compile(r"\b(?:за\s+пределами|за\s+пределы|вне|за)\s+мкад\w*(?:\s+кольц\w*)?\b")
+
+
+def extract_within_mkad(text: str) -> tuple[bool | None, list[Span]]:
+    """«внутри/в пределах/в черте МКАД» → True; «за/вне МКАД» → False; иначе None.
+
+    pik.ru не фильтрует по границе МКАД — сужение делается по ``blocks``
+    (``app.pik.location_fallback``). Здесь только распознаём желание и его знак.
+    """
+    norm = _normalize(text)
+    within = list(_WITHIN_MKAD.finditer(norm))
+    if within:
+        return True, [m.span() for m in within]
+    beyond = list(_BEYOND_MKAD.finditer(norm))
+    if beyond:
+        return False, [m.span() for m in beyond]
+    return None, []
 
 
 _FALLBACK_METRO = re.compile(r"(?i)\bу\s+метро\s+([а-яА-ЯёЁ-]+)")

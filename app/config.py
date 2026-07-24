@@ -21,11 +21,20 @@ class Settings(BaseSettings):
     # выданный `claude setup-token`.
     CLAUDE_OAUTH_TOKEN: str | None = None
     ANTIGRAVITY_CLI_PATH: str | None = None
+    # Путь к бинарю Claude Code CLI (`claude`) для провайдера claude. Пусто =
+    # авто-дискавери самим Claude Agent SDK (см. app/ai/client.py, call_claude —
+    # транспорт по образцу workflow-ai: SDK сам запускает локальный CLI и берёт
+    # авторизацию из логина Claude Code).
+    CLAUDE_CLI_PATH: str = ""
+    # Потолок числа ходов одного вызова Claude — cost-guard. Для нашего
+    # одношагового структурного ответа (tools=[], без тул-лупа) хватает малого
+    # значения; держим небольшой запас на служебные ходы SDK.
+    CLAUDE_MAX_TURNS: int = 4
     # Единственное поле «какую модель звать» — используется обоими провайдерами
-    # (передаётся в `agy --model` для antigravity и в Anthropic API для claude).
-    # Раньше существовало отдельное ANTIGRAVITY_MODEL, из-за чего AI_MODEL_NAME по
-    # факту не использовался при провайдере antigravity (AUDIT_REPORT 1.4) —
-    # поле убрано, источник истины теперь один.
+    # (передаётся в `agy --model` для antigravity и в ClaudeAgentOptions.model
+    # для claude). Раньше существовало отдельное ANTIGRAVITY_MODEL, из-за чего
+    # AI_MODEL_NAME по факту не использовался при провайдере antigravity
+    # (AUDIT_REPORT 1.4) — поле убрано, источник истины теперь один.
     AI_MODEL_NAME: str = "gemini-3.5-flash"
     # Единый источник строки подключения к БД ИИ (AUDIT_REPORT 2.8): раньше
     # app/ai/memory.py читал DATABASE_URL напрямую через os.getenv в обход

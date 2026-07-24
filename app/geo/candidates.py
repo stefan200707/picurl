@@ -397,6 +397,27 @@ def block_ids_by_tag(field: str, name: str) -> list[str]:
     ]
 
 
+def complexes_in_mkad(within: bool) -> list[str]:
+    """id ЖК, чьи координаты лежат внутри (``within=True``) или вне МКАД.
+
+    Гео-сужение для желания «внутри/за МКАД» (у pik.ru нет такого URL-фильтра —
+    см. docs/pik-url-schema.md). Как и остальной geo-фолбэк, работает по
+    ``blocks`` (единственный проверяемый параметр): нужен собственный ``id`` ЖК и
+    координаты. Полигон и точечная проверка — ``app.geo.mkad``.
+    """
+    from app.geo.mkad import point_in_mkad
+
+    ref_data = load_all()
+    return [
+        c.id
+        for c in ref_data.complexes
+        if c.id
+        and c.lat is not None
+        and c.lon is not None
+        and point_in_mkad(c.lat, c.lon) == within
+    ]
+
+
 def nearby_block_ids(
     lat: float,
     lon: float,

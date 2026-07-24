@@ -270,6 +270,13 @@ class Criteria(BaseModel):
     poi_requirements: list[POIRequirement] = Field(default_factory=list)
     center_requested: bool = False
 
+    # --- «внутри/за МКАД» ------------------------------------------------------
+    # У pik.ru НЕТ URL-фильтра границы МКАД (docs/pik-url-schema.md). Желание
+    # реализуется гео-сужением списка ЖК по blocks (app/pik/location_fallback +
+    # app/geo/mkad.point_in_mkad), поэтому в to_query_dict НЕ сериализуется.
+    # True = внутри МКАД, False = за МКАД, None = не задано.
+    within_mkad: bool | None = None
+
     # --- Именованные ориентиры (промпт 23) -------------------------------------
     # «рядом с МГУ», «у Кремля» — сужают complexes по дистанции до координат
     # ориентира детерминированно (см. app/geo/candidates.py), без похода в ИИ.
