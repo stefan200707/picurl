@@ -296,6 +296,20 @@ class Criteria(BaseModel):
     # что и именованные ориентиры выше — без похода в ИИ.
     station_class_requirements: list[StationClassRequirement] = Field(default_factory=list)
 
+    # --- Внутренний сигнал «ЖК посчитаны и их ноль» (AI-23, defect fix) --------
+    # `complexes == []` неотличим от «ЖК не выбирались вовсе» и от «выбор дал
+    # ноль» — оба состояния пустой список по построению pydantic. Этот флаг
+    # различает их: True выставляет `app.ai.enrichment.merge_enrichment`, когда
+    # детерминированное/ИИ сужение (ориентир/POI/центр) РЕАЛЬНО посчитало
+    # кандидатов и получило пустой результат (а не просто «нечего было
+    # считать»). `app.pik.location_fallback.combine_with_fallback` использует
+    # его, чтобы пересечение с гео-фолбэком (МКАД и т.п.) корректно давало
+    # пустое множество вместо тихого отката на весь фолбэк-список — тот же
+    # класс дефекта, что и потеря суперлатива при POI, только для случая
+    # ПУСТОГО пересечения. В query/public dict не сериализуется — служебное
+    # поле пайплайна, не пользовательский критерий.
+    complexes_matched_empty: bool = False
+
     # --- Расширяемость: слаги «как есть» (см. docs/pik-url-schema.md) --------
     current_benefit: str | None = None
     option_groups: list[str] = Field(default_factory=list)
@@ -329,6 +343,9 @@ class Criteria(BaseModel):
         # Очищаем то, что нужно преобразовать вручную
         for k in ["rooms", "finish", "metro", "counties", "districts", "complexes"]:
             public.pop(k, None)
+
+        # Служебный сигнал пайплайна (не пользовательский критерий) — см. docstring поля.
+        public.pop("complexes_matched_empty", None)
 
         if self.rooms:
             labels = [ROOMS_LABELS[room] for room in self.rooms]

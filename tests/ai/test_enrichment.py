@@ -1578,3 +1578,276 @@ async def test_enrich_landmark_empty_shortlist_is_not_ai_failure(
 
     assert result.ai_failed is False
     assert any("МГУ" in w and "1000" in w for w in warnings)
+    # Дефект №1: ориентир РЕАЛЬНО участвовал (жёсткая отсечка обнулила шорт-лист)
+    # и дал легитимный ноль — merge_enrichment должен отличать это от «не
+    # считали вовсе», иначе AND с гео-фолбэком (МКАД и т.п.) молча откатывался
+    # на весь фолбэк-список.
+    assert result.complexes_matched is True
+    assert result.matched_complex_ids == []
+
+    criteria = merge_enrichment(criteria, result)
+    assert criteria.complexes == []
+    assert criteria.complexes_matched_empty is True
+
+
+@pytest.mark.asyncio
+@patch("app.ai.enrichment.log_ai_call", new_callable=AsyncMock)
+@patch("app.ai.enrichment.build_candidate_shortlist")
+async def test_enrich_landmark_match_result_forces_empty_intersection_with_mkad(
+    mock_build, mock_log, mock_settings
+):
+    """Дефект №1 — конец в конец, полный путь enrich()→merge_enrichment()→build_url().
+
+    Repro: «двушку внутри МКАД рядом с Третьяковкой не дальше 1,5 км» — ближайший
+    ЖК ПИК от ориентира лежит за пределами заданной дистанции, шорт-лист (уже
+    отфильтрованный по дистанции — жёсткая отсечка ``_rank_by_landmark``) пуст.
+    До фикса build_url подставлял ВЕСЬ МКАД-список, как будто ориентира не было.
+    """
+    from app.geo.candidates import complexes_in_mkad
+    from app.pik.url_builder import build_url
+
+    mock_settings.AI_ENRICHMENT_ENABLED = False
+    mock_build.return_value = []  # жёсткая дистанционная отсечка обнулила шорт-лист
+    full_mkad = complexes_in_mkad(True)
+    assert full_mkad, "нет ЖК внутри МКАД — тест потерял смысл"
+
+    criteria = Criteria(
+        within_mkad=True,
+        landmark_requirements=[
+            LandmarkRequirement(
+                name="Третьяковская галерея", lat=55.741395, lon=37.620072, max_distance_m=1500
+            )
+        ],
+    )
+    warnings: list[str] = []
+
+    result = await enrich("рядом с третьяковкой не дальше 1.5 км", criteria, warnings)
+    criteria = merge_enrichment(criteria, result)
+
+    build_warnings: list[str] = []
+    url = build_url(criteria, build_warnings)
+
+    assert "blocks=" in url
+    got = url.split("blocks=")[1].split("&")[0]
+    assert got == "", f"blocks должен остаться пустым, получили: {got!r}"
+    assert f"blocks={full_mkad[0]}" not in url
+    assert any("не пересекаются" in w for w in build_warnings)
+
+
+@pytest.mark.asyncio
+@patch("app.ai.enrichment.log_ai_call", new_callable=AsyncMock)
+@patch("app.ai.enrichment.build_candidate_shortlist")
+async def test_enrich_no_landmark_mkad_alone_still_fills_blocks(
+    mock_build, mock_log, mock_settings
+):
+    """Контраст: ориентир НЕ задан вовсе — МКАД-фолбэк работает как раньше
+    (весь список), никакой регрессии от фикса дефекта №1."""
+    from app.geo.candidates import complexes_in_mkad
+    from app.pik.url_builder import build_url
+
+    mock_settings.AI_ENRICHMENT_ENABLED = False
+    full_mkad = complexes_in_mkad(True)
+    assert full_mkad
+
+    criteria = Criteria(within_mkad=True)
+    warnings: list[str] = []
+
+    result = await enrich("квартиру внутри МКАД", criteria, warnings)
+    criteria = merge_enrichment(criteria, result)
+
+    assert criteria.complexes_matched_empty is False
+    mock_build.assert_not_called()  # гейт 1: без poi/center/landmark/station — noop
+
+    url = build_url(criteria, [])
+    assert "blocks=" in url
+    assert len(url.split("blocks=")[1].split("&")[0].split(",")) == len(full_mkad)
+
+
+@pytest.mark.asyncio
+@patch("app.ai.enrichment.log_ai_call", new_callable=AsyncMock)
+@patch("app.ai.enrichment.build_candidate_shortlist")
+async def test_enrich_names_nearest_operational_poi(mock_build, mock_log, mock_settings):
+    """POI-требование сузило выдачу → в warnings видно ИМЯ объекта и дистанцию.
+
+    Живой прогон: кэш обещал сад в 186 м, пользователь садов на карте не нашёл —
+    это была стройплощадка. Голого числа метров недостаточно, чтобы проверить
+    результат самому; строящиеся тоже не исчезают молча (инвариант 1).
+    """
+    mock_settings.AI_ENRICHMENT_ENABLED = False
+    mock_build.return_value = [
+        ComplexCandidate(
+            id="1165",
+            name="Нарвин",
+            district=None,
+            county=None,
+            metro=[],
+            is_center=None,
+            known_poi={"kindergarten": True},
+            poi_distances={"kindergarten": 300.0},
+            poi_names={"kindergarten": "Детский сад №2044"},
+            poi_unnamed={"kindergarten": False},
+            poi_under_construction={"kindergarten": 2},
+        )
+    ]
+    criteria = Criteria(
+        poi_requirements=[
+            POIRequirement(
+                category=POICategory.KINDERGARTEN, raw_phrase="садик", max_distance_m=350
+            )
+        ]
+    )
+    warnings: list[str] = []
+
+    await enrich("двушку с садиком в 350 метрах", criteria, warnings)
+
+    note = next(w for w in warnings if "Детский сад №2044" in w)
+    assert "300 м" in note
+    assert "Нарвин" in note
+    assert "строящихся объектов не учтено: 2" in note
+
+
+@pytest.mark.asyncio
+@patch("app.ai.enrichment.log_ai_call", new_callable=AsyncMock)
+@patch("app.ai.enrichment.build_candidate_shortlist")
+async def test_enrich_says_when_nearest_poi_is_unnamed(mock_build, mock_log, mock_settings):
+    """Безымянный объект не выдаём за названный — так и говорим."""
+    mock_settings.AI_ENRICHMENT_ENABLED = False
+    mock_build.return_value = [
+        ComplexCandidate(
+            id="1",
+            name="ЖК",
+            district=None,
+            county=None,
+            metro=[],
+            is_center=None,
+            known_poi={"kindergarten": True},
+            poi_distances={"kindergarten": 120.0},
+            poi_names={"kindergarten": None},
+            poi_unnamed={"kindergarten": True},
+        )
+    ]
+    criteria = Criteria(
+        poi_requirements=[POIRequirement(category=POICategory.KINDERGARTEN, raw_phrase="садик")]
+    )
+    warnings: list[str] = []
+
+    await enrich("двушку с садиком", criteria, warnings)
+
+    assert any("без названия" in w for w in warnings), warnings
+
+
+@pytest.mark.asyncio
+@patch("app.ai.enrichment.log_ai_call", new_callable=AsyncMock)
+@patch("app.ai.enrichment.build_candidate_shortlist")
+async def test_enrich_poi_evidence_names_closer_construction(mock_build, mock_log, mock_settings):
+    """Стройка ближе действующего объекта — говорим это числом, а не молчим.
+
+    Ровно то число, которое объясняет живой случай «сад в 186 м»: действующий
+    сад дальше, а в 186 м — котлован. Без этой строки пользователь видит
+    «ближайший действующий 900 м» и не понимает, куда делся сад с карты.
+    """
+    mock_settings.AI_ENRICHMENT_ENABLED = False
+    mock_build.return_value = [
+        ComplexCandidate(
+            id="1165",
+            name="Нарвин",
+            district=None,
+            county=None,
+            metro=[],
+            is_center=None,
+            known_poi={"kindergarten": True},
+            poi_distances={"kindergarten": 900.0},
+            poi_names={"kindergarten": "Детский сад №2044"},
+            poi_unnamed={"kindergarten": False},
+            poi_under_construction={"kindergarten": 2},
+            poi_under_construction_m={"kindergarten": 186.0},
+            poi_schema_version={"kindergarten": 2},
+        )
+    ]
+    criteria = Criteria(
+        poi_requirements=[POIRequirement(category=POICategory.KINDERGARTEN, raw_phrase="садик")]
+    )
+    warnings: list[str] = []
+
+    await enrich("двушку с садиком", criteria, warnings)
+
+    note = next(w for w in warnings if "Детский сад №2044" in w)
+    assert "900 м" in note
+    assert "186 м" in note
+    assert "ближе" in note
+
+
+@pytest.mark.asyncio
+@patch("app.ai.enrichment.log_ai_call", new_callable=AsyncMock)
+@patch("app.ai.enrichment.build_candidate_shortlist")
+async def test_enrich_poi_evidence_hedges_for_v1_cache(mock_build, mock_log, mock_settings):
+    """Для записи v1 «действующий» утверждать нельзя — этого факта у нас нет.
+
+    v1 не различала стройки, и имя объекта в ней не сохранялось: пустое
+    ``closest_name`` там значит «не записано», а не «объект без названия».
+    """
+    mock_settings.AI_ENRICHMENT_ENABLED = False
+    mock_build.return_value = [
+        ComplexCandidate(
+            id="1",
+            name="ЖК",
+            district=None,
+            county=None,
+            metro=[],
+            is_center=None,
+            known_poi={"kindergarten": True},
+            poi_distances={"kindergarten": 186.0},
+            poi_names={"kindergarten": None},
+            poi_unnamed={"kindergarten": False},
+            poi_schema_version={"kindergarten": 1},
+        )
+    ]
+    criteria = Criteria(
+        poi_requirements=[POIRequirement(category=POICategory.KINDERGARTEN, raw_phrase="садик")]
+    )
+    warnings: list[str] = []
+
+    await enrich("двушку с садиком", criteria, warnings)
+
+    note = next(w for w in warnings if "186 м" in w)
+    assert "действующий" not in note
+    assert "без названия" not in note
+    assert "v1" in note
+
+
+@pytest.mark.asyncio
+@patch("app.ai.enrichment.log_ai_call", new_callable=AsyncMock)
+@patch("app.ai.enrichment.build_candidate_shortlist")
+async def test_enrich_poi_evidence_shown_without_narrowing(mock_build, mock_log, mock_settings):
+    """Строка-пояснение выдаётся и когда требование НИЧЕГО не отсекло.
+
+    Фактическое условие — «хоть один ЖК прошёл требование», а не «выдача
+    сузилась»: имя и дистанция объекта нужны пользователю для самопроверки
+    независимо от того, отсеялся ли кто-то (докстринг и CLAUDE.md обещали
+    сужение и расходились с кодом).
+    """
+    mock_settings.AI_ENRICHMENT_ENABLED = False
+    mock_build.return_value = [
+        ComplexCandidate(
+            id=str(idx),
+            name=f"ЖК-{idx}",
+            district=None,
+            county=None,
+            metro=[],
+            is_center=None,
+            known_poi={"kindergarten": True},
+            poi_distances={"kindergarten": 100.0 * idx},
+            poi_names={"kindergarten": f"Сад {idx}"},
+            poi_schema_version={"kindergarten": 2},
+        )
+        for idx in (1, 2)
+    ]
+    criteria = Criteria(
+        poi_requirements=[POIRequirement(category=POICategory.KINDERGARTEN, raw_phrase="садик")]
+    )
+    warnings: list[str] = []
+
+    result = await enrich("двушку с садиком", criteria, warnings)
+
+    assert set(result.matched_complex_ids or []) == {"1", "2"}
+    assert any("Сад 1" in w for w in warnings), warnings

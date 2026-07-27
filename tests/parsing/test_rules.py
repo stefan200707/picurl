@@ -355,8 +355,31 @@ def test_extract_area_does_not_consume_line_number(text: str) -> None:
         ("до 15 мин на транспорте", TimeFacts(time_on_transport=15)),
         ("до метро до 15 мин на транспорте", TimeFacts(time_on_transport=15)),
         ("за 10 минут транспортом до метро", TimeFacts(time_on_transport=10)),
+        # Способ передвижения МЕЖДУ «метро» и числом: раньше форма не покрывалась
+        # вовсе (между метро и числом допускался только предлог), а минуты молча
+        # уходили в фиктивную дистанцию POI. Это реальный URL-фильтр timeOnFoot.
+        ("до метро пешком 7 минут", TimeFacts(time_on_foot=7)),
+        ("метро пешком 7 минут", TimeFacts(time_on_foot=7)),
+        ("до метро 7 минут пешком", TimeFacts(time_on_foot=7)),
+        ("метро в шаговой доступности 10 минут", TimeFacts(time_on_foot=10)),
+        ("до метро идти 12 минут", TimeFacts(time_on_foot=12)),
+        ("до станции метро пешком 6 мин", TimeFacts(time_on_foot=6)),
+        ("до метро ходьбы 9 минут", TimeFacts(time_on_foot=9)),
+        # Транспорт различается от пешего по слову-носителю.
+        ("до метро на транспорте 15 минут", TimeFacts(time_on_transport=15)),
+        ("метро на машине 12 минут", TimeFacts(time_on_transport=12)),
         ("у метро", TimeFacts()),
         ("", TimeFacts()),
+        # Числительные прописью (находка QA №2): «семь» вместо «7». Прямой
+        # порядок (число перед «минут», как и у цифровой формы) поддержан
+        # для всех идиом; инверсия «минут семь» — только для формы MODE
+        # («метро <способ> минут N» — тот же приближённый разговорный оборот,
+        # что «часов в пять»), см. app/parsing/rules/time.py.
+        ("до метро пешком семь минут", TimeFacts(time_on_foot=7)),
+        ("до метро пешком минут семь", TimeFacts(time_on_foot=7)),
+        ("до метро десять минут", TimeFacts(time_on_foot=10)),
+        ("до метро на машине пятнадцать минут", TimeFacts(time_on_transport=15)),
+        ("метро в шаговой доступности двадцать минут", TimeFacts(time_on_foot=20)),
     ],
 )
 def test_extract_time_to_metro(text: str, expected: TimeFacts) -> None:
@@ -379,6 +402,11 @@ def test_extract_time_to_metro(text: str, expected: TimeFacts) -> None:
         ("этаж с 3 по 7", FloorFacts(floor_min=3, floor_max=7)),
         ("этажность от 9 до 16", FloorFacts(floor_min=9, floor_max=16)),
         ("от 9 до 16 этажа", FloorFacts(floor_min=9, floor_max=16)),
+        # Сиротское «этажностью»: слово распознано правилом и входит в спан, иначе
+        # оседает ложным warning'ом «не удалось распознать» (инвариант 1).
+        ("этажностью от 9 до 16 этажа", FloorFacts(floor_min=9, floor_max=16)),
+        ("этажностью от 7 этажа", FloorFacts(floor_min=7)),
+        ("этажность до 12 этажа", FloorFacts(floor_max=12)),
         ("5-20 этаж", FloorFacts(floor_min=5, floor_max=20)),
         ("не ниже 4 этажа", FloorFacts(floor_min=4)),
         ("с 6-го этажа", FloorFacts(floor_min=6)),
@@ -1767,6 +1795,128 @@ def test_poi_leading_distance_still_works():
 
 
 # ---------------------------------------------------------------------------
+# Голая форма «школ» и целостность маркера близости
+# ---------------------------------------------------------------------------
+
+
+def test_poi_bare_genitive_plural_school():
+    """«до этих школ» — голый родительный падеж без окончания.
+
+    Стем ``школ\\w+`` требовал хотя бы одну букву после «школ», поэтому самая
+    частая разговорная форма («до школ», «этих школ») не матчилась вовсе и
+    требование пользователя оседало в остатке.
+    """
+    from app.parsing.rules.poi import extract_poi_requirements
+
+    poi_reqs, _center, _spans = extract_poi_requirements("чтобы до этих школ было идти до 18 минут")
+
+    schools = [r for r in poi_reqs if r.category.value == "school"]
+    assert len(schools) == 1
+    assert schools[0].max_distance_m == 1440
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("квартира со школьником", False),
+        ("школьник в семье", False),
+        ("рядом школьная территория", True),
+        ("рядом школы", True),
+        ("до этих школ", True),
+    ],
+)
+def test_poi_school_stem_still_excludes_schoolchild(text, expected):
+    """Разрешение голой формы не должно впустить «школьника» (человек, не POI)."""
+    from app.parsing.rules.poi import extract_poi_requirements
+
+    poi_reqs, _center, _spans = extract_poi_requirements(text)
+
+    assert any(r.category.value == "school" for r in poi_reqs) is expected
+
+
+def test_leading_distance_marker_is_a_whole_word():
+    """Правильное поведение на ПРАВИЛЬНОМ механизме.
+
+    «квартира до 18 минут школы и сады» и раньше давало 1440/1440 — но матч
+    начинался с нулевого индекса, потому что маркер близости «к» цеплялся за
+    букву «к» внутри слова «квартира». Ведущая дистанция обязана начинаться с
+    самого «до».
+    """
+    from app.parsing.rules.poi import extract_poi_requirements
+
+    text = "квартира до 18 минут школы и сады"
+    poi_reqs, _center, spans = extract_poi_requirements(text)
+
+    assert sorted(r.max_distance_m for r in poi_reqs) == [1440, 1440]
+    assert any(start == text.index("до 18") for start, _end in spans)
+    assert all(start != 0 for start, _end in spans)
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "площадью от 35 до 45 метров рядом школа",
+        # Сокращённая единица «м» — ЕДИНСТВЕННАЯ форма, которая реально доходит
+        # до кражи: у полного «метров» подстрока «метро» гасит матч guard'ом
+        # «это время до метро». Без короткой формы тест был бы вакуумным.
+        "площадью от 35 до 45 м рядом школа",
+        "кухня от 8 до 12 м рядом школа",
+    ],
+)
+def test_leading_distance_does_not_steal_area_before_categories(text):
+    """Обратный порядок: «площадью от 35 до 45 м рядом школа».
+
+    Прижатие выражения к началу POI-спана здесь не спасает (зазор « рядом »
+    цифр не содержит), поэтому ведущая дистанция обязана уважать уже съеденные
+    спаны — тот же приём, что у ``extract_floor(norm, consumed)``.
+    """
+    from app.parsing.parser import parse
+
+    result = parse(text)
+
+    schools = [r for r in result.criteria.poi_requirements if r.category.value == "school"]
+    assert len(schools) == 1
+    assert schools[0].max_distance_m is None
+
+
+def test_leading_distance_respects_explicit_consumed():
+    """Юнит-вариант того же: спаны площади передаются напрямую.
+
+    Первый assert фиксирует, что предохранитель ДЕЙСТВИТЕЛЬНО нужен: без
+    ``consumed`` «до 45 м» уходит школе как дистанция.
+    """
+    from app.parsing.rules.area import extract_area
+    from app.parsing.rules.poi import extract_poi_requirements
+
+    text = "площадью от 35 до 45 м рядом школа"
+    area, area_spans = extract_area(text)
+    assert (area.area_min, area.area_max) == (35, 45)
+
+    without, _center, _spans = extract_poi_requirements(text)
+    assert without[0].max_distance_m == 45, "контрпример перестал быть контрпримером"
+
+    with_consumed, _center, _spans = extract_poi_requirements(text, area_spans)
+    assert all(r.max_distance_m is None for r in with_consumed)
+
+
+def test_poi_trailing_distance_reaches_both_categories():
+    """Живой запрос: «до этих детских садов и школ было идти до 18 минут».
+
+    Оба требования должны получить дистанцию — и школа (её спан вплотную к
+    разрыву), и детский сад (зазор «и школ было идти» цифр не содержит).
+    """
+    from app.parsing.rules.poi import extract_poi_requirements
+
+    poi_reqs, _center, _spans = extract_poi_requirements(
+        "до этих детских садов и школ было идти до 18 минут"
+    )
+
+    by_category = {r.category.value: r.max_distance_m for r in poi_reqs}
+    assert by_category["school"] == 1440
+    assert by_category["kindergarten"] == 1440
+
+
+# ---------------------------------------------------------------------------
 # Падежные алиасы ориентиров
 # ---------------------------------------------------------------------------
 
@@ -1781,6 +1931,9 @@ def test_poi_leading_distance_still_works():
         ("квартира рядом с Воробьёвыми горами", "Воробьёвы горы"),
         ("двушку недалеко от Останкинской телебашни", "Останкинская телебашня"),
         ("однушку около Парка Сокольники", "Парк Сокольники"),
+        ("трёшка ближайшая к Финашке", "Финансовый университет"),
+        ("квартира рядом с Финашкой", "Финансовый университет"),
+        ("студию около Финашки", "Финансовый университет"),
     ],
 )
 def test_landmark_declension_aliases(text, expected):
@@ -1851,3 +2004,204 @@ def test_range_distance_e2e_consumed_from_residual():
 
     assert result.criteria.poi_requirements[0].max_distance_m == 1600
     assert result.warnings == []
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "до метро пешком 7 минут",
+        "метро пешком 7 минут",
+        "до метро 7 минут пешком",
+        "метро в шаговой доступности 10 минут",
+        "до метро идти 12 минут",
+        "до метро на транспорте 15 минут",
+    ],
+)
+def test_time_to_metro_span_covers_whole_idiom(text: str) -> None:
+    """Спан обязан покрыть идиому целиком, включая «до метро» и способ передвижения.
+
+    Иначе «до метро»/«пешком» оседают в остатке ложным warning'ом (инвариант 1) —
+    ровно тот дефект, из-за которого минуты раньше уходили в дистанцию POI.
+    """
+    from app.parsing.rules.time import extract_time_to_metro as _extract
+
+    _time, spans = _extract(text)
+
+    assert spans, f"идиома не распознана вовсе: {text!r}"
+    assert spans[0][0] == 0
+    assert spans[-1][1] == len(text)
+
+
+def test_time_to_metro_does_not_steal_poi_distance() -> None:
+    """Число идиомы времени не должно становиться дистанцией POI (и наоборот)."""
+    from app.parsing.parser import parse
+
+    result = parse("двушка, до метро пешком 7 минут, рядом школа не дальше 500 метров")
+
+    assert result.criteria.time_on_foot == 7
+    assert [p.max_distance_m for p in result.criteria.poi_requirements] == [500]
+    assert result.warnings == []
+
+
+# ---------------------------------------------------------------------------
+# Дефекты QA-прогона живого запроса №1 (AI-25)
+# ---------------------------------------------------------------------------
+
+
+def test_time_on_foot_not_stolen_from_poi_context() -> None:
+    """D2: «пешком» БЕЗ метро не имеет права создавать URL-фильтр ``timeOnFoot``.
+
+    «до магазинов не более 12 минут пешком» — это дистанция до POI, а не время до
+    метро. Живой замер вреда: у ЖК «Волжский парк» (id 411) реальный
+    ``timeOnFoot=15``, и подставленный ``timeOnFoot=12`` обнулял выдачу (0 однушек
+    против 31 без фильтра) — ссылка обещала ЖК, которых pik.ru не показывал.
+    """
+    from app.parsing.parser import parse
+
+    result = parse("до магазинов не более 12 минут пешком")
+
+    assert result.criteria.time_on_foot is None
+    assert [p.max_distance_m for p in result.criteria.poi_requirements] == [960]
+    assert result.warnings == []
+
+
+def test_time_on_foot_guard_sees_poi_on_the_right() -> None:
+    """D2, ведущая форма: POI стоит СПРАВА от идиомы времени.
+
+    «до 20 минут пешком до школы и детского сада» — число принадлежит POI. Раньше
+    оно уходило в ``timeOnFoot``, а спан времени попадал в ``consumed`` и через
+    ``_overlaps`` глушил ведущую дистанцию POI — категории оставались без радиуса.
+    """
+    from app.parsing.parser import parse
+
+    result = parse("двушку, до 20 минут пешком до школы и детского сада")
+
+    assert result.criteria.time_on_foot is None
+    assert {p.category.value: p.max_distance_m for p in result.criteria.poi_requirements} == {
+        "school": 1600,
+        "kindergarten": 1600,
+    }
+    assert result.warnings == []
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "до метро пешком 7 минут",
+        "метро пешком 7 минут",
+        "до метро 7 минут пешком",
+        "метро в шаговой доступности 10 минут",
+        "в шаговой доступности 7 минут",
+        "рядом парк, до метро 8 минут пешком",
+        "рядом магазин, метро в шаговой доступности 10 минут",
+    ],
+)
+def test_time_on_foot_metro_idioms_survive_poi_guard(text: str) -> None:
+    """D2, контроль: guard не смеет ломать настоящие идиомы «пешком до метро»."""
+    from app.parsing.rules.time import extract_time_to_metro as _extract
+
+    facts, _spans = _extract(text)
+
+    assert facts.time_on_foot is not None, f"идиома времени до метро потеряна: {text!r}"
+
+
+def test_dist_marker_accepts_colloquial_ne_bolshe() -> None:
+    """D1: разговорное «не больше» — такой же маркер дистанции, как «не более».
+
+    В обоих корпусах «не больше» встречается 0 раз, поэтому зелёные пороги дефект
+    не ловили: требование оседало ложным warning'ом, а число уходило в чужой фильтр.
+    """
+    from app.parsing.parser import parse
+
+    result = parse("до магазинов не больше 12 минут")
+
+    assert [p.max_distance_m for p in result.criteria.poi_requirements] == [960]
+    assert result.warnings == []
+
+
+def test_ne_menee_is_not_a_distance_marker() -> None:
+    """D1, контрпример: симметричное «не менее/не меньше» в маркер НЕ добавляется.
+
+    «не менее» — НИЖНЯЯ граница, дистанцию она не ограничивает, зато в живой речи
+    ровно так задают площадь/цену («площадь не менее 60 метров»). Впустив её в
+    ``_DIST_MARKER``, мы бы отдавали чужое число радиусу POI — тот же класс
+    коллизии, что «однушка у МЦД от 60 метров». Фраза остаётся в warnings (честно),
+    но фильтром не становится.
+    """
+    from app.parsing.parser import parse
+
+    result = parse("до магазинов не менее 12 минут")
+
+    assert [p.max_distance_m for p in result.criteria.poi_requirements] == [None]
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "однушку не более 12 минут до магазинов",
+        "квартиру не более 12 минут до магазинов",
+        "ищу не более 12 минут до магазинов",
+    ],
+)
+def test_leading_distance_prefix_is_word_anchored(text: str) -> None:
+    """D5: голые предлоги «у»/«к» в маркере близости нужны ЦЕЛЫМ словом.
+
+    Без левой ``\\b`` маркером становилась конечная «у» слова «однушку»: спан
+    ведущей дистанции пересекался со спаном комнатности, срабатывал ``break`` и
+    дистанция выбрасывалась целиком. Различие ровно в одном слове: «студию …»
+    работало, «однушку …» — нет.
+    """
+    from app.parsing.parser import parse
+
+    result = parse(text)
+
+    assert [p.max_distance_m for p in result.criteria.poi_requirements] == [960]
+    assert result.warnings == []
+
+
+def test_trailing_distance_reaches_earlier_categories_in_enumeration() -> None:
+    """D3: хвостовая дистанция достаётся ВСЕМ категориям перечисления.
+
+    «до магазинов, аптек и поликлиники было не более 12 минут»: пока перечисление
+    коротко, дистанцию получали обе категории; чуть длиннее — первая теряла её, и
+    БЕЗ warning'а (спан съеден последней категорией, покрытие текста полное).
+    """
+    from app.parsing.parser import parse
+
+    result = parse("однушку, чтобы до магазинов, аптек и поликлиники было не более 12 минут")
+
+    by_category = {p.category.value: p.max_distance_m for p in result.criteria.poi_requirements}
+    assert by_category == {"shop": 960, "medical": 960}
+
+
+def test_trailing_distance_does_not_leak_across_separate_wishes() -> None:
+    """D3, контрпример: распространение — только через союзы/запятые перечисления.
+
+    «рядом школа. магазины не дальше 500 метров» — два независимых пожелания,
+    дистанция второго не имеет права стать радиусом первого.
+    """
+    from app.parsing.rules.poi import extract_poi_requirements
+
+    poi_reqs, _center, _spans = extract_poi_requirements(
+        "рядом школа. магазины не дальше 500 метров"
+    )
+
+    by_category = {r.category.value: r.max_distance_m for r in poi_reqs}
+    assert by_category == {"school": None, "shop": 500}
+
+
+def test_finish_pod_kluch_consumes_word_otdelka() -> None:
+    """D4: «отделка под ключ» — ветка обязана поглотить и слово «отделка».
+
+    Иначе «отделка» оседает ложным warning'ом и лишним ``option_candidate``, а тот
+    уходит в ``resolve_options()`` ДО гейта 1 — сжигает вызов ИИ и пачкает
+    ``build_query_signature``. Для whitebox приём уже применён (``_FINISH_PRED``).
+    """
+    from app.parsing.parser import parse
+    from app.parsing.schema import Finish as _Finish
+
+    result = parse("отделка под ключ")
+
+    assert result.criteria.finish == [_Finish.READY]
+    assert result.warnings == []
+    assert result.option_candidates == []

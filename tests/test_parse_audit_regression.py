@@ -16,6 +16,9 @@
 падешевле, трёха, с отделкай, кухня ат N, первый этаж, своя ванная):
 crashes=0, empty_criteria=28, no_filter_urls=60, coverage=0.906.
 Замер после Milestone AI-20: 32 / 64 / 0.886. ДО фиксов (дефект): 37 / 68 / 0.853.
+Замер после AI-24 (алиасы ориентиров, guard маркера близости, stopwords модальности/
+указательных, ведущее «этажностью», идиома «до метро пешком N минут»):
+crashes=0, empty_criteria=27, no_filter_urls=60, coverage=0.9142.
 Существенная часть «URL без фильтров» — законные кейсы: station-class/
 landmark-запросы (сужение делает enrich(), которого оффлайн-аудит намеренно
 не зовёт), болтовня без фактов и неподдерживаемые фильтры.
@@ -29,9 +32,9 @@ CORPUS = Path(__file__).parent / "corpus" / "queries.txt"
 
 #: Пороги «не хуже» (см. докстринг модуля).
 MAX_CRASHES = 0
-MAX_EMPTY_CRITERIA = 31
-MAX_NO_FILTER_URLS = 63
-MIN_AVG_COVERAGE = 0.89
+MAX_EMPTY_CRITERIA = 28
+MAX_NO_FILTER_URLS = 61
+MIN_AVG_COVERAGE = 0.91
 
 
 def test_corpus_regression_thresholds() -> None:

@@ -5,22 +5,41 @@ import httpx
 from pydantic import BaseModel
 
 from app.parsing.schema import Criteria
-from app.pik.location_fallback import resolve_fallback_block_ids
+from app.pik.location_fallback import combine_with_fallback, resolve_fallback_block_ids
 
-#: Локационные query-параметры, которые ``api.pik.ru/v2/filter`` принимает, но
+#: ЛОКАЦИОННЫЕ query-параметры, которые ``api.pik.ru/v2/filter`` принимает, но
 #: РЕАЛЬНО ИГНОРИРУЕТ при подсчёте count (аудит 2026-07-23, живые замеры curl:
 #: baseline без параметров / запрос с настоящим GUID метро / запрос с заведомо
 #: фейковым GUID (``deadbeef-...``) / запрос с несуществующим id округа —
 #: все четыре вернули ПОБАЙТОВО одинаковый count. Единственный локационный
 #: параметр, который бэкенд реально проверяет — ``blocks``
-#: (``blocks=999999`` -> count=0, подтверждено). Если хоть один из этих трёх
-#: параметров уходит в запрос, соответствующий локационный фильтр НЕ отражён в
-#: result_count — это не «квартиры не найдены», а «мы не можем это
-#: проверить», и врать об этом молча нельзя (инвариант проекта).
-UNVERIFIED_BY_BACKEND_PARAMS: tuple[str, ...] = (
+#: (``blocks=999999`` -> count=0, подтверждено).
+UNVERIFIED_LOCATION_PARAMS: tuple[str, ...] = (
     "metroStations",
     "districtLocations",
     "districtCounties",
+)
+
+#: НЕлокационные параметры, которые бэкенд игнорирует так же молча (живые замеры
+#: 2026-07-27): ``blocks=477&rooms=1`` → 54; ``+settlementYearFrom=2030&
+#: settlementYearTo=2031`` → 54; ``+finish=0`` → 54. Контроль, что бэкенд не
+#: «сломан вообще»: ``blocks=411&timeOnFoot=12`` → 0 — то есть игнорируются именно
+#: эти параметры. Без них ``validate()`` выдавал за полноценную проверку число,
+#: не учитывающее 2 из 6 фильтров ссылки — ровно то нарушение инварианта, ради
+#: которого константа и заведена.
+UNVERIFIED_NON_LOCATION_PARAMS: tuple[str, ...] = (
+    "finish",
+    "settlementYearFrom",
+    "settlementYearTo",
+)
+
+#: Все параметры, не отражённые в ``result_count``. Если хоть один уходит в
+#: запрос, соответствующий фильтр НЕ отражён в count — это не «квартиры не
+#: найдены», а «мы не можем это проверить», и врать об этом молча нельзя
+#: (инвариант проекта). Имя намеренно осталось прежним: константа с самого начала
+#: описывала «что бэкенд не проверяет», а не только локации.
+UNVERIFIED_BY_BACKEND_PARAMS: tuple[str, ...] = (
+    UNVERIFIED_LOCATION_PARAMS + UNVERIFIED_NON_LOCATION_PARAMS
 )
 
 
@@ -31,7 +50,7 @@ class ValidationResult(BaseModel):
     ok: bool
     warning: str | None = None
     #: True, если среди отправленных параметров есть хотя бы один из
-    #: UNVERIFIED_BY_BACKEND_PARAMS — result_count в этом случае НЕ отражает
+    #: UNVERIFIED_LOCATION_PARAMS — result_count в этом случае НЕ отражает
     #: соответствующий локационный фильтр (см. модульную константу выше).
     #: Отдельное структурное поле (в дополнение к тексту в ``warning``) — на
     #: случай, если владелец HTTP-слоя (app/api/schemas.py, вне зоны
@@ -56,6 +75,7 @@ async def validate(criteria: Criteria, client: httpx.AsyncClient) -> ValidationR
     ровно то сужение, которое получит пользователь по ссылке.
     """
     params: dict[str, str] = criteria.to_query_dict()
+    warning_parts: list[str] = []
 
     # 1. Комнатность
     if criteria.rooms:
@@ -72,23 +92,44 @@ async def validate(criteria: Criteria, client: httpx.AsyncClient) -> ValidationR
     params.update(criteria.location_query_dict())
 
     # 3.5 Geo-фолбэк на blocks для локаций без достоверного id — см. docstring.
+    # ПЕРЕСЕЧЕНИЕ, а не объединение (Дефект №2 фикс) — та же логика, что
+    # app.pik.url_builder.build_url, теперь общий хелпер
+    # app.pik.location_fallback.combine_with_fallback: иначе result_count
+    # проверял НЕ то сужение, которое получит пользователь по ссылке (живой
+    # замер: 3889 вместо реальных 598 — validate() объединял фолбэк вместо
+    # пересечения).
     fallback = resolve_fallback_block_ids(criteria)
     if fallback.block_ids:
-        existing_blocks = params.get("blocks", "")
-        merged_ids = (existing_blocks.split(",") if existing_blocks else []) + fallback.block_ids
-        params["blocks"] = ",".join(dict.fromkeys(merged_ids))
+        existing_blocks = [b for b in params.get("blocks", "").split(",") if b]
+        params["blocks"] = ",".join(
+            combine_with_fallback(existing_blocks, fallback, criteria, warning_parts)
+        )
 
     # Сортировка (sortBy/orderBy) уже добавлена в params через
     # criteria.to_query_dict() выше — повторный расчёт здесь был мёртвым
     # кодом (AUDIT_REPORT 2.1).
 
-    location_filters_not_verified = any(key in params for key in UNVERIFIED_BY_BACKEND_PARAMS)
-    warning_parts: list[str] = []
+    # Поле ответа осталось ПРО ЛОКАЦИИ (контракт API не меняется), а warning
+    # честно перечисляет все непроверяемые фильтры — включая нелокационные.
+    location_filters_not_verified = any(key in params for key in UNVERIFIED_LOCATION_PARAMS)
     if location_filters_not_verified:
         warning_parts.append(
             "result_count не учитывает фильтр по метро/округу/району — "
             "api.pik.ru/v2/filter не проверяет эти параметры (подтверждено "
             "живыми замерами); достоверна только часть по комнатности/цене/ЖК"
+        )
+    unverified_present = [key for key in UNVERIFIED_NON_LOCATION_PARAMS if key in params]
+    if unverified_present:
+        # Перечисляем только то, что реально ушло в запрос: «не учитывает отделку»
+        # при отсутствии finish было бы такой же неправдой, как молчание.
+        labels: list[str] = []
+        if "finish" in unverified_present:
+            labels.append("отделку")
+        if any(key.startswith("settlementYear") for key in unverified_present):
+            labels.append("год заселения")
+        warning_parts.append(
+            f"result_count не учитывает {' и '.join(labels)} — api.pik.ru/v2/filter "
+            "игнорирует эти параметры (подтверждено живыми замерами)"
         )
     warning_parts.extend(fallback.notes)
     success_warning = "; ".join(warning_parts) or None

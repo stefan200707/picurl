@@ -42,6 +42,7 @@ from app.geo.candidates import (
     station_class_nearest_fallback,
     station_class_points,
 )
+from app.geo.poi import POI_CACHE_SCHEMA_VERSION
 from app.parsing.rules.landmark import has_superlative_cue
 from app.parsing.schema import Criteria, LandmarkRequirement
 from app.reference.loader import load_landmarks, load_option_groups, load_options, normalize
@@ -117,6 +118,15 @@ class EnrichmentResult(BaseModel):
     cache_hit: bool
     success: bool
     matched_complex_ids: list[str] = []
+    #: True, когда ``matched_complex_ids`` — результат РЕАЛЬНОГО сужения
+    #: (детерминированного/кэшированного/ИИ), а не значение по умолчанию.
+    #: Различает «ЖК не считали вовсе» (``noop()``/``failed()``/``disabled()``,
+    #: matched_complex_ids=[] по конструктору) от «считали и получили пустой
+    #: список» (легитимный ноль — ориентир/POI/центр реально не оставили ни
+    #: одного ЖК). ``merge_enrichment`` читает этот флаг, чтобы не спутать два
+    #: состояния и корректно занулить ``criteria.complexes`` во втором случае
+    #: (см. ``Criteria.complexes_matched_empty``).
+    complexes_matched: bool = False
     center_district_ids: list[str] = []
     poi_findings: dict[str, dict[str, bool]] = {}
     explanation: str | None = None
@@ -141,6 +151,7 @@ class EnrichmentResult(BaseModel):
             cache_hit=False,
             success=True,
             matched_complex_ids=known.get("matched_complex_ids", []),
+            complexes_matched=True,
             center_district_ids=known.get("center_district_ids", []),
             poi_findings=known.get("poi_findings", {}),
         )
@@ -152,6 +163,7 @@ class EnrichmentResult(BaseModel):
             cache_hit=True,
             success=True,
             matched_complex_ids=cached.answer.get("matched_complex_ids", []),
+            complexes_matched=True,
             center_district_ids=cached.answer.get("center_district_ids", []),
             poi_findings=cached.answer.get("poi_findings", {}),
         )
@@ -173,6 +185,7 @@ class EnrichmentResult(BaseModel):
             cache_hit=False,
             success=True,
             matched_complex_ids=answer.matched_complex_ids,
+            complexes_matched=True,
             center_district_ids=answer.center_district_ids,
             poi_findings=answer.poi_findings,
             explanation=answer.explanation,
@@ -184,7 +197,14 @@ def merge_enrichment(criteria: Criteria, enrichment: EnrichmentResult) -> Criter
     # MatchedEntity импортировался дважды в двух разных if-ветках.
     from app.parsing.schema import MatchedEntity
 
-    if enrichment.matched_complex_ids:
+    # ``complexes_matched`` (не truthy-проверка matched_complex_ids!) отличает
+    # «сужение реально считалось» от «matched_complex_ids=[] по умолчанию,
+    # ничего не считали» — truthy-проверка их не различала, и легитимный ноль
+    # (ориентир/POI/центр реально не оставили ни одного ЖК) был неотличим от
+    # «ЖК не выбирались вовсе»: criteria.complexes оставался нетронутым, и
+    # downstream (build_url/validate) не видел, что locations-фильтр вообще
+    # участвовал (Дефект №1 — тихая потеря при AND с гео-фолбэком МКАД).
+    if enrichment.complexes_matched:
         from app.reference.loader import load_complexes
 
         complexes_data = load_complexes()
@@ -202,6 +222,10 @@ def merge_enrichment(criteria: Criteria, enrichment: EnrichmentResult) -> Criter
                     )
                     break
         criteria.complexes = new_complexes
+        # Явный ноль (не «не считали») — сигнал для geo-фолбэка (МКАД и т.п.):
+        # пересечение с этим требованием должно давать пусто, а не тихо
+        # игнорировать его и откатываться на весь фолбэк-список.
+        criteria.complexes_matched_empty = not new_complexes
 
     if enrichment.center_district_ids:
         from app.reference.loader import load_districts
@@ -656,6 +680,85 @@ def _apply_superlative(
     return nearest_ids
 
 
+#: Человекочитаемые названия POI-категорий для пояснений пользователю.
+_POI_CATEGORY_LABELS = {
+    "school": "школа",
+    "kindergarten": "детский сад",
+    "shop": "магазин",
+    "parking": "парковка",
+    "park_forest": "парк/лес",
+    "medical": "медицина",
+}
+
+
+def _poi_object_label(candidate: ComplexCandidate, cat: str) -> str:
+    """Как назвать ближайший объект категории у конкретного ЖК.
+
+    Пустое имя значит РАЗНОЕ в двух схемах кэша, и подменять одно другим нельзя
+    (инвариант 1): ``closest_unnamed=True`` — установленный факт схемы v2 (на
+    карте это просто двор), тогда как в v1 имена не сохранялись вовсе, и там
+    пустое имя честно значит «в кэше не записано». Именно поэтому читается флаг
+    ``poi_unnamed``, а не просто ``poi_names[cat] is None``: он единственный
+    отличает «безымянный» от «неизвестно».
+    """
+    name = candidate.poi_names.get(cat)
+    if name:
+        return f"«{name}»"
+    if candidate.poi_unnamed.get(cat):
+        return "объект без названия в OSM"
+    return "объект (имя в кэше не записано)"
+
+
+def _warn_poi_evidence(
+    criteria: Criteria,
+    candidates: list[ComplexCandidate],
+    matched_ids: list[str],
+    warnings: list[str],
+) -> None:
+    """Назвать объект, из-за которого ЖК прошли POI-требование.
+
+    Живой прогон: пользователь получил ссылку, где кэш обещал сад в 186 м, и
+    садов на карте не нашёл (это была стройплощадка). Одного числа метров
+    недостаточно — пользователь должен видеть ИМЯ объекта, чтобы проверить его
+    сам. Одна строка на категорию — когда требование участвовало в отборе и
+    хотя бы один ЖК его прошёл (условие ровно такое: непустой ``matched_ids``;
+    сужения выдачи НЕ требуется — имя и дистанция нужны для самопроверки и
+    тогда, когда прошли все кандидаты). Строящиеся объекты упоминаем числом, а
+    если стройка ближе действующего объекта — ещё и дистанцией: это ровно то
+    число, которое объясняет «сад в 186 м» (инвариант 1 — не молчим).
+
+    Для записи кэша v1 формулировка мягче: там действующие и строящиеся объекты
+    не разделены, и утверждать «ближайший ДЕЙСТВУЮЩИЙ» мы права не имеем.
+    """
+    if not criteria.poi_requirements or not matched_ids:
+        return
+
+    matched = [c for c in candidates if c.id in set(matched_ids)]
+    for req in criteria.poi_requirements:
+        cat = req.category.value
+        label = _POI_CATEGORY_LABELS.get(cat, cat)
+        scored = sorted(
+            ((c.poi_distances[cat], c) for c in matched if c.poi_distances.get(cat) is not None),
+            key=lambda pair: pair[0],
+        )
+        if not scored:
+            continue
+        dist, nearest = scored[0]
+        is_v2 = nearest.poi_schema_version.get(cat, 1) >= POI_CACHE_SCHEMA_VERSION
+        who = _poi_object_label(nearest, cat)
+        kind = "ближайший действующий" if is_v2 else "ближайший"
+        note = f"{label}: {kind} — {who}, {dist:.0f} м (ЖК «{nearest.name}»)"
+        if not is_v2:
+            note += "; запись кэша v1 — стройки в ней не отделены от работающих объектов"
+        under_construction = sum(c.poi_under_construction.get(cat, 0) for c in matched)
+        if under_construction:
+            note += f"; строящихся объектов не учтено: {under_construction}"
+            closer = nearest.poi_under_construction_m.get(cat)
+            if closer is not None and closer < dist:
+                note += f" (ближайшая стройка ближе — {closer:.0f} м)"
+        warnings.append(note)
+
+
 def _warn_mixed_superlative(superlative: list[LandmarkRequirement], warnings: list[str]) -> None:
     """Смешанный запрос: суперлатив не применяем, но и не проглатываем молча."""
     sup_names = ", ".join(f"«{lm.name}»" for lm in superlative)
@@ -771,7 +874,21 @@ async def enrich(
             ]
             limit_note = f" в пределах {min(declared)} м" if declared else ""
             warnings.append(f"рядом с {landmark_names}{limit_note} подходящих ЖК не найдено")
-            return await _log(EnrichmentResult.noop())
+            # НЕ noop(): ориентир РЕАЛЬНО участвовал (жёсткая отсечка дистанции
+            # обнулила шорт-лист ещё до подсчёта) и дал легитимный ноль — это
+            # отличается от «нечего было считать» (см. EnrichmentResult.complexes_matched).
+            # Иначе merge_enrichment не трогал criteria.complexes, и AND с
+            # гео-фолбэком (МКАД и т.п.) молча откатывался на весь фолбэк-список,
+            # как будто ориентира не было вовсе (Дефект №1).
+            return await _log(
+                EnrichmentResult(
+                    ai_used=False,
+                    cache_hit=False,
+                    success=True,
+                    matched_complex_ids=[],
+                    complexes_matched=True,
+                )
+            )
         warnings.append("Список кандидатов пуст")
         return await _log(EnrichmentResult.failed())
 
@@ -864,6 +981,7 @@ async def enrich(
             cache_hit=False,
             success=True,
             matched_complex_ids=matched_complex_ids,
+            complexes_matched=True,
         )
         return await _log(result)
 
@@ -904,6 +1022,12 @@ async def enrich(
 
         if not known["matched_complex_ids"]:
             warnings.append(f"рядом с {landmark_names} подходящих ЖК не найдено")
+
+    # Прозрачность POI: назвать объект, по которому ЖК прошли требование. Ставим
+    # здесь — ниже все ветки, где poi_requirements по условию пусты (landmark-
+    # only, station-class-only), поэтому лишних строк не будет, а обе ветви ниже
+    # (гейт 2 и ИИ-путь) сообщение получат.
+    _warn_poi_evidence(criteria, candidates, known["matched_complex_ids"], warnings)
 
     # Сужение по классу станций («рядом с МЦД не важно какой станции», «у
     # любого метро» — Milestone AI-15) — то же обобщение ориентира на КЛАСС
@@ -958,6 +1082,7 @@ async def enrich(
             cache_hit=False,
             success=True,
             matched_complex_ids=matched_complex_ids,
+            complexes_matched=True,
         )
         return await _log(result)
 

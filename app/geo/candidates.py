@@ -1,7 +1,10 @@
 import json
 
+from pydantic import ValidationError
+
 from app.ai.schema import ComplexCandidate
 from app.geo.distance import CENTER_RADIUS_M, haversine
+from app.geo.poi import POI_CACHE_SCHEMA_VERSION, POI_CACHE_STALE_HINT, POIResult
 from app.parsing.schema import (
     Criteria,
     LandmarkRequirement,
@@ -167,6 +170,38 @@ def _location_filter(criteria: Criteria) -> set[str] | None:
     return names or None
 
 
+def _parse_poi_entry(slug: str, category: str, data: dict) -> POIResult:
+    """Прочитать запись POI-кэша в типизированный :class:`POIResult`.
+
+    Записи прошлой схемы (без ``schema_version``) валидны — у них просто
+    ``schema_version=1``, и вызывающий код обязан учитывать, что их дистанция
+    считалась вместе со стройками. Битая запись — явная ошибка с инструкцией
+    пересобрать кэш, а не тихая деградация в «POI нет».
+    """
+    try:
+        return POIResult.model_validate(data)
+    except ValidationError as e:
+        raise ValueError(
+            f"повреждённая запись POI-кэша {slug}/{category}: {e}; {POI_CACHE_STALE_HINT}"
+        ) from e
+
+
+def _has_stale_poi_entries(poi_cache: dict) -> bool:
+    """Есть ли в кэше записи прошлой схемы с непроверяемой дистанцией."""
+    for categories in poi_cache.values():
+        if not isinstance(categories, dict):
+            continue
+        for data in categories.values():
+            if not isinstance(data, dict):
+                continue
+            if (
+                data.get("schema_version", 1) < POI_CACHE_SCHEMA_VERSION
+                and data.get("closest_distance_m") is not None
+            ):
+                return True
+    return False
+
+
 def build_candidate_shortlist(
     criteria: Criteria, warnings: list[str] | None = None
 ) -> list[ComplexCandidate]:
@@ -180,6 +215,15 @@ def build_candidate_shortlist(
     ref_data = load_all()
     poi_cache_path = DATA_DIR / "poi_cache.json"
     poi_cache = json.loads(poi_cache_path.read_text("utf-8")) if poi_cache_path.exists() else {}
+
+    # Кэш прошлой схемы читается (падать на нём нельзя — рантайм не обязан
+    # ломаться из-за формата), но и молчать нельзя: в v1 closest_distance_m
+    # считался по ВСЕМ объектам OSM, включая стройплощадки, и как «дистанция до
+    # действующего сада» это число недостоверно. Предупреждаем один раз и только
+    # если дистанция там реально есть (записи-заглушки промоушена с None ничего
+    # не искажают).
+    if warnings is not None and _has_stale_poi_entries(poi_cache):
+        warnings.append(POI_CACHE_STALE_HINT)
 
     # Маппинг «имя района -> признак центра» для вычисления is_center кандидата.
     center_by_district = {
@@ -215,10 +259,30 @@ def build_candidate_shortlist(
 
             known_poi = {}
             poi_distances = {}
+            poi_names = {}
+            poi_unnamed = {}
+            poi_under_construction = {}
+            poi_under_construction_m = {}
+            poi_schema_version = {}
             if c.slug and c.slug in poi_cache:
                 for cat, data in poi_cache[c.slug].items():
-                    known_poi[cat] = data.get("count", 0) > 0
-                    poi_distances[cat] = data.get("closest_distance_m")
+                    entry = _parse_poi_entry(c.slug, cat, data)
+                    # v1-запись не различала действующие и строящиеся объекты,
+                    # поэтому count_operational там нулевой не по факту, а по
+                    # отсутствию данных — берём общий count (иначе кэш прошлой
+                    # схемы молча превратил бы «сады есть» в «садов нет»).
+                    present = (
+                        entry.count_operational
+                        if entry.schema_version >= POI_CACHE_SCHEMA_VERSION
+                        else entry.count
+                    )
+                    known_poi[cat] = present > 0
+                    poi_distances[cat] = entry.closest_distance_m
+                    poi_names[cat] = entry.closest_name
+                    poi_unnamed[cat] = entry.closest_unnamed
+                    poi_under_construction[cat] = entry.count_under_construction
+                    poi_under_construction_m[cat] = entry.closest_under_construction_m
+                    poi_schema_version[cat] = entry.schema_version
 
             result.append(
                 ComplexCandidate(
@@ -230,6 +294,11 @@ def build_candidate_shortlist(
                     is_center=center_by_district.get(normalize(c.district)) if c.district else None,
                     known_poi=known_poi,
                     poi_distances=poi_distances,
+                    poi_names=poi_names,
+                    poi_unnamed=poi_unnamed,
+                    poi_under_construction=poi_under_construction,
+                    poi_under_construction_m=poi_under_construction_m,
+                    poi_schema_version=poi_schema_version,
                     lat=c.lat,
                     lon=c.lon,
                 )
@@ -632,9 +701,13 @@ def resolve_known_facts(candidates: list[ComplexCandidate], criteria: Criteria) 
                     satisfies = False
                     break
                 # Пользовательская отсечка дистанции («садик в 300 метрах»,
-                # Milestone AI-20): closest_distance_m из poi_cache. Дистанция
-                # запрошена, но неизвестна — совпадением не считаем (не
-                # додумываем; тот же принцип, что у центра/ориентира ниже).
+                # Milestone AI-20): closest_distance_m из poi_cache — это
+                # дистанция до ДЕЙСТВУЮЩЕГО объекта (схема кэша v2). Раньше она
+                # считалась по всем элементам OSM, и «садик в 200 метрах»
+                # проходил по стройплощадке (живой прогон ЖК «Нарвин»: сад в
+                # 186 м = relation/13512774, огороженный котлован без названия).
+                # Дистанция запрошена, но неизвестна — совпадением не считаем
+                # (не додумываем; тот же принцип, что у центра/ориентира ниже).
                 if req.max_distance_m is not None:
                     dist = c.poi_distances.get(req.category.value)
                     if dist is None or dist > req.max_distance_m:
@@ -707,8 +780,11 @@ def fully_resolved(
                 return False
 
     if criteria.poi_requirements:
-        # «Только новые» (only_new) кэш POI пока не различает: count схлопывает
-        # обычные и construction:/planned:-теги OSM в одно число. Факт
+        # «Только новые» (only_new) кэш POI по-прежнему не различает. Схема v2
+        # отделила ДЕЙСТВУЮЩИЕ объекты от строящихся (construction:/planned:/
+        # proposed:), но «новый» сад — это уже открытый и недавно построенный, а
+        # такого признака в OSM-тегах нет вовсе (дата постройки не заполняется).
+        # То есть отделение стройки эту неопределённость не снимает. Факт
         # новизны детерминированно не подтверждаем — решение уходит в ИИ
         # (известное ограничение схемы кэша, Milestone AI-20).
         if any(req.only_new for req in criteria.poi_requirements):

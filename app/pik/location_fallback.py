@@ -72,6 +72,57 @@ class LocationFallback:
     notes: list[str] = field(default_factory=list)
 
 
+#: Единый текст предупреждения о пустом пересечении локационных требований.
+#: Раньше жил только в ``url_builder.build_url`` (текстом внутри функции), и
+#: ``validator.validate`` его вообще не воспроизводил (Дефект №2) — теперь оба
+#: места используют одну константу, чтобы не разойтись формулировкой снова.
+LOCATION_INTERSECTION_EMPTY_WARNING = (
+    "гео-условия запроса не пересекаются: ЖК, подходящие сразу под все "
+    "локационные требования, не найдены — показаны подходящие под часть"
+)
+
+
+def combine_with_fallback(
+    existing_block_ids: list[str],
+    fallback: LocationFallback,
+    criteria: Criteria,
+    warnings: list[str] | None = None,
+) -> list[str]:
+    """Скомбинировать уже выбранные ЖК с geo-фолбэком (МКАД/метро-дистанция/тег).
+
+    ПЕРЕСЕЧЕНИЕ, а не объединение — общая логика для
+    ``app.pik.url_builder.build_url`` и ``app.pik.validator.validate`` (Дефект
+    №2: раньше validate() ОБЪЕДИНЯЛ фолбэк с уже выбранными ЖК, из-за чего
+    result_count расходился с build_url в разы). Оба списка сужают одну и ту же
+    ось «какие ЖК», поэтому OR стирал бы более узкое требование — тот же класс
+    дефекта, что потеря суперлатива при POI (AI-23).
+
+    Вызывать имеет смысл, только когда ``fallback.block_ids`` непусто (иначе
+    сочетать нечего) — эту гарантию соблюдают оба вызывающих места.
+
+    ``criteria.complexes_matched_empty`` (Дефект №1) отличает «ЖК не выбирались
+    вовсе» (тогда фолбэк применяется целиком, как раньше) от «сужение по
+    ориентиру/POI/центру РЕАЛЬНО посчиталось и дало ноль» — во втором случае
+    это ТОЖЕ полноценное требование «какие ЖК», просто с пустым результатом:
+    пересечение непустого фолбэка с пустым множеством обязано остаться пустым,
+    а не тихо откатиться на весь фолбэк-список (как будто требования не было).
+    """
+    has_existing_constraint = bool(existing_block_ids) or criteria.complexes_matched_empty
+    if not has_existing_constraint:
+        return list(dict.fromkeys(fallback.block_ids))
+
+    narrowed = [b for b in existing_block_ids if b in set(fallback.block_ids)]
+    if not narrowed:
+        # Требования несовместимы (или обе стороны легитимно пусты).
+        # Расширяться до объединения нельзя (это и был баг), поэтому
+        # оставляем более специфичный список — тот, что пришёл из семантики
+        # запроса (ориентир/POI/названный ЖК), — и честно предупреждаем.
+        if warnings is not None:
+            warnings.append(LOCATION_INTERSECTION_EMPTY_WARNING)
+        narrowed = existing_block_ids
+    return list(dict.fromkeys(narrowed))
+
+
 def _metro_needs_fallback(entity: MatchedEntity) -> bool:
     return not entity.slug and not is_verified_metro_id(entity.id)
 

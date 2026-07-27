@@ -1,7 +1,7 @@
 import pytest
 
 from app.parsing.parser import parse
-from app.parsing.schema import Rooms, Sort
+from app.parsing.schema import Finish, Rooms, Sort
 
 
 def test_parse_reference_example():
@@ -140,3 +140,63 @@ def test_looks_like_option_rejects_line_carrier_words(text: str):
     from app.parsing.parser import _looks_like_option
 
     assert _looks_like_option(text) is False
+
+
+def test_floor_with_etazhnost_prefix_leaves_no_residual():
+    """«этажностью» входит в спан правила этажа, а не оседает ложным warning'ом.
+
+    Факт распознан (floor_min/floor_max выставлены) — сообщать пользователю «не
+    удалось распознать» про слово, которое как раз и было распознано, значит
+    врать (инвариант 1: отбрасывается значение, а не текст).
+    """
+    result = parse("этажностью от 9 до 16 этажа")
+
+    assert result.criteria.floor_min == 9
+    assert result.criteria.floor_max == 16
+    assert result.warnings == []
+
+
+def test_modal_and_demonstrative_filler_is_not_a_warning():
+    """Модальность «должны быть» и указательное «этих» — служебный шум, не факт.
+
+    Оба класса слов не несут фильтрующего смысла ни в каком контексте, поэтому
+    лечатся STOP_WORDS, а не расширением POI-спана влево (спан их не закроет —
+    они встречаются и перед ценой/отделкой/метро).
+    """
+    result = parse(
+        "рядом должны быть детские сады, чтобы до этих детских садов было идти до 18 минут"
+    )
+
+    assert not [w for w in result.warnings if "должны" in w or "этих" in w], result.warnings
+
+
+LIVE_QUERY = (
+    "хочу трёшка ближайшая к Финашке, с кухней от 20 квадратов, "
+    "этажностью от 9 до 16 этажа, заселение с 2026 года по 2028 год, "
+    "готовая отделка, рядом должны быть детские сады и школы, "
+    "чтобы до этих детских садов и школ было идти до 18 минут"
+)
+
+
+def test_live_query_defects_closed():
+    """Якорь на живой запрос пользователя: все фильтры доехали, остатка нет."""
+    result = parse(LIVE_QUERY)
+    criteria = result.criteria
+
+    assert result.warnings == [], result.warnings
+    assert criteria.rooms == [Rooms.THREE_PLUS]
+    assert criteria.area_kitchen_min == 20
+    assert criteria.floor_min == 9
+    assert criteria.floor_max == 16
+    assert criteria.finish == [Finish.READY]
+    assert criteria.settlement_year_from == 2026
+    assert criteria.settlement_year_to == 2028
+
+    assert len(criteria.landmark_requirements) == 1
+    landmark = criteria.landmark_requirements[0]
+    assert landmark.name == "Финансовый университет"
+    assert landmark.nearest_only is True
+
+    by_category = {p.category: p for p in criteria.poi_requirements}
+    assert set(by_category) == {"school", "kindergarten"}
+    assert [p.max_distance_m for p in by_category.values()] == [1440, 1440]

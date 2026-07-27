@@ -12,6 +12,7 @@ from pydantic import BaseModel
 
 from app.ai.memory import StructuredFact
 from app.config import get_settings
+from app.geo.poi import POI_CACHE_SCHEMA_VERSION, POIResult
 from app.reference.loader import DATA_DIR, normalize
 from app.reference.refresh import load_existing, write_entries
 
@@ -92,6 +93,73 @@ async def find_promotable_facts(pool: asyncpg.Pool) -> list[StructuredFact]:
     return facts
 
 
+def _entry_present(entry: dict) -> bool:
+    """Есть ли POI по записи кэша — ровно как это читает рантайм.
+
+    Повторяет правило ``app.geo.candidates._get_candidates``: v2 отвечает
+    ``count_operational`` (в ``count`` входят и стройки), v1 такого поля не
+    знала — там значим общий ``count``.
+    """
+    if int(entry.get("schema_version", 1)) >= POI_CACHE_SCHEMA_VERSION:
+        return int(entry.get("count_operational", 0)) > 0
+    return int(entry.get("count", 0)) > 0
+
+
+def _promote_poi_fact(categories: dict, category: str, is_present: bool, slug: str) -> bool:
+    """Записать факт «POI есть/нет» в кэш ЖК. ``True`` — факт отражён в кэше.
+
+    Два правила, обе линии инварианта 3 («LLM не считает дистанции и не
+    выдумывает фильтров»):
+
+    1. **Измерение сильнее догадки.** Существующую запись промоушен не правит
+       вовсе. Раньше ``present=False`` записывал ``count_operational=0`` рядом с
+       измеренными ``closest_distance_m=300``/``closest_name='Детский сад
+       №2044'``: запись противоречила сама себе, а «садов нет» получалось
+       догадкой модели против реального замера OSM. Расхождение не проглатывается
+       молча — уходит в лог, и факт остаётся непромоутированным (попадёт в
+       ``ignored_count`` отчёта).
+    2. **Версию схемы существующей записи не трогаем.** ``schema_version=2``
+       ставится ТОЛЬКО новой записи. Пометить v1-запись как v2 значило бы выдать
+       её дистанцию (посчитанную вместе со стройками — живой случай «сад в 186 м»
+       = котлован) за дистанцию до действующего объекта: слепли сразу оба
+       предохранителя — stale-warning ``build_candidate_shortlist`` и
+       ``refresh_poi._needs_refresh``, то есть запись ещё и перестала бы
+       пересобираться. Пусть честно остаётся v1 и подлежит пересборке.
+    """
+    existing = categories.get(category)
+    if existing is None:
+        # Измерения нет вовсе — единственный источник здесь догадка ИИ. Форму
+        # записи берём у самой модели POIResult, чтобы схемы не разъезжались.
+        # Дистанцию не выдумываем: None = неизвестна, и требование «сад в 300
+        # метрах» такой ЖК не примет.
+        categories[category] = POIResult(
+            count=1 if is_present else 0,
+            count_operational=1 if is_present else 0,
+            schema_version=POI_CACHE_SCHEMA_VERSION,
+        ).model_dump()
+        return True
+
+    if not isinstance(existing, dict):
+        # Битую запись не трогаем и не «лечим» догадкой: её починит пересборка
+        # кэша (рантайм сообщает о ней ValueError с той же инструкцией).
+        logger.warning("POI-факт %s/%s не применён: запись кэша повреждена", slug, category)
+        return False
+
+    if _entry_present(existing) == is_present:
+        # Факт уже отражён измерением — считаем применённым (идемпотентность).
+        return True
+
+    logger.info(
+        "POI-факт %s/%s (present=%s) не применён: в кэше есть измерение "
+        "(present=%s) — измерение сильнее догадки ИИ",
+        slug,
+        category,
+        is_present,
+        _entry_present(existing),
+    )
+    return False
+
+
 async def promote(pool: asyncpg.Pool, facts: list[StructuredFact]) -> PromotionReport:
     """Записать факты в JSON-справочники и отметить их как promoted в БД."""
     if not facts:
@@ -137,15 +205,7 @@ async def promote(pool: asyncpg.Pool, facts: list[StructuredFact]) -> PromotionR
                     is_present = fact.fact_value.get("present", False)
                     if slug not in poi_cache:
                         poi_cache[slug] = {}
-
-                    # Create a simulated POIResult dump if not exist
-                    cache_entry = poi_cache[slug].get(poi_category, {})
-                    cache_entry["count"] = 1 if is_present else 0
-                    if "closest_distance_m" not in cache_entry:
-                        cache_entry["closest_distance_m"] = None
-
-                    poi_cache[slug][poi_category] = cache_entry
-                    promoted = True
+                    promoted = _promote_poi_fact(poi_cache[slug], poi_category, is_present, slug)
 
         if promoted:
             promoted_ids.append(fact.id)

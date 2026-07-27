@@ -7,8 +7,9 @@ import pytest
 from app.ai.memory import StructuredFact
 from app.ai.promotion import analyze_option_aliases, promote, promote_aliases
 from app.ai.schema import ComplexCandidate
-from app.geo.candidates import resolve_known_facts
-from app.geo.poi import POICategory
+from app.geo.candidates import _has_stale_poi_entries, resolve_known_facts
+from app.geo.poi import POI_CACHE_SCHEMA_VERSION, POICategory
+from app.geo.refresh_poi import _needs_refresh
 from app.parsing.schema import Criteria, POIRequirement
 
 
@@ -84,6 +85,121 @@ async def test_promote_facts(temp_data_dir):
         # Idempotency
         report2 = await promote(pool, facts)
         assert report2.promoted_count == 2
+
+
+def _poi_fact(fact_id: int, complex_id: str, fact_type: str, present: bool) -> StructuredFact:
+    return StructuredFact(
+        id=fact_id,
+        subject_type="complex",
+        subject_id=complex_id,
+        fact_type=fact_type,
+        fact_value={"present": present},
+        source="ai_inference",
+        confidence=0.9,
+        observed_count=5,
+        first_seen_at=datetime.now(),
+        last_confirmed_at=datetime.now(),
+    )
+
+
+@pytest.mark.asyncio
+async def test_promote_new_poi_entry_is_v2(temp_data_dir):
+    """НОВАЯ запись (измерения не было) — полноценная v2-заглушка без дистанции."""
+    with patch("app.ai.promotion.DATA_DIR", temp_data_dir):
+        await promote(AsyncMock(), [_poi_fact(2, "100", "poi_school", True)])
+
+        entry = json.loads((temp_data_dir / "poi_cache.json").read_text())["center"]["school"]
+        assert entry["count_operational"] == 1
+        assert entry["count_under_construction"] == 0
+        assert entry["schema_version"] == POI_CACHE_SCHEMA_VERSION
+        # Дистанцию промоушен не выдумывает: неизвестна = None.
+        assert entry["closest_distance_m"] is None
+
+
+@pytest.mark.asyncio
+async def test_promote_does_not_stamp_v2_on_existing_v1_entry(temp_data_dir):
+    """v1-запись остаётся v1: иначе слепнут ОБА предохранителя устаревшей схемы.
+
+    В v1 ``closest_distance_m`` считался по всем объектам OSM, включая стройки
+    (живой случай: «сад в 186 м» = котлован). Пометка такой записи как v2
+    превращала недостоверное число в «дистанцию до действующего объекта»:
+    stale-warning больше не выдавался, а ``refresh_poi`` перестал её добирать.
+    """
+    with patch("app.ai.promotion.DATA_DIR", temp_data_dir):
+        (temp_data_dir / "poi_cache.json").write_text(
+            json.dumps({"center": {"school": {"count": 4, "closest_distance_m": 186.0}}}),
+            encoding="utf-8",
+        )
+
+        await promote(AsyncMock(), [_poi_fact(2, "100", "poi_school", True)])
+
+        entry = json.loads((temp_data_dir / "poi_cache.json").read_text())["center"]["school"]
+        assert entry.get("schema_version", 1) == 1
+        assert entry["closest_distance_m"] == 186.0
+        assert _has_stale_poi_entries({"center": {"school": entry}}) is True
+        assert _needs_refresh(entry, force=False) is True
+
+
+@pytest.mark.asyncio
+async def test_promote_does_not_overwrite_measured_count(temp_data_dir):
+    """Догадка ИИ не затирает ИЗМЕРЕНИЕ (инвариант 3) и не рвёт запись изнутри.
+
+    Раньше ``present=False`` записывал ``count_operational=0`` рядом с живыми
+    ``closest_distance_m``/``closest_name``: запись противоречила себе, а
+    «садов нет» получалось догадкой против измерения.
+    """
+    measured = {
+        "count": 7,
+        "closest_distance_m": 300.0,
+        "closest_name": "Детский сад №2044",
+        "closest_unnamed": False,
+        "count_operational": 7,
+        "count_under_construction": 0,
+        "closest_under_construction_m": None,
+        "schema_version": POI_CACHE_SCHEMA_VERSION,
+    }
+    with patch("app.ai.promotion.DATA_DIR", temp_data_dir):
+        (temp_data_dir / "poi_cache.json").write_text(
+            json.dumps({"center": {"kindergarten": measured}}, ensure_ascii=False),
+            encoding="utf-8",
+        )
+
+        report = await promote(AsyncMock(), [_poi_fact(2, "100", "poi_kindergarten", False)])
+
+        entry = json.loads((temp_data_dir / "poi_cache.json").read_text())["center"]["kindergarten"]
+        assert entry == measured
+        # Факт не применён — значит и «промоутированным» его считать нельзя.
+        assert report.promoted_count == 0
+        assert report.ignored_count == 1
+
+
+@pytest.mark.asyncio
+async def test_promote_poi_fact_agreeing_with_measurement_is_idempotent(temp_data_dir):
+    """Согласный с измерением факт считается применённым (повторный прогон стабилен)."""
+    with patch("app.ai.promotion.DATA_DIR", temp_data_dir):
+        (temp_data_dir / "poi_cache.json").write_text(
+            json.dumps(
+                {
+                    "center": {
+                        "school": {
+                            "count": 3,
+                            "count_operational": 3,
+                            "count_under_construction": 0,
+                            "closest_distance_m": 250.0,
+                            "schema_version": POI_CACHE_SCHEMA_VERSION,
+                        }
+                    }
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        report = await promote(AsyncMock(), [_poi_fact(2, "100", "poi_school", True)])
+
+        assert report.promoted_count == 1
+        entry = json.loads((temp_data_dir / "poi_cache.json").read_text())["center"]["school"]
+        assert entry["count_operational"] == 3
+        assert entry["closest_distance_m"] == 250.0
 
 
 @pytest.fixture

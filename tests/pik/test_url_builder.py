@@ -212,3 +212,43 @@ def test_geo_fallback_alone_still_fills_blocks():
 
     assert "blocks=" in url
     assert len(url.split("blocks=")[1].split("&")[0].split(",")) == len(complexes_in_mkad(True))
+
+
+# ---------------------------------------------------------------------------
+# Дефект №1: пустой матч ориентира не должен молча теряться при AND с МКАД
+# ---------------------------------------------------------------------------
+#
+# Repro: «двушку внутри МКАД рядом с Третьяковкой не дальше 1,5 км» — ориентир
+# РЕАЛЬНО участвовал (жёсткая отсечка дистанции) и дал легитимный ноль
+# (ближайший ЖК ПИК — 4.18 км). До фикса criteria.complexes оставался нетронут
+# (== [] неотличимо от «ориентир не считали»), и build_url подставлял ВЕСЬ
+# МКАД-список, будто ориентира не было вовсе.
+
+
+def test_geo_fallback_empty_landmark_match_does_not_expand_to_full_mkad():
+    """complexes_matched_empty=True + within_mkad=True → blocks остаётся пустым,
+    а НЕ откатывается на полный МКАД-список; предупреждение о непересечении есть."""
+    from app.geo.candidates import complexes_in_mkad
+
+    full_mkad = complexes_in_mkad(True)
+    assert full_mkad, "нет ЖК внутри МКАД — тест потерял смысл"
+
+    warnings: list[str] = []
+    url = build_url(Criteria(within_mkad=True, complexes_matched_empty=True), warnings)
+
+    assert "blocks=" in url
+    got = url.split("blocks=")[1].split("&")[0]
+    assert got == "", f"blocks должен остаться пустым, получили: {got!r}"
+    assert f"blocks={full_mkad[0]}" not in url
+    assert any("не пересекаются" in w for w in warnings)
+
+
+def test_geo_fallback_without_landmark_flag_still_uses_full_mkad():
+    """Контраст: ориентир НЕ участвовал вовсе (флаг не выставлен) — МКАД-фолбэк
+    работает по-прежнему (весь список), регрессии нет."""
+    from app.geo.candidates import complexes_in_mkad
+
+    url = build_url(Criteria(within_mkad=True, complexes_matched_empty=False))
+
+    assert "blocks=" in url
+    assert len(url.split("blocks=")[1].split("&")[0].split(",")) == len(complexes_in_mkad(True))

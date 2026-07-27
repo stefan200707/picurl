@@ -137,7 +137,10 @@ def apply_rules(text: str) -> RulesOutcome:
     unsupported, spans = extract_unsupported(norm)
     consumed.extend(spans)
 
-    poi_reqs, center_req, spans = extract_poi_requirements(norm)
+    # Спаны выше (цена/площадь/время/этаж) нужны ведущей дистанции POI: без них
+    # «площадью от 35 до 45 метров рядом школа» отдаёт «до 45 метров» школе
+    # (см. poi._LEADING_DISTANCE). Тот же приём, что у extract_floor.
+    poi_reqs, center_req, spans = extract_poi_requirements(norm, consumed)
     if poi_reqs:
         criteria.poi_requirements.extend(poi_reqs)
     if center_req:

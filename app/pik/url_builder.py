@@ -1,7 +1,7 @@
 from urllib.parse import urlencode
 
 from app.parsing.schema import Criteria, Finish
-from app.pik.location_fallback import resolve_fallback_block_ids
+from app.pik.location_fallback import combine_with_fallback, resolve_fallback_block_ids
 
 
 def build_url(criteria: Criteria, warnings: list[str] | None = None) -> str:
@@ -93,33 +93,20 @@ def build_url(criteria: Criteria, warnings: list[str] | None = None) -> str:
     # 3.5 Geo-фолбэк на blocks для локаций без достоверного id (аудит validate()):
     # метро/округ/район, у которых нет ни slug, ни подтверждённого id, тихо
     # выпадали из ссылки выше — вместо этого сужаем ЖК по привязке/расстоянию.
+    # ПЕРЕСЕЧЕНИЕ, а не объединение (AI-23 + Дефект №1 фикс) — общая логика с
+    # app.pik.validator.validate вынесена в
+    # app.pik.location_fallback.combine_with_fallback (Дефект №2: раньше
+    # validator ОБЪЕДИНЯЛ фолбэк вместо пересечения, и они расходились). Оба
+    # списка сужают одну и ту же ось «какие ЖК» — OR стирал бы более узкое
+    # требование, а criteria.complexes_matched_empty гарантирует, что легитимный
+    # ноль от ориентира/POI/центра тоже участвует в пересечении, а не
+    # игнорируется как «требования не было».
     fallback = resolve_fallback_block_ids(criteria)
     if fallback.block_ids:
         existing_blocks = [b for b in query_params.get("blocks", "").split(",") if b]
-        if existing_blocks:
-            # ПЕРЕСЕЧЕНИЕ, а не объединение. Оба списка сужают одну и ту же ось
-            # («какие ЖК»), поэтому OR не складывал требования, а СТИРАЛ более
-            # узкое: «двушку внутри МКАД около Патриарших прудов» давало 8 ЖК от
-            # ориентира ∪ 27 ЖК внутри МКАД = все 27, то есть требование
-            # «около Патриарших» исчезало молча. Тот же класс, что потеря
-            # суперлатива при POI (AI-23), и то же правило AND, которое
-            # resolve_fallback_block_ids уже применяет внутри себя для МКАД и
-            # прочих локаций.
-            narrowed = [b for b in existing_blocks if b in set(fallback.block_ids)]
-            if not narrowed:
-                # Требования несовместимы. Расширяться до объединения нельзя (это
-                # и был баг), поэтому оставляем более специфичный список — тот,
-                # что пришёл из семантики запроса (ориентир/POI/названный ЖК), —
-                # и честно об этом предупреждаем.
-                if warnings is not None:
-                    warnings.append(
-                        "гео-условия запроса не пересекаются: ЖК, подходящие сразу под все "
-                        "локационные требования, не найдены — показаны подходящие под часть"
-                    )
-                narrowed = existing_blocks
-            query_params["blocks"] = ",".join(dict.fromkeys(narrowed))
-        else:
-            query_params["blocks"] = ",".join(dict.fromkeys(fallback.block_ids))
+        query_params["blocks"] = ",".join(
+            combine_with_fallback(existing_blocks, fallback, criteria, warnings)
+        )
 
     # Общие query-параметры добавляем в конец
     query_params.update(criteria.to_query_dict())

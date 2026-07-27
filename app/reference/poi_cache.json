@@ -2,1795 +2,4279 @@
   "irtyshskiy": {
     "school": {
       "count": 27,
-      "closest_distance_m": 587.7202514046736
+      "closest_distance_m": 587.7202514046736,
+      "closest_name": "Beksly",
+      "closest_unnamed": false,
+      "count_operational": 27,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "kindergarten": {
       "count": 36,
-      "closest_distance_m": 495.32193184933914
+      "closest_distance_m": 495.32193184933914,
+      "closest_name": null,
+      "closest_unnamed": true,
+      "count_operational": 36,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "shop": {
       "count": 81,
-      "closest_distance_m": 391.76706922104376
+      "closest_distance_m": 391.76706922104376,
+      "closest_name": "Eka Маркет",
+      "closest_unnamed": false,
+      "count_operational": 81,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "parking": {
       "count": 248,
-      "closest_distance_m": 176.42388969639833
+      "closest_distance_m": 176.42388969639833,
+      "closest_name": null,
+      "closest_unnamed": true,
+      "count_operational": 248,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "park_forest": {
       "count": 122,
-      "closest_distance_m": 582.8744981356018
+      "closest_distance_m": 582.8744981356018,
+      "closest_name": null,
+      "closest_unnamed": true,
+      "count_operational": 122,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "medical": {
       "count": 63,
-      "closest_distance_m": 576.372033923792
+      "closest_distance_m": 576.372033923792,
+      "closest_name": "Здравсити",
+      "closest_unnamed": false,
+      "count_operational": 63,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     }
   },
   "alt53": {
     "school": {
       "count": 45,
-      "closest_distance_m": 298.3304518204877
+      "closest_distance_m": 298.3304518204877,
+      "closest_name": "Школа № 305",
+      "closest_unnamed": false,
+      "count_operational": 45,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "kindergarten": {
       "count": 54,
-      "closest_distance_m": 260.0008156235469
+      "closest_distance_m": 260.0008156235469,
+      "closest_name": "Детский сад №2287",
+      "closest_unnamed": false,
+      "count_operational": 54,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "shop": {
       "count": 145,
-      "closest_distance_m": 63.65481215413264
+      "closest_distance_m": 63.65481215413264,
+      "closest_name": "Пятёрочка",
+      "closest_unnamed": false,
+      "count_operational": 145,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "parking": {
       "count": 334,
-      "closest_distance_m": 282.8779389241436
+      "closest_distance_m": 282.8779389241436,
+      "closest_name": null,
+      "closest_unnamed": true,
+      "count_operational": 334,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "park_forest": {
       "count": 104,
-      "closest_distance_m": 172.69859852035273
+      "closest_distance_m": 172.69859852035273,
+      "closest_name": null,
+      "closest_unnamed": true,
+      "count_operational": 104,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "medical": {
       "count": 124,
-      "closest_distance_m": 410.0723368726118
+      "closest_distance_m": 410.0723368726118,
+      "closest_name": "Нео-фарм",
+      "closest_unnamed": false,
+      "count_operational": 124,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     }
   },
   "amur": {
     "school": {
       "count": 25,
-      "closest_distance_m": 342.1745389585479
+      "closest_distance_m": 342.1745389585479,
+      "closest_name": "Школа №319 (здание №1)",
+      "closest_unnamed": false,
+      "count_operational": 25,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "kindergarten": {
       "count": 36,
-      "closest_distance_m": 623.2910025979764
+      "closest_distance_m": 623.2910025979764,
+      "closest_name": "Школа №319 (здание №6)",
+      "closest_unnamed": false,
+      "count_operational": 36,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "shop": {
       "count": 115,
-      "closest_distance_m": 242.25006594151228
+      "closest_distance_m": 242.25006594151228,
+      "closest_name": "Магнит",
+      "closest_unnamed": false,
+      "count_operational": 115,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "parking": {
-      "count": 325,
-      "closest_distance_m": 72.5986572769017
+      "count": 327,
+      "closest_distance_m": 72.5986572769017,
+      "closest_name": null,
+      "closest_unnamed": true,
+      "count_operational": 327,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "park_forest": {
       "count": 278,
-      "closest_distance_m": 459.9403993731021
+      "closest_distance_m": 459.9403993731021,
+      "closest_name": null,
+      "closest_unnamed": true,
+      "count_operational": 278,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "medical": {
       "count": 82,
-      "closest_distance_m": 26.859397057979244
+      "closest_distance_m": 26.859397057979244,
+      "closest_name": "Инвитро",
+      "closest_unnamed": false,
+      "count_operational": 82,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     }
   },
   "barclay6": {
     "school": {
       "count": 22,
-      "closest_distance_m": 327.90284357243604
+      "closest_distance_m": 327.90284357243604,
+      "closest_name": "Школа \"Интеграл\". Корпус 2",
+      "closest_unnamed": false,
+      "count_operational": 22,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "kindergarten": {
       "count": 30,
-      "closest_distance_m": 302.2607993724617
+      "closest_distance_m": 302.2607993724617,
+      "closest_name": "Протон",
+      "closest_unnamed": false,
+      "count_operational": 30,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "shop": {
       "count": 100,
-      "closest_distance_m": 152.7176140731884
+      "closest_distance_m": 152.7176140731884,
+      "closest_name": "Мираторг",
+      "closest_unnamed": false,
+      "count_operational": 100,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "parking": {
       "count": 200,
-      "closest_distance_m": 110.99616781599578
+      "closest_distance_m": 110.99616781599578,
+      "closest_name": null,
+      "closest_unnamed": true,
+      "count_operational": 200,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "park_forest": {
       "count": 180,
-      "closest_distance_m": 220.09032325400656
+      "closest_distance_m": 220.09032325400656,
+      "closest_name": null,
+      "closest_unnamed": true,
+      "count_operational": 180,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "medical": {
       "count": 109,
-      "closest_distance_m": 86.07351099681573
+      "closest_distance_m": 86.07351099681573,
+      "closest_name": "36,6",
+      "closest_unnamed": false,
+      "count_operational": 109,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     }
   },
   "bd": {
     "school": {
       "count": 12,
-      "closest_distance_m": 309.6460273703555
+      "closest_distance_m": 309.6460273703555,
+      "closest_name": "Частная школа \"Возможность\"",
+      "closest_unnamed": false,
+      "count_operational": 12,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "kindergarten": {
       "count": 22,
-      "closest_distance_m": 170.73307733321118
+      "closest_distance_m": 170.73307733321118,
+      "closest_name": null,
+      "closest_unnamed": true,
+      "count_operational": 22,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "shop": {
       "count": 79,
-      "closest_distance_m": 154.26690919901912
+      "closest_distance_m": 154.26690919901912,
+      "closest_name": "Дикси",
+      "closest_unnamed": false,
+      "count_operational": 79,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "parking": {
       "count": 222,
-      "closest_distance_m": 28.462123589443813
+      "closest_distance_m": 28.462123589443813,
+      "closest_name": null,
+      "closest_unnamed": true,
+      "count_operational": 221,
+      "count_under_construction": 1,
+      "closest_under_construction_m": 653.7144403623978,
+      "schema_version": 2
     },
     "park_forest": {
       "count": 34,
-      "closest_distance_m": 484.5495257157494
+      "closest_distance_m": 484.5495257157494,
+      "closest_name": null,
+      "closest_unnamed": true,
+      "count_operational": 34,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "medical": {
       "count": 65,
-      "closest_distance_m": 42.78225465882169
+      "closest_distance_m": 42.78225465882169,
+      "closest_name": "Горздрав",
+      "closest_unnamed": false,
+      "count_operational": 65,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     }
   },
   "ba85": {
     "school": {
       "count": 20,
-      "closest_distance_m": 373.2654030521346
+      "closest_distance_m": 373.2654030521346,
+      "closest_name": "Школа № 1213",
+      "closest_unnamed": false,
+      "count_operational": 20,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "kindergarten": {
       "count": 17,
-      "closest_distance_m": 893.4955939692439
+      "closest_distance_m": 893.4955939692439,
+      "closest_name": "Школа № 1576. Корпус № 16",
+      "closest_unnamed": false,
+      "count_operational": 17,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "shop": {
       "count": 93,
-      "closest_distance_m": 125.86891014349318
+      "closest_distance_m": 125.86891014349318,
+      "closest_name": "Магнит",
+      "closest_unnamed": false,
+      "count_operational": 93,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "parking": {
       "count": 286,
-      "closest_distance_m": 35.34839410724313
+      "closest_distance_m": 35.34839410724313,
+      "closest_name": null,
+      "closest_unnamed": true,
+      "count_operational": 286,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "park_forest": {
       "count": 248,
-      "closest_distance_m": 206.9208230834998
+      "closest_distance_m": 206.9208230834998,
+      "closest_name": null,
+      "closest_unnamed": true,
+      "count_operational": 248,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "medical": {
       "count": 79,
-      "closest_distance_m": 122.30549970231401
+      "closest_distance_m": 122.30549970231401,
+      "closest_name": "Горздрав",
+      "closest_unnamed": false,
+      "count_operational": 79,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     }
   },
   "vladivostok/borisenko": {
     "school": {
       "count": 14,
-      "closest_distance_m": 140.82229629849434
+      "closest_distance_m": 140.82229629849434,
+      "closest_name": "Средняя школа №25",
+      "closest_unnamed": false,
+      "count_operational": 14,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "kindergarten": {
       "count": 22,
-      "closest_distance_m": 350.0715132113417
+      "closest_distance_m": 350.0715132113417,
+      "closest_name": "Детский сад №19",
+      "closest_unnamed": false,
+      "count_operational": 22,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "shop": {
       "count": 176,
-      "closest_distance_m": 147.42437064231638
+      "closest_distance_m": 147.42437064231638,
+      "closest_name": null,
+      "closest_unnamed": true,
+      "count_operational": 176,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "parking": {
       "count": 1335,
-      "closest_distance_m": 70.07252637698937
+      "closest_distance_m": 70.07252637698937,
+      "closest_name": null,
+      "closest_unnamed": true,
+      "count_operational": 1335,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "park_forest": {
       "count": 817,
-      "closest_distance_m": 77.54471428165597
+      "closest_distance_m": 77.54471428165597,
+      "closest_name": null,
+      "closest_unnamed": true,
+      "count_operational": 817,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "medical": {
       "count": 73,
-      "closest_distance_m": 194.6827186827035
+      "closest_distance_m": 194.6827186827035,
+      "closest_name": null,
+      "closest_unnamed": true,
+      "count_operational": 73,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     }
   },
   "vladivostok/bosforskiypark": {
     "school": {
       "count": 7,
-      "closest_distance_m": 953.720836930019
+      "closest_distance_m": 953.720836930019,
+      "closest_name": "Владивостокская специальная (коррекционная) общеобразовательная школа-интернат №2",
+      "closest_unnamed": false,
+      "count_operational": 7,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "kindergarten": {
       "count": 12,
-      "closest_distance_m": 149.8622626833595
+      "closest_distance_m": 149.8622626833595,
+      "closest_name": null,
+      "closest_unnamed": true,
+      "count_operational": 12,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "shop": {
       "count": 95,
-      "closest_distance_m": 32.905631352031726
+      "closest_distance_m": 32.905631352031726,
+      "closest_name": "Квартет вкусов",
+      "closest_unnamed": false,
+      "count_operational": 95,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "parking": {
       "count": 832,
-      "closest_distance_m": 80.21559286868369
+      "closest_distance_m": 80.21559286868369,
+      "closest_name": null,
+      "closest_unnamed": true,
+      "count_operational": 832,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "park_forest": {
       "count": 506,
-      "closest_distance_m": 136.6825651038409
+      "closest_distance_m": 136.6825651038409,
+      "closest_name": null,
+      "closest_unnamed": true,
+      "count_operational": 506,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "medical": {
       "count": 35,
-      "closest_distance_m": 489.41845536939434
+      "closest_distance_m": 489.41845536939434,
+      "closest_name": "Аптека25.рф",
+      "closest_unnamed": false,
+      "count_operational": 35,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     }
   },
   "kazan/botanicheskaya": {
     "school": {
       "count": 18,
-      "closest_distance_m": 206.45967242537796
+      "closest_distance_m": 206.45967242537796,
+      "closest_name": "Школа №88",
+      "closest_unnamed": false,
+      "count_operational": 18,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "kindergarten": {
       "count": 28,
-      "closest_distance_m": 121.8031263284239
+      "closest_distance_m": 121.8031263284239,
+      "closest_name": "Детский сад № 156",
+      "closest_unnamed": false,
+      "count_operational": 28,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "shop": {
       "count": 95,
-      "closest_distance_m": 157.64348407244947
+      "closest_distance_m": 157.64348407244947,
+      "closest_name": "Пятёрочка",
+      "closest_unnamed": false,
+      "count_operational": 95,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "parking": {
       "count": 187,
-      "closest_distance_m": 51.63735652970442
+      "closest_distance_m": 51.63735652970442,
+      "closest_name": null,
+      "closest_unnamed": true,
+      "count_operational": 187,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "park_forest": {
       "count": 54,
-      "closest_distance_m": 116.26086599540008
+      "closest_distance_m": 116.26086599540008,
+      "closest_name": null,
+      "closest_unnamed": true,
+      "count_operational": 54,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "medical": {
       "count": 86,
-      "closest_distance_m": 171.7668676100269
+      "closest_distance_m": 171.7668676100269,
+      "closest_name": "Государственная сеть",
+      "closest_unnamed": false,
+      "count_operational": 86,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     }
   },
   "bnab": {
     "school": {
       "count": 11,
-      "closest_distance_m": 238.1329540321015
+      "closest_distance_m": 238.1329540321015,
+      "closest_name": "Школа № 338, Теорема",
+      "closest_unnamed": false,
+      "count_operational": 11,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "kindergarten": {
       "count": 25,
-      "closest_distance_m": 204.59379885189293
+      "closest_distance_m": 204.59379885189293,
+      "closest_name": "Школа № 338, детский сад Цветные Ладошки",
+      "closest_unnamed": false,
+      "count_operational": 25,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "shop": {
       "count": 61,
-      "closest_distance_m": 309.2863327568142
+      "closest_distance_m": 309.2863327568142,
+      "closest_name": "Йола-маркет",
+      "closest_unnamed": false,
+      "count_operational": 61,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "parking": {
       "count": 487,
-      "closest_distance_m": 126.06154244750617
+      "closest_distance_m": 126.06154244750617,
+      "closest_name": null,
+      "closest_unnamed": true,
+      "count_operational": 464,
+      "count_under_construction": 23,
+      "closest_under_construction_m": 655.4387329828638,
+      "schema_version": 2
     },
     "park_forest": {
-      "count": 73,
-      "closest_distance_m": 315.3401823854104
+      "count": 72,
+      "closest_distance_m": 315.3401823854104,
+      "closest_name": null,
+      "closest_unnamed": true,
+      "count_operational": 72,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "medical": {
       "count": 49,
-      "closest_distance_m": 373.6229126164458
+      "closest_distance_m": 373.6229126164458,
+      "closest_name": "Горздрав",
+      "closest_unnamed": false,
+      "count_operational": 48,
+      "count_under_construction": 1,
+      "closest_under_construction_m": 1797.4445992637754,
+      "schema_version": 2
     }
   },
   "bpark": {
     "school": {
       "count": 19,
-      "closest_distance_m": 626.8288069843778
+      "closest_distance_m": 626.8288069843778,
+      "closest_name": "Школа №2098 корпус 5",
+      "closest_unnamed": false,
+      "count_operational": 18,
+      "count_under_construction": 1,
+      "closest_under_construction_m": 1463.626675338962,
+      "schema_version": 2
     },
     "kindergarten": {
       "count": 33,
-      "closest_distance_m": 562.4694961265798
+      "closest_distance_m": 562.4694961265798,
+      "closest_name": "Детский сад № 2",
+      "closest_unnamed": false,
+      "count_operational": 33,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "shop": {
       "count": 100,
-      "closest_distance_m": 37.86709174873464
+      "closest_distance_m": 37.86709174873464,
+      "closest_name": "Магнит",
+      "closest_unnamed": false,
+      "count_operational": 100,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "parking": {
       "count": 259,
-      "closest_distance_m": 18.01484078817443
+      "closest_distance_m": 18.01484078817443,
+      "closest_name": null,
+      "closest_unnamed": true,
+      "count_operational": 256,
+      "count_under_construction": 3,
+      "closest_under_construction_m": 230.7124081803434,
+      "schema_version": 2
     },
     "park_forest": {
       "count": 135,
-      "closest_distance_m": 270.6911537325355
+      "closest_distance_m": 270.6911537325355,
+      "closest_name": null,
+      "closest_unnamed": true,
+      "count_operational": 135,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "medical": {
       "count": 78,
-      "closest_distance_m": 91.4175114131678
+      "closest_distance_m": 91.4175114131678,
+      "closest_name": "Здравсити",
+      "closest_unnamed": false,
+      "count_operational": 78,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     }
   },
   "spb/vitpark": {
     "school": {
       "count": 22,
-      "closest_distance_m": 728.9284864870654
+      "closest_distance_m": 728.9284864870654,
+      "closest_name": "Школа № 359",
+      "closest_unnamed": false,
+      "count_operational": 22,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "kindergarten": {
       "count": 21,
-      "closest_distance_m": 210.0431302464093
+      "closest_distance_m": 210.0431302464093,
+      "closest_name": "Детский сад № 17",
+      "closest_unnamed": false,
+      "count_operational": 21,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "parking": {
       "count": 215,
-      "closest_distance_m": 234.06957945744836
+      "closest_distance_m": 234.06957945744836,
+      "closest_name": null,
+      "closest_unnamed": true,
+      "count_operational": 215,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "park_forest": {
       "count": 123,
-      "closest_distance_m": 304.91781309242
+      "closest_distance_m": 304.91781309242,
+      "closest_name": null,
+      "closest_unnamed": true,
+      "count_operational": 123,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "shop": {
       "count": 106,
-      "closest_distance_m": 180.207934989177
+      "closest_distance_m": 180.207934989177,
+      "closest_name": "Магнит",
+      "closest_unnamed": false,
+      "count_operational": 106,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "medical": {
       "count": 121,
-      "closest_distance_m": 156.63838941784613
+      "closest_distance_m": 156.63838941784613,
+      "closest_name": "Алоэ",
+      "closest_unnamed": false,
+      "count_operational": 121,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     }
   },
   "yaroslavl/volgapark": {
     "school": {
       "count": 6,
-      "closest_distance_m": 614.4558170840256
+      "closest_distance_m": 614.4558170840256,
+      "closest_name": "Школа №91",
+      "closest_unnamed": false,
+      "count_operational": 6,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "kindergarten": {
       "count": 17,
-      "closest_distance_m": 421.50125304086555
+      "closest_distance_m": 421.50125304086555,
+      "closest_name": "Детский сад № 25",
+      "closest_unnamed": false,
+      "count_operational": 17,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "shop": {
       "count": 27,
-      "closest_distance_m": 121.09210723444288
+      "closest_distance_m": 121.09210723444288,
+      "closest_name": "Макси",
+      "closest_unnamed": false,
+      "count_operational": 27,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "parking": {
       "count": 55,
-      "closest_distance_m": 75.33769960453625
+      "closest_distance_m": 75.33769960453625,
+      "closest_name": null,
+      "closest_unnamed": true,
+      "count_operational": 55,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "park_forest": {
       "count": 137,
-      "closest_distance_m": 184.13189586374722
+      "closest_distance_m": 184.13189586374722,
+      "closest_name": null,
+      "closest_unnamed": true,
+      "count_operational": 137,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "medical": {
       "count": 19,
-      "closest_distance_m": 243.6040920665327
+      "closest_distance_m": 243.6040920665327,
+      "closest_name": "Инвитро",
+      "closest_unnamed": false,
+      "count_operational": 19,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     }
   },
   "volp": {
     "school": {
       "count": 22,
-      "closest_distance_m": 619.9544641211781
+      "closest_distance_m": 619.9544641211781,
+      "closest_name": "Школа № 841",
+      "closest_unnamed": false,
+      "count_operational": 22,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "kindergarten": {
       "count": 24,
-      "closest_distance_m": 202.05525284775123
+      "closest_distance_m": 202.05525284775123,
+      "closest_name": null,
+      "closest_unnamed": true,
+      "count_operational": 24,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "shop": {
       "count": 101,
-      "closest_distance_m": 58.81502461860451
+      "closest_distance_m": 58.81502461860451,
+      "closest_name": "ВкусВилл",
+      "closest_unnamed": false,
+      "count_operational": 101,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "parking": {
       "count": 187,
-      "closest_distance_m": 19.86722293859323
+      "closest_distance_m": 19.86722293859323,
+      "closest_name": null,
+      "closest_unnamed": true,
+      "count_operational": 187,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "park_forest": {
       "count": 72,
-      "closest_distance_m": 87.31412584003203
+      "closest_distance_m": 87.31412584003203,
+      "closest_name": null,
+      "closest_unnamed": true,
+      "count_operational": 72,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "medical": {
       "count": 88,
-      "closest_distance_m": 120.04355560491392
+      "closest_distance_m": 120.04355560491392,
+      "closest_name": "Медлайн-Сервис",
+      "closest_unnamed": false,
+      "count_operational": 88,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     }
   },
   "spb/volta": {
     "school": {
       "count": 24,
-      "closest_distance_m": 276.2409129963446
+      "closest_distance_m": 276.2409129963446,
+      "closest_name": "SkillSet",
+      "closest_unnamed": false,
+      "count_operational": 24,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "kindergarten": {
       "count": 36,
-      "closest_distance_m": 445.1059673310561
+      "closest_distance_m": 445.1059673310561,
+      "closest_name": "Детский сад № 3",
+      "closest_unnamed": false,
+      "count_operational": 36,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "shop": {
       "count": 90,
-      "closest_distance_m": 86.0230275829897
+      "closest_distance_m": 86.0230275829897,
+      "closest_name": "Пятёрочка",
+      "closest_unnamed": false,
+      "count_operational": 90,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "parking": {
       "count": 241,
-      "closest_distance_m": 37.418515438258545
+      "closest_distance_m": 37.418515438258545,
+      "closest_name": null,
+      "closest_unnamed": true,
+      "count_operational": 241,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "park_forest": {
       "count": 107,
-      "closest_distance_m": 548.276320185515
+      "closest_distance_m": 548.276320185515,
+      "closest_name": null,
+      "closest_unnamed": true,
+      "count_operational": 107,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "medical": {
       "count": 77,
-      "closest_distance_m": 108.21201090757145
+      "closest_distance_m": 108.21201090757145,
+      "closest_name": "Здравсити",
+      "closest_unnamed": false,
+      "count_operational": 77,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     }
   },
   "mkr-vostochnoe-butovo": {
     "school": {
       "count": 10,
-      "closest_distance_m": 136.4874864967109
+      "closest_distance_m": 136.4874864967109,
+      "closest_name": "Бутовская средняя общеобразовательная школа №1",
+      "closest_unnamed": false,
+      "count_operational": 10,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "kindergarten": {
       "count": 9,
-      "closest_distance_m": 267.6824266208892
+      "closest_distance_m": 267.6824266208892,
+      "closest_name": "Бобренок",
+      "closest_unnamed": false,
+      "count_operational": 9,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "shop": {
       "count": 31,
-      "closest_distance_m": 230.65165668706598
+      "closest_distance_m": 230.65165668706598,
+      "closest_name": "Дикси",
+      "closest_unnamed": false,
+      "count_operational": 31,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "parking": {
       "count": 245,
-      "closest_distance_m": 127.48924149768912
+      "closest_distance_m": 127.48924149768912,
+      "closest_name": null,
+      "closest_unnamed": true,
+      "count_operational": 245,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "park_forest": {
       "count": 35,
-      "closest_distance_m": 324.29448622308206
+      "closest_distance_m": 324.29448622308206,
+      "closest_name": null,
+      "closest_unnamed": true,
+      "count_operational": 35,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "medical": {
       "count": 22,
-      "closest_distance_m": 141.81726950244203
+      "closest_distance_m": 141.81726950244203,
+      "closest_name": "Ситилаб",
+      "closest_unnamed": false,
+      "count_operational": 22,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     }
   },
   "2ngt": {
     "school": {
       "count": 19,
-      "closest_distance_m": 479.7548405111229
+      "closest_distance_m": 479.7548405111229,
+      "closest_name": "Школа № 507, здание № 6 «Гимназический корпус»",
+      "closest_unnamed": false,
+      "count_operational": 19,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "kindergarten": {
       "count": 35,
-      "closest_distance_m": 114.0899186449875
+      "closest_distance_m": 114.0899186449875,
+      "closest_name": "Ника",
+      "closest_unnamed": false,
+      "count_operational": 35,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "shop": {
       "count": 69,
-      "closest_distance_m": 194.9682853550474
+      "closest_distance_m": 194.9682853550474,
+      "closest_name": "Перекрёсток",
+      "closest_unnamed": false,
+      "count_operational": 69,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "parking": {
       "count": 193,
-      "closest_distance_m": 61.557780463512486
+      "closest_distance_m": 61.557780463512486,
+      "closest_name": null,
+      "closest_unnamed": true,
+      "count_operational": 193,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "park_forest": {
       "count": 198,
-      "closest_distance_m": 442.71749036854055
+      "closest_distance_m": 442.71749036854055,
+      "closest_name": null,
+      "closest_unnamed": true,
+      "count_operational": 197,
+      "count_under_construction": 1,
+      "closest_under_construction_m": 1135.67893584508,
+      "schema_version": 2
     },
     "medical": {
       "count": 81,
-      "closest_distance_m": 40.91845721244983
+      "closest_distance_m": 40.91845721244983,
+      "closest_name": "Горздрав",
+      "closest_unnamed": false,
+      "count_operational": 81,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     }
   },
   "spb/zpark": {
     "school": {
       "count": 12,
-      "closest_distance_m": 671.3138369231458
+      "closest_distance_m": 671.3138369231458,
+      "closest_name": "Школа № 5",
+      "closest_unnamed": false,
+      "count_operational": 8,
+      "count_under_construction": 4,
+      "closest_under_construction_m": 1383.075936539516,
+      "schema_version": 2
     },
     "kindergarten": {
       "count": 32,
-      "closest_distance_m": 155.66063197321225
+      "closest_distance_m": 155.66063197321225,
+      "closest_name": null,
+      "closest_unnamed": true,
+      "count_operational": 32,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "shop": {
       "count": 109,
-      "closest_distance_m": 36.34980442453954
+      "closest_distance_m": 36.34980442453954,
+      "closest_name": "Дикси",
+      "closest_unnamed": false,
+      "count_operational": 109,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "parking": {
       "count": 363,
-      "closest_distance_m": 26.616743253680152
+      "closest_distance_m": 26.616743253680152,
+      "closest_name": null,
+      "closest_unnamed": true,
+      "count_operational": 361,
+      "count_under_construction": 2,
+      "closest_under_construction_m": 1016.4342261860565,
+      "schema_version": 2
     },
     "park_forest": {
       "count": 102,
-      "closest_distance_m": 128.13576966493392
+      "closest_distance_m": 128.13576966493392,
+      "closest_name": null,
+      "closest_unnamed": true,
+      "count_operational": 102,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "medical": {
       "count": 77,
-      "closest_distance_m": 500.48404318055225
+      "closest_distance_m": 500.48404318055225,
+      "closest_name": "Первая помощь",
+      "closest_unnamed": false,
+      "count_operational": 77,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     }
   },
   "zelpark": {
     "school": {
       "count": 29,
-      "closest_distance_m": 296.0217163745435
+      "closest_distance_m": 296.0217163745435,
+      "closest_name": null,
+      "closest_unnamed": true,
+      "count_operational": 28,
+      "count_under_construction": 1,
+      "closest_under_construction_m": 881.1032769392793,
+      "schema_version": 2
     },
     "kindergarten": {
       "count": 26,
-      "closest_distance_m": 316.1629380624033
+      "closest_distance_m": 316.1629380624033,
+      "closest_name": null,
+      "closest_unnamed": true,
+      "count_operational": 26,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "shop": {
       "count": 49,
-      "closest_distance_m": 699.4401540964366
+      "closest_distance_m": 699.4401540964366,
+      "closest_name": "Пятёрочка",
+      "closest_unnamed": false,
+      "count_operational": 49,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "parking": {
       "count": 332,
-      "closest_distance_m": 326.5455987139141
+      "closest_distance_m": 326.5455987139141,
+      "closest_name": null,
+      "closest_unnamed": true,
+      "count_operational": 332,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "park_forest": {
       "count": 155,
-      "closest_distance_m": 410.97985604987775
+      "closest_distance_m": 410.97985604987775,
+      "closest_name": null,
+      "closest_unnamed": true,
+      "count_operational": 155,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "medical": {
       "count": 67,
-      "closest_distance_m": 255.17459338785093
+      "closest_distance_m": 255.17459338785093,
+      "closest_name": "Горздрав",
+      "closest_unnamed": false,
+      "count_operational": 67,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     }
   },
   "blagoveshchensk/zeyapark": {
     "school": {
       "count": 3,
-      "closest_distance_m": 1287.1603075581118
+      "closest_distance_m": 1287.1603075581118,
+      "closest_name": "Школа № 15",
+      "closest_unnamed": false,
+      "count_operational": 3,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "kindergarten": {
       "count": 14,
-      "closest_distance_m": 570.0967983496073
+      "closest_distance_m": 570.0967983496073,
+      "closest_name": "Золотко",
+      "closest_unnamed": false,
+      "count_operational": 14,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "shop": {
       "count": 9,
-      "closest_distance_m": 514.6761004124374
+      "closest_distance_m": 514.6761004124374,
+      "closest_name": "северный",
+      "closest_unnamed": false,
+      "count_operational": 9,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "parking": {
       "count": 17,
-      "closest_distance_m": 643.1600036770005
+      "closest_distance_m": 643.1600036770005,
+      "closest_name": null,
+      "closest_unnamed": true,
+      "count_operational": 17,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "park_forest": {
       "count": 6,
-      "closest_distance_m": 503.4303893609297
+      "closest_distance_m": 503.4303893609297,
+      "closest_name": null,
+      "closest_unnamed": true,
+      "count_operational": 6,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "medical": {
       "count": 3,
-      "closest_distance_m": 801.5730942362208
+      "closest_distance_m": 801.5730942362208,
+      "closest_name": "Кабинет врача общей практики",
+      "closest_unnamed": false,
+      "count_operational": 3,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     }
   },
   "il-luga": {
     "school": {
       "count": 4,
-      "closest_distance_m": 397.9034188908881
+      "closest_distance_m": 397.9034188908881,
+      "closest_name": "Ильинская школа",
+      "closest_unnamed": false,
+      "count_operational": 4,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "kindergarten": {
       "count": 5,
-      "closest_distance_m": 207.77299603184915
+      "closest_distance_m": 207.77299603184915,
+      "closest_name": "Детский сад «Калейдоскоп»",
+      "closest_unnamed": false,
+      "count_operational": 5,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "shop": {
       "count": 24,
-      "closest_distance_m": 107.5924368551828
+      "closest_distance_m": 107.5924368551828,
+      "closest_name": "Ильинский",
+      "closest_unnamed": false,
+      "count_operational": 24,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "parking": {
       "count": 155,
-      "closest_distance_m": 40.149995736864476
+      "closest_distance_m": 40.149995736864476,
+      "closest_name": null,
+      "closest_unnamed": true,
+      "count_operational": 155,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "park_forest": {
       "count": 62,
-      "closest_distance_m": 294.2472683613126
+      "closest_distance_m": 294.2472683613126,
+      "closest_name": null,
+      "closest_unnamed": true,
+      "count_operational": 62,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "medical": {
       "count": 21,
-      "closest_distance_m": 162.29528407343375
+      "closest_distance_m": 162.29528407343375,
+      "closest_name": "Горздрав",
+      "closest_unnamed": false,
+      "count_operational": 21,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     }
   },
   "ekb/ip": {
     "school": {
       "count": 23,
-      "closest_distance_m": 455.82866985587805
+      "closest_distance_m": 455.82866985587805,
+      "closest_name": "Школа №28",
+      "closest_unnamed": false,
+      "count_operational": 23,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "kindergarten": {
       "count": 26,
-      "closest_distance_m": 503.45628976717705
+      "closest_distance_m": 503.45628976717705,
+      "closest_name": "Детский сад №544",
+      "closest_unnamed": false,
+      "count_operational": 26,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "shop": {
       "count": 92,
-      "closest_distance_m": 29.303891794527757
+      "closest_distance_m": 29.303891794527757,
+      "closest_name": "Магнит",
+      "closest_unnamed": false,
+      "count_operational": 92,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "parking": {
       "count": 304,
-      "closest_distance_m": 53.51477065439407
+      "closest_distance_m": 53.51477065439407,
+      "closest_name": null,
+      "closest_unnamed": true,
+      "count_operational": 304,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "park_forest": {
       "count": 140,
-      "closest_distance_m": 111.1181368187937
+      "closest_distance_m": 111.1181368187937,
+      "closest_name": null,
+      "closest_unnamed": true,
+      "count_operational": 140,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "medical": {
       "count": 90,
-      "closest_distance_m": 83.25337283645996
+      "closest_distance_m": 83.25337283645996,
+      "closest_name": "Вита",
+      "closest_unnamed": false,
+      "count_operational": 90,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     }
   },
   "kvb51": {
     "school": {
       "count": 23,
-      "closest_distance_m": 812.9924228620373
+      "closest_distance_m": 812.9924228620373,
+      "closest_name": "ГБОУ Школа №904",
+      "closest_unnamed": false,
+      "count_operational": 23,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "kindergarten": {
       "count": 32,
-      "closest_distance_m": 634.0808046358943
+      "closest_distance_m": 634.0808046358943,
+      "closest_name": "Д/C № 563",
+      "closest_unnamed": false,
+      "count_operational": 32,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "shop": {
-      "count": 70,
-      "closest_distance_m": 532.8165315613486
+      "count": 71,
+      "closest_distance_m": 532.8165315613486,
+      "closest_name": null,
+      "closest_unnamed": true,
+      "count_operational": 71,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "parking": {
       "count": 206,
-      "closest_distance_m": 57.634999716649844
+      "closest_distance_m": 57.634999716649844,
+      "closest_name": null,
+      "closest_unnamed": true,
+      "count_operational": 206,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "park_forest": {
       "count": 110,
-      "closest_distance_m": 460.20104919250946
+      "closest_distance_m": 460.20104919250946,
+      "closest_name": null,
+      "closest_unnamed": true,
+      "count_operational": 109,
+      "count_under_construction": 1,
+      "closest_under_construction_m": 561.8253200893653,
+      "schema_version": 2
     },
     "medical": {
       "count": 52,
-      "closest_distance_m": 50.522959881170046
+      "closest_distance_m": 50.522959881170046,
+      "closest_name": "Горздрав",
+      "closest_unnamed": false,
+      "count_operational": 52,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     }
   },
   "spb/k11": {
     "school": {
       "count": 24,
-      "closest_distance_m": 87.79638535545946
+      "closest_distance_m": 87.79638535545946,
+      "closest_name": "Дошкольное отделение школы № 104 имени М. С. Харченко",
+      "closest_unnamed": false,
+      "count_operational": 24,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "kindergarten": {
       "count": 34,
-      "closest_distance_m": 330.7541893440204
+      "closest_distance_m": 330.7541893440204,
+      "closest_name": "Детский сад № 29",
+      "closest_unnamed": false,
+      "count_operational": 34,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "shop": {
-      "count": 102,
-      "closest_distance_m": 113.36427062354466
+      "count": 103,
+      "closest_distance_m": 113.36427062354466,
+      "closest_name": "Uppetit",
+      "closest_unnamed": false,
+      "count_operational": 103,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "parking": {
       "count": 365,
-      "closest_distance_m": 41.27964449383252
+      "closest_distance_m": 41.27964449383252,
+      "closest_name": null,
+      "closest_unnamed": true,
+      "count_operational": 365,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "park_forest": {
       "count": 200,
-      "closest_distance_m": 163.79639429583804
+      "closest_distance_m": 163.79639429583804,
+      "closest_name": null,
+      "closest_unnamed": true,
+      "count_operational": 200,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "medical": {
       "count": 115,
-      "closest_distance_m": 57.86089669841699
+      "closest_distance_m": 57.86089669841699,
+      "closest_name": "Медицинский центр \"МСС\"",
+      "closest_unnamed": false,
+      "count_operational": 115,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     }
   },
   "kvartalmit": {
     "parking": {
       "count": 197,
-      "closest_distance_m": 249.32900727272275
+      "closest_distance_m": 249.32900727272275,
+      "closest_name": null,
+      "closest_unnamed": true,
+      "count_operational": 197,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "park_forest": {
       "count": 146,
-      "closest_distance_m": 232.4914438746839
+      "closest_distance_m": 232.4914438746839,
+      "closest_name": null,
+      "closest_unnamed": true,
+      "count_operational": 146,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "school": {
       "count": 9,
-      "closest_distance_m": 493.3011541478688
+      "closest_distance_m": 493.3011541478688,
+      "closest_name": "Новая гимназия",
+      "closest_unnamed": false,
+      "count_operational": 9,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "kindergarten": {
       "count": 24,
-      "closest_distance_m": 206.2146117498136
+      "closest_distance_m": 206.2146117498136,
+      "closest_name": "Детский клуб «Kids story»",
+      "closest_unnamed": false,
+      "count_operational": 24,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "shop": {
       "count": 58,
-      "closest_distance_m": 221.25059325130704
+      "closest_distance_m": 221.25059325130704,
+      "closest_name": "Пятёрочка",
+      "closest_unnamed": false,
+      "count_operational": 58,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "medical": {
       "count": 44,
-      "closest_distance_m": 260.94101282229866
+      "closest_distance_m": 260.94101282229866,
+      "closest_name": "Столички",
+      "closest_unnamed": false,
+      "count_operational": 44,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     }
   },
   "kolskaya8": {
     "school": {
       "count": 37,
-      "closest_distance_m": 640.1323240241534
+      "closest_distance_m": 640.1323240241534,
+      "closest_name": "Школа Свиблово, корпус 4",
+      "closest_unnamed": false,
+      "count_operational": 37,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "kindergarten": {
       "count": 46,
-      "closest_distance_m": 321.31378740625166
+      "closest_distance_m": 321.31378740625166,
+      "closest_name": "Детский сад - Школа Свиблово, корпус 13",
+      "closest_unnamed": false,
+      "count_operational": 46,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "shop": {
       "count": 135,
-      "closest_distance_m": 125.31522389252278
+      "closest_distance_m": 125.31522389252278,
+      "closest_name": "Пятёрочка",
+      "closest_unnamed": false,
+      "count_operational": 135,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "parking": {
-      "count": 346,
-      "closest_distance_m": 7.162482274836095
+      "count": 347,
+      "closest_distance_m": 7.162482274836095,
+      "closest_name": null,
+      "closest_unnamed": true,
+      "count_operational": 347,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "park_forest": {
       "count": 346,
-      "closest_distance_m": 177.15724324485134
+      "closest_distance_m": 177.15724324485134,
+      "closest_name": "парк Яуза",
+      "closest_unnamed": false,
+      "count_operational": 346,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "medical": {
       "count": 131,
-      "closest_distance_m": 148.3075052136628
+      "closest_distance_m": 148.3075052136628,
+      "closest_name": "Горздрав",
+      "closest_unnamed": false,
+      "count_operational": 131,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     }
   },
   "kron9": {
     "school": {
       "count": 17,
-      "closest_distance_m": 513.8595545274069
+      "closest_distance_m": 513.8595545274069,
+      "closest_name": "Московский городской детский морской центр им. Петра Великого",
+      "closest_unnamed": false,
+      "count_operational": 17,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "kindergarten": {
       "count": 25,
-      "closest_distance_m": 247.6820775591073
+      "closest_distance_m": 247.6820775591073,
+      "closest_name": "Sun School",
+      "closest_unnamed": false,
+      "count_operational": 24,
+      "count_under_construction": 1,
+      "closest_under_construction_m": 432.7344068340901,
+      "schema_version": 2
     },
     "shop": {
       "count": 104,
-      "closest_distance_m": 116.0907047399327
+      "closest_distance_m": 116.0907047399327,
+      "closest_name": "Магнолия",
+      "closest_unnamed": false,
+      "count_operational": 104,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "parking": {
       "count": 262,
-      "closest_distance_m": 56.51377875807988
+      "closest_distance_m": 56.51377875807988,
+      "closest_name": null,
+      "closest_unnamed": true,
+      "count_operational": 262,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "park_forest": {
       "count": 203,
-      "closest_distance_m": 291.3724195193848
+      "closest_distance_m": 291.3724195193848,
+      "closest_name": null,
+      "closest_unnamed": true,
+      "count_operational": 203,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "medical": {
       "count": 85,
-      "closest_distance_m": 42.0382577447379
+      "closest_distance_m": 42.0382577447379,
+      "closest_name": "Горздрав",
+      "closest_unnamed": false,
+      "count_operational": 85,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     }
   },
   "kuzminskyles": {
     "school": {
       "count": 10,
-      "closest_distance_m": 343.2564372296616
+      "closest_distance_m": 343.2564372296616,
+      "closest_name": "Начальная школа",
+      "closest_unnamed": false,
+      "count_operational": 10,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "kindergarten": {
       "count": 25,
-      "closest_distance_m": 150.8847762981452
+      "closest_distance_m": 150.8847762981452,
+      "closest_name": "Детский сад «Детство»",
+      "closest_unnamed": false,
+      "count_operational": 25,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "shop": {
       "count": 76,
-      "closest_distance_m": 178.54780679511913
+      "closest_distance_m": 178.54780679511913,
+      "closest_name": null,
+      "closest_unnamed": true,
+      "count_operational": 76,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "parking": {
       "count": 236,
-      "closest_distance_m": 43.320945004520986
+      "closest_distance_m": 43.320945004520986,
+      "closest_name": null,
+      "closest_unnamed": true,
+      "count_operational": 232,
+      "count_under_construction": 4,
+      "closest_under_construction_m": 1133.552684156168,
+      "schema_version": 2
     },
     "park_forest": {
       "count": 26,
-      "closest_distance_m": 190.4141787341572
+      "closest_distance_m": 190.4141787341572,
+      "closest_name": null,
+      "closest_unnamed": true,
+      "count_operational": 26,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "medical": {
       "count": 73,
-      "closest_distance_m": 78.46257217746127
+      "closest_distance_m": 78.46257217746127,
+      "closest_name": "Вита Экспресс",
+      "closest_unnamed": false,
+      "count_operational": 73,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     }
   },
   "kutuzovskiy": {
     "school": {
       "count": 41,
-      "closest_distance_m": 214.6020673209147
+      "closest_distance_m": 214.6020673209147,
+      "closest_name": "спецшкола № 6",
+      "closest_unnamed": false,
+      "count_operational": 41,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "kindergarten": {
       "count": 49,
-      "closest_distance_m": 388.7725291329299
+      "closest_distance_m": 388.7725291329299,
+      "closest_name": "Школа № 887. Корпус \"Сказка\"",
+      "closest_unnamed": false,
+      "count_operational": 49,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "shop": {
       "count": 118,
-      "closest_distance_m": 287.38769567019904
+      "closest_distance_m": 287.38769567019904,
+      "closest_name": "Лента",
+      "closest_unnamed": false,
+      "count_operational": 118,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "parking": {
       "count": 308,
-      "closest_distance_m": 96.772010580648
+      "closest_distance_m": 96.772010580648,
+      "closest_name": null,
+      "closest_unnamed": true,
+      "count_operational": 308,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "park_forest": {
       "count": 117,
-      "closest_distance_m": 300.8216651913481
+      "closest_distance_m": 300.8216651913481,
+      "closest_name": null,
+      "closest_unnamed": true,
+      "count_operational": 117,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "medical": {
       "count": 120,
-      "closest_distance_m": 284.6482602517959
+      "closest_distance_m": 284.6482602517959,
+      "closest_name": null,
+      "closest_unnamed": true,
+      "count_operational": 120,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     }
   },
   "spb/lermontovskiy": {
     "school": {
       "count": 51,
-      "closest_distance_m": 201.29703568901263
+      "closest_distance_m": 201.29703568901263,
+      "closest_name": "Лицей № 280 имени М. Ю. Лермонтова",
+      "closest_unnamed": false,
+      "count_operational": 51,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "kindergarten": {
       "count": 65,
-      "closest_distance_m": 262.69561273890923
+      "closest_distance_m": 262.69561273890923,
+      "closest_name": "Детский сад № 109",
+      "closest_unnamed": false,
+      "count_operational": 65,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "parking": {
       "count": 220,
-      "closest_distance_m": 57.419496897197824
+      "closest_distance_m": 57.419496897197824,
+      "closest_name": null,
+      "closest_unnamed": true,
+      "count_operational": 220,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "shop": {
       "count": 185,
-      "closest_distance_m": 285.4868737008668
+      "closest_distance_m": 285.4868737008668,
+      "closest_name": "ВкусВилл",
+      "closest_unnamed": false,
+      "count_operational": 185,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "park_forest": {
       "count": 258,
-      "closest_distance_m": 142.6244793057817
+      "closest_distance_m": 142.6244793057817,
+      "closest_name": null,
+      "closest_unnamed": true,
+      "count_operational": 258,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "medical": {
       "count": 254,
-      "closest_distance_m": 127.31043422453112
+      "closest_distance_m": 127.31043422453112,
+      "closest_name": "Первая наркологическая служба",
+      "closest_unnamed": false,
+      "count_operational": 254,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     }
   },
   "lospark": {
     "school": {
       "count": 20,
-      "closest_distance_m": 465.3114529317746
+      "closest_distance_m": 465.3114529317746,
+      "closest_name": "Школа №1035",
+      "closest_unnamed": false,
+      "count_operational": 20,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "kindergarten": {
       "count": 30,
-      "closest_distance_m": 96.9971520017169
+      "closest_distance_m": 96.9971520017169,
+      "closest_name": null,
+      "closest_unnamed": true,
+      "count_operational": 30,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "shop": {
       "count": 78,
-      "closest_distance_m": 76.96052670513166
+      "closest_distance_m": 76.96052670513166,
+      "closest_name": "Дикси",
+      "closest_unnamed": false,
+      "count_operational": 78,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "parking": {
       "count": 218,
-      "closest_distance_m": 151.6124674548599
+      "closest_distance_m": 151.6124674548599,
+      "closest_name": null,
+      "closest_unnamed": true,
+      "count_operational": 218,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "park_forest": {
       "count": 137,
-      "closest_distance_m": 341.0038152533018
+      "closest_distance_m": 341.0038152533018,
+      "closest_name": null,
+      "closest_unnamed": true,
+      "count_operational": 137,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "medical": {
       "count": 58,
-      "closest_distance_m": 111.84604068557555
+      "closest_distance_m": 111.84604068557555,
+      "closest_name": "Горздрав",
+      "closest_unnamed": false,
+      "count_operational": 58,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     }
   },
   "lublinpark": {
     "school": {
       "count": 41,
-      "closest_distance_m": 318.4721084032307
+      "closest_distance_m": 919.4390169351167,
+      "closest_name": null,
+      "closest_unnamed": true,
+      "count_operational": 40,
+      "count_under_construction": 1,
+      "closest_under_construction_m": 318.4721084032307,
+      "schema_version": 2
     },
     "kindergarten": {
       "count": 57,
-      "closest_distance_m": 192.9242323236663
+      "closest_distance_m": 192.9242323236663,
+      "closest_name": "Школа им. Ф. М. Достоевского. Учебный корпус № 9",
+      "closest_unnamed": false,
+      "count_operational": 57,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "shop": {
       "count": 142,
-      "closest_distance_m": 62.70455753155923
+      "closest_distance_m": 62.70455753155923,
+      "closest_name": "Мираторг",
+      "closest_unnamed": false,
+      "count_operational": 142,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "parking": {
       "count": 418,
-      "closest_distance_m": 20.486219778357142
+      "closest_distance_m": 20.486219778357142,
+      "closest_name": null,
+      "closest_unnamed": true,
+      "count_operational": 418,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "park_forest": {
       "count": 144,
-      "closest_distance_m": 36.55668584572469
+      "closest_distance_m": 36.55668584572469,
+      "closest_name": null,
+      "closest_unnamed": true,
+      "count_operational": 144,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "medical": {
       "count": 116,
-      "closest_distance_m": 101.90266492678688
+      "closest_distance_m": 101.90266492678688,
+      "closest_name": "Вита Экспресс",
+      "closest_unnamed": false,
+      "count_operational": 116,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     }
   },
   "mtvpark": {
     "school": {
       "count": 10,
-      "closest_distance_m": 219.67271912941632
+      "closest_distance_m": 219.67271912941632,
+      "closest_name": null,
+      "closest_unnamed": true,
+      "count_operational": 10,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "kindergarten": {
       "count": 18,
-      "closest_distance_m": 120.06537470555331
+      "closest_distance_m": 120.06537470555331,
+      "closest_name": null,
+      "closest_unnamed": true,
+      "count_operational": 18,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "parking": {
       "count": 397,
-      "closest_distance_m": 22.70977474827559
+      "closest_distance_m": 22.70977474827559,
+      "closest_name": null,
+      "closest_unnamed": true,
+      "count_operational": 397,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "park_forest": {
       "count": 370,
-      "closest_distance_m": 107.90909981077462
+      "closest_distance_m": 107.90909981077462,
+      "closest_name": null,
+      "closest_unnamed": true,
+      "count_operational": 370,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "shop": {
       "count": 50,
-      "closest_distance_m": 246.3939897293824
+      "closest_distance_m": 246.3939897293824,
+      "closest_name": "Пятёрочка",
+      "closest_unnamed": false,
+      "count_operational": 50,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "medical": {
       "count": 59,
-      "closest_distance_m": 51.01894744659569
+      "closest_distance_m": 51.01894744659569,
+      "closest_name": "Инвитро",
+      "closest_unnamed": false,
+      "count_operational": 59,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     }
   },
   "kazan/matyushino": {
     "school": {
       "count": 2,
-      "closest_distance_m": 1443.5341868069536
+      "closest_distance_m": 1443.5341868069536,
+      "closest_name": "Лицей «Инноватика»",
+      "closest_unnamed": false,
+      "count_operational": 2,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "kindergarten": {
       "count": 4,
-      "closest_distance_m": 484.52806989916735
+      "closest_distance_m": 484.52806989916735,
+      "closest_name": "Детский сад «Умные дети»",
+      "closest_unnamed": false,
+      "count_operational": 4,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "shop": {
       "count": 14,
-      "closest_distance_m": 486.24929012374224
+      "closest_distance_m": 486.24929012374224,
+      "closest_name": "Фасоль",
+      "closest_unnamed": false,
+      "count_operational": 14,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "parking": {
       "count": 60,
-      "closest_distance_m": 193.89663989932959
+      "closest_distance_m": 193.89663989932959,
+      "closest_name": null,
+      "closest_unnamed": true,
+      "count_operational": 60,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "park_forest": {
       "count": 38,
-      "closest_distance_m": 506.7589769753458
+      "closest_distance_m": 506.7589769753458,
+      "closest_name": null,
+      "closest_unnamed": true,
+      "count_operational": 38,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "medical": {
       "count": 6,
-      "closest_distance_m": 925.7091637901946
+      "closest_distance_m": 925.7091637901946,
+      "closest_name": "Вита Экспресс",
+      "closest_unnamed": false,
+      "count_operational": 6,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     }
   },
   "mles": {
     "school": {
       "count": 15,
-      "closest_distance_m": 302.7407666191499
+      "closest_distance_m": 302.7407666191499,
+      "closest_name": "Новая гимназия",
+      "closest_unnamed": false,
+      "count_operational": 15,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "kindergarten": {
       "count": 36,
-      "closest_distance_m": 579.9811709424814
+      "closest_distance_m": 579.9811709424814,
+      "closest_name": null,
+      "closest_unnamed": true,
+      "count_operational": 36,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "shop": {
       "count": 94,
-      "closest_distance_m": 13.188298514112454
+      "closest_distance_m": 13.188298514112454,
+      "closest_name": "Пятёрочка",
+      "closest_unnamed": false,
+      "count_operational": 94,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "parking": {
       "count": 256,
-      "closest_distance_m": 80.98073209795767
+      "closest_distance_m": 80.98073209795767,
+      "closest_name": null,
+      "closest_unnamed": true,
+      "count_operational": 256,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "park_forest": {
       "count": 163,
-      "closest_distance_m": 78.28549863410994
+      "closest_distance_m": 78.28549863410994,
+      "closest_name": null,
+      "closest_unnamed": true,
+      "count_operational": 163,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "medical": {
       "count": 96,
-      "closest_distance_m": 215.83469866754442
+      "closest_distance_m": 215.83469866754442,
+      "closest_name": "Горздрав",
+      "closest_unnamed": false,
+      "count_operational": 96,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     }
   },
   "mpark": {
     "school": {
       "count": 13,
-      "closest_distance_m": 394.51969400539
+      "closest_distance_m": 882.238620863037,
+      "closest_name": "Школа №1741",
+      "closest_unnamed": false,
+      "count_operational": 12,
+      "count_under_construction": 1,
+      "closest_under_construction_m": 394.51969400539,
+      "schema_version": 2
     },
     "kindergarten": {
       "count": 17,
-      "closest_distance_m": 714.8169903747056
+      "closest_distance_m": 714.8169903747056,
+      "closest_name": "Детский сад №2282",
+      "closest_unnamed": false,
+      "count_operational": 17,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "shop": {
       "count": 60,
-      "closest_distance_m": 11.362430428822142
+      "closest_distance_m": 11.362430428822142,
+      "closest_name": "Ярче!",
+      "closest_unnamed": false,
+      "count_operational": 60,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "parking": {
       "count": 498,
-      "closest_distance_m": 18.730255514945462
+      "closest_distance_m": 18.730255514945462,
+      "closest_name": null,
+      "closest_unnamed": true,
+      "count_operational": 498,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "park_forest": {
       "count": 224,
-      "closest_distance_m": 233.049116402355
+      "closest_distance_m": 233.049116402355,
+      "closest_name": null,
+      "closest_unnamed": true,
+      "count_operational": 224,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "medical": {
       "count": 44,
-      "closest_distance_m": 81.00520889682615
+      "closest_distance_m": 81.00520889682615,
+      "closest_name": "Горздрав",
+      "closest_unnamed": false,
+      "count_operational": 44,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     }
   },
   "moskvorechye": {
     "kindergarten": {
       "count": 32,
-      "closest_distance_m": 775.3606667374714
+      "closest_distance_m": 775.3606667374714,
+      "closest_name": "Детский сад №2593",
+      "closest_unnamed": false,
+      "count_operational": 32,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "shop": {
       "count": 75,
-      "closest_distance_m": 694.7654980945596
+      "closest_distance_m": 694.7654980945596,
+      "closest_name": "Пятёрочка",
+      "closest_unnamed": false,
+      "count_operational": 73,
+      "count_under_construction": 2,
+      "closest_under_construction_m": 967.3966637679163,
+      "schema_version": 2
     },
     "parking": {
       "count": 172,
-      "closest_distance_m": 196.04083760493256
+      "closest_distance_m": 196.04083760493256,
+      "closest_name": null,
+      "closest_unnamed": true,
+      "count_operational": 172,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "park_forest": {
       "count": 131,
-      "closest_distance_m": 313.9716924029932
+      "closest_distance_m": 313.9716924029932,
+      "closest_name": null,
+      "closest_unnamed": true,
+      "count_operational": 130,
+      "count_under_construction": 1,
+      "closest_under_construction_m": 1632.2075630835598,
+      "schema_version": 2
     },
     "school": {
       "count": 27,
-      "closest_distance_m": 752.3589088487682
+      "closest_distance_m": 752.3589088487682,
+      "closest_name": "Школа № 1579",
+      "closest_unnamed": false,
+      "count_operational": 27,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "medical": {
       "count": 81,
-      "closest_distance_m": 773.9641169544575
+      "closest_distance_m": 773.9641169544575,
+      "closest_name": "Городская клиническая психиатрическая больница № 15",
+      "closest_unnamed": false,
+      "count_operational": 81,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     }
   },
   "myakinino": {
     "school": {
       "count": 9,
-      "closest_distance_m": 265.6175101768547
+      "closest_distance_m": 265.6175101768547,
+      "closest_name": "Школа № 1371 \"Крылатское\". Школьный корпус",
+      "closest_unnamed": false,
+      "count_operational": 9,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "kindergarten": {
       "count": 25,
-      "closest_distance_m": 144.34262551563967
+      "closest_distance_m": 144.34262551563967,
+      "closest_name": "Школа № 1371 \"Крылатское\". Дошкольный корпус",
+      "closest_unnamed": false,
+      "count_operational": 25,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "parking": {
       "count": 174,
-      "closest_distance_m": 64.77224407874704
+      "closest_distance_m": 64.77224407874704,
+      "closest_name": null,
+      "closest_unnamed": true,
+      "count_operational": 174,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "park_forest": {
       "count": 153,
-      "closest_distance_m": 239.6848863740902
+      "closest_distance_m": 239.6848863740902,
+      "closest_name": null,
+      "closest_unnamed": true,
+      "count_operational": 153,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "shop": {
       "count": 66,
-      "closest_distance_m": 867.9006820966662
+      "closest_distance_m": 867.9006820966662,
+      "closest_name": null,
+      "closest_unnamed": true,
+      "count_operational": 66,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "medical": {
       "count": 52,
-      "closest_distance_m": 71.84868989930114
+      "closest_distance_m": 71.84868989930114,
+      "closest_name": "Ригла",
+      "closest_unnamed": false,
+      "count_operational": 52,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     }
   },
   "narvin": {
     "school": {
       "count": 24,
-      "closest_distance_m": 272.4906106937214
+      "closest_distance_m": 272.4906106937214,
+      "closest_name": "Гимназия №1583",
+      "closest_unnamed": false,
+      "count_operational": 24,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "kindergarten": {
       "count": 28,
-      "closest_distance_m": 186.02264908062273
+      "closest_distance_m": 299.51983888527116,
+      "closest_name": "Детский сад №2044",
+      "closest_unnamed": false,
+      "count_operational": 27,
+      "count_under_construction": 1,
+      "closest_under_construction_m": 186.02264908062273,
+      "schema_version": 2
     },
     "shop": {
       "count": 118,
-      "closest_distance_m": 362.70751631641633
+      "closest_distance_m": 362.70751631641633,
+      "closest_name": "Пятёрочка",
+      "closest_unnamed": false,
+      "count_operational": 118,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "parking": {
       "count": 278,
-      "closest_distance_m": 131.6876508699139
+      "closest_distance_m": 131.6876508699139,
+      "closest_name": null,
+      "closest_unnamed": true,
+      "count_operational": 278,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "park_forest": {
       "count": 134,
-      "closest_distance_m": 190.3609010220058
+      "closest_distance_m": 190.3609010220058,
+      "closest_name": null,
+      "closest_unnamed": true,
+      "count_operational": 134,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "medical": {
       "count": 98,
-      "closest_distance_m": 398.3822277591771
+      "closest_distance_m": 398.3822277591771,
+      "closest_name": "Капсула",
+      "closest_unnamed": false,
+      "count_operational": 98,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     }
   },
   "nluga": {
     "school": {
       "count": 12,
-      "closest_distance_m": 300.55102141699336
+      "closest_distance_m": 300.55102141699336,
+      "closest_name": null,
+      "closest_unnamed": true,
+      "count_operational": 12,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "kindergarten": {
       "count": 14,
-      "closest_distance_m": 414.4177785496102
+      "closest_distance_m": 414.4177785496102,
+      "closest_name": null,
+      "closest_unnamed": true,
+      "count_operational": 14,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "shop": {
       "count": 49,
-      "closest_distance_m": 451.30665753168716
+      "closest_distance_m": 451.30665753168716,
+      "closest_name": "Магнит",
+      "closest_unnamed": false,
+      "count_operational": 49,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "parking": {
       "count": 294,
-      "closest_distance_m": 217.3457858789357
+      "closest_distance_m": 412.2086908826485,
+      "closest_name": null,
+      "closest_unnamed": true,
+      "count_operational": 275,
+      "count_under_construction": 19,
+      "closest_under_construction_m": 217.3457858789357,
+      "schema_version": 2
     },
     "park_forest": {
       "count": 32,
-      "closest_distance_m": 361.23290875365
+      "closest_distance_m": 361.23290875365,
+      "closest_name": null,
+      "closest_unnamed": true,
+      "count_operational": 32,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "medical": {
       "count": 40,
-      "closest_distance_m": 413.35616388945385
+      "closest_distance_m": 413.35616388945385,
+      "closest_name": null,
+      "closest_unnamed": true,
+      "count_operational": 40,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     }
   },
   "ochakovo": {
     "school": {
       "count": 14,
-      "closest_distance_m": 545.9505953825603
+      "closest_distance_m": 545.9505953825603,
+      "closest_name": null,
+      "closest_unnamed": true,
+      "count_operational": 13,
+      "count_under_construction": 1,
+      "closest_under_construction_m": 1785.2895052830504,
+      "schema_version": 2
     },
     "kindergarten": {
       "count": 15,
-      "closest_distance_m": 388.71894259493246
+      "closest_distance_m": 388.71894259493246,
+      "closest_name": "Детский сад № 2476",
+      "closest_unnamed": false,
+      "count_operational": 15,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "shop": {
       "count": 46,
-      "closest_distance_m": 257.2296071716079
+      "closest_distance_m": 257.2296071716079,
+      "closest_name": "Верный",
+      "closest_unnamed": false,
+      "count_operational": 46,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "parking": {
       "count": 330,
-      "closest_distance_m": 279.1445042946745
+      "closest_distance_m": 279.1445042946745,
+      "closest_name": null,
+      "closest_unnamed": true,
+      "count_operational": 330,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "park_forest": {
       "count": 310,
-      "closest_distance_m": 443.34288623780066
+      "closest_distance_m": 443.34288623780066,
+      "closest_name": null,
+      "closest_unnamed": true,
+      "count_operational": 310,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "medical": {
       "count": 48,
-      "closest_distance_m": 130.59060036730463
+      "closest_distance_m": 130.59060036730463,
+      "closest_name": "Горздрав",
+      "closest_unnamed": false,
+      "count_operational": 48,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     }
   },
   "raion-novokurkino": {
     "school": {
       "count": 18,
-      "closest_distance_m": 201.02461001768782
+      "closest_distance_m": 201.02461001768782,
+      "closest_name": "Школа №31",
+      "closest_unnamed": false,
+      "count_operational": 18,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "kindergarten": {
       "count": 43,
-      "closest_distance_m": 258.23242581434755
+      "closest_distance_m": 258.23242581434755,
+      "closest_name": "Детский сад №17",
+      "closest_unnamed": false,
+      "count_operational": 43,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "shop": {
       "count": 110,
-      "closest_distance_m": 47.87934519080167
+      "closest_distance_m": 47.87934519080167,
+      "closest_name": "Дикси",
+      "closest_unnamed": false,
+      "count_operational": 110,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "parking": {
       "count": 276,
-      "closest_distance_m": 28.724662551163725
+      "closest_distance_m": 28.724662551163725,
+      "closest_name": null,
+      "closest_unnamed": true,
+      "count_operational": 276,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "park_forest": {
       "count": 127,
-      "closest_distance_m": 313.7058601884465
+      "closest_distance_m": 313.7058601884465,
+      "closest_name": null,
+      "closest_unnamed": true,
+      "count_operational": 127,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "medical": {
       "count": 81,
-      "closest_distance_m": 44.498856610470376
+      "closest_distance_m": 44.498856610470376,
+      "closest_name": null,
+      "closest_unnamed": true,
+      "count_operational": 81,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     }
   },
   "kazan/noksapark": {
     "school": {
       "count": 6,
-      "closest_distance_m": 348.8806656339954
+      "closest_distance_m": 348.8806656339954,
+      "closest_name": "лицей 123",
+      "closest_unnamed": false,
+      "count_operational": 6,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "kindergarten": {
       "count": 18,
-      "closest_distance_m": 184.75820987690173
+      "closest_distance_m": 184.75820987690173,
+      "closest_name": "Детский сад № 11 «Листочки»",
+      "closest_unnamed": false,
+      "count_operational": 18,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "shop": {
       "count": 67,
-      "closest_distance_m": 266.83322351886113
+      "closest_distance_m": 266.83322351886113,
+      "closest_name": "Пятёрочка",
+      "closest_unnamed": false,
+      "count_operational": 67,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "parking": {
       "count": 166,
-      "closest_distance_m": 56.74971511185248
+      "closest_distance_m": 56.74971511185248,
+      "closest_name": null,
+      "closest_unnamed": true,
+      "count_operational": 165,
+      "count_under_construction": 1,
+      "closest_under_construction_m": 1832.425093194144,
+      "schema_version": 2
     },
     "park_forest": {
       "count": 56,
-      "closest_distance_m": 237.28498061703974
+      "closest_distance_m": 237.28498061703974,
+      "closest_name": null,
+      "closest_unnamed": true,
+      "count_operational": 56,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "medical": {
       "count": 40,
-      "closest_distance_m": 248.04835851395447
+      "closest_distance_m": 248.04835851395447,
+      "closest_name": "Здравсити",
+      "closest_unnamed": false,
+      "count_operational": 40,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     }
   },
   "onezhskiy": {
     "school": {
       "count": 29,
-      "closest_distance_m": 651.9244175321721
+      "closest_distance_m": 651.9244175321721,
+      "closest_name": "Лицей №1594",
+      "closest_unnamed": false,
+      "count_operational": 29,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "kindergarten": {
       "count": 31,
-      "closest_distance_m": 390.9805825863705
+      "closest_distance_m": 390.9805825863705,
+      "closest_name": "Детский сад",
+      "closest_unnamed": false,
+      "count_operational": 31,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "shop": {
       "count": 121,
-      "closest_distance_m": 110.31873328117561
+      "closest_distance_m": 110.31873328117561,
+      "closest_name": null,
+      "closest_unnamed": true,
+      "count_operational": 121,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "parking": {
       "count": 301,
-      "closest_distance_m": 179.18924847545802
+      "closest_distance_m": 179.18924847545802,
+      "closest_name": null,
+      "closest_unnamed": true,
+      "count_operational": 301,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "park_forest": {
       "count": 96,
-      "closest_distance_m": 618.2812345536283
+      "closest_distance_m": 618.2812345536283,
+      "closest_name": null,
+      "closest_unnamed": true,
+      "count_operational": 96,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "medical": {
       "count": 108,
-      "closest_distance_m": 275.3174630229789
+      "closest_distance_m": 275.3174630229789,
+      "closest_name": "Медтокс",
+      "closest_unnamed": false,
+      "count_operational": 108,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     }
   },
   "1dubr": {
     "school": {
       "count": 27,
-      "closest_distance_m": 435.2706531046772
+      "closest_distance_m": 435.2706531046772,
+      "closest_name": "Интернат №4",
+      "closest_unnamed": false,
+      "count_operational": 27,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "kindergarten": {
       "count": 35,
-      "closest_distance_m": 500.8584371986934
+      "closest_distance_m": 500.8584371986934,
+      "closest_name": "Детский сад № 2091",
+      "closest_unnamed": false,
+      "count_operational": 34,
+      "count_under_construction": 1,
+      "closest_under_construction_m": 1790.9337127803533,
+      "schema_version": 2
     },
     "shop": {
-      "count": 123,
-      "closest_distance_m": 298.91466857414986
+      "count": 124,
+      "closest_distance_m": 298.91466857414986,
+      "closest_name": "Зерно",
+      "closest_unnamed": false,
+      "count_operational": 124,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "park_forest": {
       "count": 68,
-      "closest_distance_m": 583.7645268409378
+      "closest_distance_m": 583.7645268409378,
+      "closest_name": null,
+      "closest_unnamed": true,
+      "count_operational": 68,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "parking": {
       "count": 203,
-      "closest_distance_m": 107.03813971231594
+      "closest_distance_m": 107.03813971231594,
+      "closest_name": null,
+      "closest_unnamed": true,
+      "count_operational": 203,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "medical": {
       "count": 132,
-      "closest_distance_m": 285.4665415183785
+      "closest_distance_m": 285.4665415183785,
+      "closest_name": "Врачи Рядом",
+      "closest_unnamed": false,
+      "count_operational": 132,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     }
   },
   "plehanova11": {
     "school": {
       "count": 23,
-      "closest_distance_m": 746.6645305356857
+      "closest_distance_m": 746.6645305356857,
+      "closest_name": "Московская богословская семинария евангельских христиан-баптистов",
+      "closest_unnamed": false,
+      "count_operational": 23,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "kindergarten": {
       "count": 32,
-      "closest_distance_m": 710.4105794782749
+      "closest_distance_m": 710.4105794782749,
+      "closest_name": "Детский сад №33",
+      "closest_unnamed": false,
+      "count_operational": 32,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "parking": {
       "count": 158,
-      "closest_distance_m": 71.58573671883764
+      "closest_distance_m": 71.58573671883764,
+      "closest_name": null,
+      "closest_unnamed": true,
+      "count_operational": 158,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "park_forest": {
       "count": 97,
-      "closest_distance_m": 37.188225896102374
+      "closest_distance_m": 37.188225896102374,
+      "closest_name": null,
+      "closest_unnamed": true,
+      "count_operational": 97,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "shop": {
       "count": 111,
-      "closest_distance_m": 516.6793101876805
+      "closest_distance_m": 516.6793101876805,
+      "closest_name": "Пятёрочка",
+      "closest_unnamed": false,
+      "count_operational": 111,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "medical": {
       "count": 96,
-      "closest_distance_m": 544.4399243689123
+      "closest_distance_m": 544.4399243689123,
+      "closest_name": "Горздрав",
+      "closest_unnamed": false,
+      "count_operational": 96,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     }
   },
   "plr": {
     "school": {
       "count": 27,
-      "closest_distance_m": 407.4336245469294
+      "closest_distance_m": 407.4336245469294,
+      "closest_name": "Детский дом № 5",
+      "closest_unnamed": false,
+      "count_operational": 27,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "kindergarten": {
       "count": 39,
-      "closest_distance_m": 293.8507630647766
+      "closest_distance_m": 293.8507630647766,
+      "closest_name": "Гимназия №1506, дошкольное отделение",
+      "closest_unnamed": false,
+      "count_operational": 39,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "shop": {
       "count": 80,
-      "closest_distance_m": 169.13354898989252
+      "closest_distance_m": 169.13354898989252,
+      "closest_name": "Пятёрочка",
+      "closest_unnamed": false,
+      "count_operational": 80,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "parking": {
       "count": 165,
-      "closest_distance_m": 106.21884616886582
+      "closest_distance_m": 106.21884616886582,
+      "closest_name": null,
+      "closest_unnamed": true,
+      "count_operational": 165,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "park_forest": {
       "count": 94,
-      "closest_distance_m": 297.3815894815987
+      "closest_distance_m": 297.3815894815987,
+      "closest_name": "Медведковский лесопарк",
+      "closest_unnamed": false,
+      "count_operational": 94,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "medical": {
       "count": 61,
-      "closest_distance_m": 533.0545414401922
+      "closest_distance_m": 533.0545414401922,
+      "closest_name": null,
+      "closest_unnamed": true,
+      "count_operational": 61,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     }
   },
   "rustaveli": {
     "school": {
       "count": 26,
-      "closest_distance_m": 426.3341726122701
+      "closest_distance_m": 426.3341726122701,
+      "closest_name": "Школа № 252",
+      "closest_unnamed": false,
+      "count_operational": 26,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "kindergarten": {
       "count": 33,
-      "closest_distance_m": 401.59323427709904
+      "closest_distance_m": 401.59323427709904,
+      "closest_name": "Школа 1236 Дошкольное отделение",
+      "closest_unnamed": false,
+      "count_operational": 33,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "shop": {
       "count": 130,
-      "closest_distance_m": 214.665169031756
+      "closest_distance_m": 214.665169031756,
+      "closest_name": "Минимаркет",
+      "closest_unnamed": false,
+      "count_operational": 130,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "parking": {
       "count": 706,
-      "closest_distance_m": 23.985698053349473
+      "closest_distance_m": 23.985698053349473,
+      "closest_name": null,
+      "closest_unnamed": true,
+      "count_operational": 706,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "park_forest": {
       "count": 340,
-      "closest_distance_m": 435.0222884996494
+      "closest_distance_m": 435.0222884996494,
+      "closest_name": null,
+      "closest_unnamed": true,
+      "count_operational": 340,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "medical": {
       "count": 127,
-      "closest_distance_m": 106.55508288745416
+      "closest_distance_m": 106.55508288745416,
+      "closest_name": "Горздрав",
+      "closest_unnamed": false,
+      "count_operational": 127,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     }
   },
   "nn/savinp": {
     "school": {
       "count": 1,
-      "closest_distance_m": 1722.324658140986
+      "closest_distance_m": 1722.324658140986,
+      "closest_name": "Анкудиновская школа",
+      "closest_unnamed": false,
+      "count_operational": 1,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "kindergarten": {
       "count": 3,
-      "closest_distance_m": 1159.5213135047304
+      "closest_distance_m": 1159.5213135047304,
+      "closest_name": "Живая школа",
+      "closest_unnamed": false,
+      "count_operational": 3,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "shop": {
       "count": 9,
-      "closest_distance_m": 1220.677752254441
+      "closest_distance_m": 1220.677752254441,
+      "closest_name": null,
+      "closest_unnamed": true,
+      "count_operational": 9,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "parking": {
       "count": 49,
-      "closest_distance_m": 81.59951168054212
+      "closest_distance_m": 81.59951168054212,
+      "closest_name": null,
+      "closest_unnamed": true,
+      "count_operational": 49,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "park_forest": {
       "count": 154,
-      "closest_distance_m": 127.9165735749362
+      "closest_distance_m": 127.9165735749362,
+      "closest_name": null,
+      "closest_unnamed": true,
+      "count_operational": 154,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "medical": {
       "count": 3,
-      "closest_distance_m": 1694.4226493761198
+      "closest_distance_m": 1694.4226493761198,
+      "closest_name": null,
+      "closest_unnamed": true,
+      "count_operational": 3,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     }
   },
   "sp": {
     "school": {
       "count": 5,
-      "closest_distance_m": 467.0098292858725
+      "closest_distance_m": 467.0098292858725,
+      "closest_name": "Школа № 2094. Корпус школьного образования №2",
+      "closest_unnamed": false,
+      "count_operational": 5,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "kindergarten": {
       "count": 10,
-      "closest_distance_m": 105.36442827286143
+      "closest_distance_m": 105.36442827286143,
+      "closest_name": "Школа № 2094. Корпус дошкольного образования №4",
+      "closest_unnamed": false,
+      "count_operational": 10,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "shop": {
-      "count": 11,
-      "closest_distance_m": 114.4536692115698
+      "count": 12,
+      "closest_distance_m": 114.4536692115698,
+      "closest_name": "Фасоль",
+      "closest_unnamed": false,
+      "count_operational": 12,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "parking": {
       "count": 298,
-      "closest_distance_m": 55.87002569917221
+      "closest_distance_m": 55.87002569917221,
+      "closest_name": null,
+      "closest_unnamed": true,
+      "count_operational": 298,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "park_forest": {
       "count": 30,
-      "closest_distance_m": 521.1583595342936
+      "closest_distance_m": 521.1583595342936,
+      "closest_name": null,
+      "closest_unnamed": true,
+      "count_operational": 30,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "medical": {
       "count": 23,
-      "closest_distance_m": 110.71828527208234
+      "closest_distance_m": 110.71828527208234,
+      "closest_name": "Семейная",
+      "closest_unnamed": false,
+      "count_operational": 23,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     }
   },
   "khabarovsk/sevpark": {
     "school": {
       "count": 4,
-      "closest_distance_m": 1647.7312906271443
+      "closest_distance_m": 1647.7312906271443,
+      "closest_name": "Школа № 16",
+      "closest_unnamed": false,
+      "count_operational": 4,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "kindergarten": {
       "count": 4,
-      "closest_distance_m": 1392.5148176981813
+      "closest_distance_m": 1392.5148176981813,
+      "closest_name": "Детский сад \"Рябинка\"",
+      "closest_unnamed": false,
+      "count_operational": 4,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "shop": {
       "count": 18,
-      "closest_distance_m": 309.55184286333514
+      "closest_distance_m": 309.55184286333514,
+      "closest_name": null,
+      "closest_unnamed": true,
+      "count_operational": 18,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "parking": {
       "count": 76,
-      "closest_distance_m": 378.4251231788771
+      "closest_distance_m": 378.4251231788771,
+      "closest_name": null,
+      "closest_unnamed": true,
+      "count_operational": 76,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "park_forest": {
       "count": 57,
-      "closest_distance_m": 395.75471643373754
+      "closest_distance_m": 395.75471643373754,
+      "closest_name": null,
+      "closest_unnamed": true,
+      "count_operational": 57,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "medical": {
       "count": 16,
-      "closest_distance_m": 1390.3173875887387
+      "closest_distance_m": 1390.3173875887387,
+      "closest_name": null,
+      "closest_unnamed": true,
+      "count_operational": 16,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     }
   },
   "sles": {
     "school": {
       "count": 2,
-      "closest_distance_m": 302.7776132813888
+      "closest_distance_m": 302.7776132813888,
+      "closest_name": null,
+      "closest_unnamed": true,
+      "count_operational": 2,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "kindergarten": {
       "count": 2,
-      "closest_distance_m": 501.0433849872934
+      "closest_distance_m": 501.0433849872934,
+      "closest_name": null,
+      "closest_unnamed": true,
+      "count_operational": 2,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "shop": {
       "count": 11,
-      "closest_distance_m": 84.23311639421503
+      "closest_distance_m": 84.23311639421503,
+      "closest_name": "ВкусВилл",
+      "closest_unnamed": false,
+      "count_operational": 11,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "parking": {
       "count": 147,
-      "closest_distance_m": 70.57424258768626
+      "closest_distance_m": 70.57424258768626,
+      "closest_name": null,
+      "closest_unnamed": true,
+      "count_operational": 147,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "park_forest": {
       "count": 27,
-      "closest_distance_m": 508.67858352269104
+      "closest_distance_m": 508.67858352269104,
+      "closest_name": null,
+      "closest_unnamed": true,
+      "count_operational": 27,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "medical": {
       "count": 4,
-      "closest_distance_m": 114.55876222565315
+      "closest_distance_m": 114.55876222565315,
+      "closest_name": "Горздрав",
+      "closest_unnamed": false,
+      "count_operational": 4,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     }
   },
   "kazan/siberovo": {
     "school": {
       "count": 13,
-      "closest_distance_m": 410.76652013830306
+      "closest_distance_m": 410.76652013830306,
+      "closest_name": "Лицей №110",
+      "closest_unnamed": false,
+      "count_operational": 13,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "kindergarten": {
       "count": 18,
-      "closest_distance_m": 653.5029610422181
+      "closest_distance_m": 653.5029610422181,
+      "closest_name": "Детский сад № 251",
+      "closest_unnamed": false,
+      "count_operational": 17,
+      "count_under_construction": 1,
+      "closest_under_construction_m": 1922.0554230126472,
+      "schema_version": 2
     },
     "shop": {
       "count": 67,
-      "closest_distance_m": 183.85374499008708
+      "closest_distance_m": 183.85374499008708,
+      "closest_name": "Авокадо",
+      "closest_unnamed": false,
+      "count_operational": 67,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "parking": {
       "count": 106,
-      "closest_distance_m": 308.512819103132
+      "closest_distance_m": 308.512819103132,
+      "closest_name": null,
+      "closest_unnamed": true,
+      "count_operational": 106,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "park_forest": {
       "count": 66,
-      "closest_distance_m": 504.1401015720112
+      "closest_distance_m": 504.1401015720112,
+      "closest_name": null,
+      "closest_unnamed": true,
+      "count_operational": 66,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "medical": {
       "count": 62,
-      "closest_distance_m": 379.7192034854442
+      "closest_distance_m": 379.7192034854442,
+      "closest_name": "Вита Экспресс",
+      "closest_unnamed": false,
+      "count_operational": 62,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     }
   },
   "s16": {
     "school": {
       "count": 30,
-      "closest_distance_m": 843.6273308339632
+      "closest_distance_m": 843.6273308339632,
+      "closest_name": "Школа № 950",
+      "closest_unnamed": false,
+      "count_operational": 30,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "kindergarten": {
       "count": 34,
-      "closest_distance_m": 682.5908915535158
+      "closest_distance_m": 682.5908915535158,
+      "closest_name": "Детский сад №1632",
+      "closest_unnamed": false,
+      "count_operational": 34,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "shop": {
       "count": 87,
-      "closest_distance_m": 298.02703993722804
+      "closest_distance_m": 298.02703993722804,
+      "closest_name": "Ашан",
+      "closest_unnamed": false,
+      "count_operational": 87,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "parking": {
       "count": 221,
-      "closest_distance_m": 87.53283362856799
+      "closest_distance_m": 87.53283362856799,
+      "closest_name": null,
+      "closest_unnamed": true,
+      "count_operational": 221,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "park_forest": {
       "count": 426,
-      "closest_distance_m": 319.09159252650693
+      "closest_distance_m": 319.09159252650693,
+      "closest_name": null,
+      "closest_unnamed": true,
+      "count_operational": 426,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "medical": {
       "count": 89,
-      "closest_distance_m": 16.164583718931468
+      "closest_distance_m": 16.164583718931468,
+      "closest_name": "Ригла",
+      "closest_unnamed": false,
+      "count_operational": 89,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     }
   },
   "vladivostok/snezhnyipark": {
     "school": {
       "count": 2,
-      "closest_distance_m": 726.9615945463144
+      "closest_distance_m": 726.9615945463144,
+      "closest_name": "Средняя шола №82",
+      "closest_unnamed": false,
+      "count_operational": 2,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "kindergarten": {
       "count": 5,
-      "closest_distance_m": 650.6564248910292
+      "closest_distance_m": 650.6564248910292,
+      "closest_name": "Детский сад №3 \"Тигрёнок\"",
+      "closest_unnamed": false,
+      "count_operational": 5,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "shop": {
       "count": 31,
-      "closest_distance_m": 99.50694827289053
+      "closest_distance_m": 99.50694827289053,
+      "closest_name": "Квартет вкусов",
+      "closest_unnamed": false,
+      "count_operational": 31,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "parking": {
       "count": 481,
-      "closest_distance_m": 153.95693887245605
+      "closest_distance_m": 153.95693887245605,
+      "closest_name": null,
+      "closest_unnamed": true,
+      "count_operational": 481,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "park_forest": {
       "count": 189,
-      "closest_distance_m": 353.9611839944153
+      "closest_distance_m": 353.9611839944153,
+      "closest_name": null,
+      "closest_unnamed": true,
+      "count_operational": 189,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "medical": {
       "count": 21,
-      "closest_distance_m": 360.0022424475475
+      "closest_distance_m": 360.0022424475475,
+      "closest_name": "Аптека25.рф",
+      "closest_unnamed": false,
+      "count_operational": 21,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     }
   },
   "strogino-360": {
     "school": {
       "count": 14,
-      "closest_distance_m": 505.90856932941165
+      "closest_distance_m": 505.90856932941165,
+      "closest_name": "Школа №58",
+      "closest_unnamed": false,
+      "count_operational": 14,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "kindergarten": {
       "count": 18,
-      "closest_distance_m": 596.9864640420748
+      "closest_distance_m": 596.9864640420748,
+      "closest_name": "Детский сад №1265",
+      "closest_unnamed": false,
+      "count_operational": 18,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "shop": {
       "count": 33,
-      "closest_distance_m": 236.97232223227613
+      "closest_distance_m": 236.97232223227613,
+      "closest_name": "Metro",
+      "closest_unnamed": false,
+      "count_operational": 33,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "parking": {
       "count": 109,
-      "closest_distance_m": 194.66962737051935
+      "closest_distance_m": 194.66962737051935,
+      "closest_name": null,
+      "closest_unnamed": true,
+      "count_operational": 109,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "park_forest": {
       "count": 65,
-      "closest_distance_m": 170.80212763217637
+      "closest_distance_m": 170.80212763217637,
+      "closest_name": null,
+      "closest_unnamed": true,
+      "count_operational": 65,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "medical": {
       "count": 40,
-      "closest_distance_m": 388.66231349573013
+      "closest_distance_m": 388.66231349573013,
+      "closest_name": "Городская поликлиника № 180, филиал № 5",
+      "closest_unnamed": false,
+      "count_operational": 40,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     }
   },
   "spb/tallinskiypark": {
     "school": {
       "count": 3,
-      "closest_distance_m": 400.95513528127486
+      "closest_distance_m": 400.95513528127486,
+      "closest_name": null,
+      "closest_unnamed": true,
+      "count_operational": 3,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "kindergarten": {
       "count": 6,
-      "closest_distance_m": 361.9093538737473
+      "closest_distance_m": 361.9093538737473,
+      "closest_name": null,
+      "closest_unnamed": true,
+      "count_operational": 6,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "shop": {
       "count": 33,
-      "closest_distance_m": 21.125192924729344
+      "closest_distance_m": 21.125192924729344,
+      "closest_name": "Магнит",
+      "closest_unnamed": false,
+      "count_operational": 33,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "parking": {
       "count": 261,
-      "closest_distance_m": 91.43832148252089
+      "closest_distance_m": 91.43832148252089,
+      "closest_name": null,
+      "closest_unnamed": true,
+      "count_operational": 261,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "park_forest": {
       "count": 80,
-      "closest_distance_m": 856.8801365938315
+      "closest_distance_m": 856.8801365938315,
+      "closest_name": null,
+      "closest_unnamed": true,
+      "count_operational": 80,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "medical": {
       "count": 21,
-      "closest_distance_m": 25.17483256396132
+      "closest_distance_m": 25.17483256396132,
+      "closest_name": "Здравсити",
+      "closest_unnamed": false,
+      "count_operational": 21,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     }
   },
   "kazan/taular": {
     "school": {
       "count": 15,
-      "closest_distance_m": 384.174229506622
+      "closest_distance_m": 384.174229506622,
+      "closest_name": "Школа №88",
+      "closest_unnamed": false,
+      "count_operational": 15,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "kindergarten": {
       "count": 21,
-      "closest_distance_m": 250.34382863487218
+      "closest_distance_m": 250.34382863487218,
+      "closest_name": "Детский сад № 307 «Золотой ключик»",
+      "closest_unnamed": false,
+      "count_operational": 21,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "shop": {
       "count": 73,
-      "closest_distance_m": 251.4839579927051
+      "closest_distance_m": 251.4839579927051,
+      "closest_name": "Mechta",
+      "closest_unnamed": false,
+      "count_operational": 73,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "parking": {
       "count": 154,
-      "closest_distance_m": 192.67693105852192
+      "closest_distance_m": 192.67693105852192,
+      "closest_name": null,
+      "closest_unnamed": true,
+      "count_operational": 154,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "park_forest": {
       "count": 46,
-      "closest_distance_m": 94.83116219341704
+      "closest_distance_m": 94.83116219341704,
+      "closest_name": null,
+      "closest_unnamed": true,
+      "count_operational": 46,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "medical": {
       "count": 52,
-      "closest_distance_m": 324.3745632822095
+      "closest_distance_m": 324.3745632822095,
+      "closest_name": "Экона",
+      "closest_unnamed": false,
+      "count_operational": 52,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     }
   },
   "tbulvar": {
     "school": {
       "count": 12,
-      "closest_distance_m": 149.28269481645432
+      "closest_distance_m": 149.28269481645432,
+      "closest_name": "Школа №2",
+      "closest_unnamed": false,
+      "count_operational": 12,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "kindergarten": {
       "count": 26,
-      "closest_distance_m": 314.2850885416512
+      "closest_distance_m": 314.2850885416512,
+      "closest_name": "Детский сад \"Светлячок\"",
+      "closest_unnamed": false,
+      "count_operational": 26,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "shop": {
       "count": 85,
-      "closest_distance_m": 88.43617163963344
+      "closest_distance_m": 88.43617163963344,
+      "closest_name": null,
+      "closest_unnamed": true,
+      "count_operational": 85,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "parking": {
       "count": 244,
-      "closest_distance_m": 142.97466626763284
+      "closest_distance_m": 142.97466626763284,
+      "closest_name": null,
+      "closest_unnamed": true,
+      "count_operational": 240,
+      "count_under_construction": 4,
+      "closest_under_construction_m": 385.4840298789445,
+      "schema_version": 2
     },
     "park_forest": {
       "count": 29,
-      "closest_distance_m": 98.77799692689092
+      "closest_distance_m": 98.77799692689092,
+      "closest_name": null,
+      "closest_unnamed": true,
+      "count_operational": 29,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "medical": {
       "count": 75,
-      "closest_distance_m": 170.6228395468936
+      "closest_distance_m": 170.6228395468936,
+      "closest_name": null,
+      "closest_unnamed": true,
+      "count_operational": 75,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     }
   },
   "ulan-ude/ulaankhoto": {
     "kindergarten": {
       "count": 16,
-      "closest_distance_m": 236.17309099185704
+      "closest_distance_m": 236.17309099185704,
+      "closest_name": "Детский сад №35 \"Алые паруса\"",
+      "closest_unnamed": false,
+      "count_operational": 16,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "shop": {
       "count": 25,
-      "closest_distance_m": 32.98656645243586
+      "closest_distance_m": 32.98656645243586,
+      "closest_name": null,
+      "closest_unnamed": true,
+      "count_operational": 25,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "parking": {
       "count": 138,
-      "closest_distance_m": 64.71616653752412
+      "closest_distance_m": 64.71616653752412,
+      "closest_name": null,
+      "closest_unnamed": true,
+      "count_operational": 138,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "park_forest": {
       "count": 34,
-      "closest_distance_m": 453.58090314969695
+      "closest_distance_m": 453.58090314969695,
+      "closest_name": null,
+      "closest_unnamed": true,
+      "count_operational": 34,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "school": {
       "count": 15,
-      "closest_distance_m": 110.64855377918893
+      "closest_distance_m": 110.64855377918893,
+      "closest_name": "Средняя общеобразовательная школа №60 социальной адаптации детей-инвалидов",
+      "closest_unnamed": false,
+      "count_operational": 15,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "medical": {
       "count": 31,
-      "closest_distance_m": 138.61824362044888
+      "closest_distance_m": 138.61824362044888,
+      "closest_name": "Ситилаб",
+      "closest_unnamed": false,
+      "count_operational": 31,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     }
   },
   "ekb/utes": {
     "school": {
       "count": 12,
-      "closest_distance_m": 280.1172610170821
+      "closest_distance_m": 280.1172610170821,
+      "closest_name": "Школа № 131",
+      "closest_unnamed": false,
+      "count_operational": 12,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "kindergarten": {
       "count": 10,
-      "closest_distance_m": 514.20584290897
+      "closest_distance_m": 514.20584290897,
+      "closest_name": "Тёма",
+      "closest_unnamed": false,
+      "count_operational": 10,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "shop": {
       "count": 56,
-      "closest_distance_m": 315.2304349198885
+      "closest_distance_m": 315.2304349198885,
+      "closest_name": "Пятёрочка",
+      "closest_unnamed": false,
+      "count_operational": 56,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "parking": {
       "count": 173,
-      "closest_distance_m": 57.24923131335873
+      "closest_distance_m": 57.24923131335873,
+      "closest_name": null,
+      "closest_unnamed": true,
+      "count_operational": 173,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "park_forest": {
       "count": 91,
-      "closest_distance_m": 164.1686401737163
+      "closest_distance_m": 164.1686401737163,
+      "closest_name": null,
+      "closest_unnamed": true,
+      "count_operational": 91,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "medical": {
       "count": 34,
-      "closest_distance_m": 317.65788053449927
+      "closest_distance_m": 317.65788053449927,
+      "closest_name": "Инвитро",
+      "closest_unnamed": false,
+      "count_operational": 34,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     }
   },
   "yuzhno-sakhalinsk/yunpark": {
     "school": {
       "count": 0,
-      "closest_distance_m": null
+      "closest_distance_m": null,
+      "closest_name": null,
+      "closest_unnamed": false,
+      "count_operational": 0,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "kindergarten": {
       "count": 3,
-      "closest_distance_m": 530.983068583513
+      "closest_distance_m": 530.983068583513,
+      "closest_name": "Детский сад № 12 «Лесная сказка»",
+      "closest_unnamed": false,
+      "count_operational": 3,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "shop": {
       "count": 18,
-      "closest_distance_m": 421.8762168234561
+      "closest_distance_m": 421.8762168234561,
+      "closest_name": "Реноме",
+      "closest_unnamed": false,
+      "count_operational": 18,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "parking": {
       "count": 19,
-      "closest_distance_m": 47.52424004235349
+      "closest_distance_m": 47.52424004235349,
+      "closest_name": null,
+      "closest_unnamed": true,
+      "count_operational": 19,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "park_forest": {
       "count": 13,
-      "closest_distance_m": 639.2773593033351
+      "closest_distance_m": 639.2773593033351,
+      "closest_name": null,
+      "closest_unnamed": true,
+      "count_operational": 13,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "medical": {
       "count": 3,
-      "closest_distance_m": 332.89467830204285
+      "closest_distance_m": 332.89467830204285,
+      "closest_name": "Дорожная больница",
+      "closest_unnamed": false,
+      "count_operational": 3,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     }
   },
   "spb/shkiperskiy": {
     "school": {
       "count": 35,
-      "closest_distance_m": 307.42693649725214
+      "closest_distance_m": 307.42693649725214,
+      "closest_name": "Дошкольное отделение гимназии № 642",
+      "closest_unnamed": false,
+      "count_operational": 35,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "kindergarten": {
       "count": 37,
-      "closest_distance_m": 237.12238409669342
+      "closest_distance_m": 237.12238409669342,
+      "closest_name": "Детский сад № 8",
+      "closest_unnamed": false,
+      "count_operational": 37,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "shop": {
       "count": 93,
-      "closest_distance_m": 265.788761971684
+      "closest_distance_m": 265.788761971684,
+      "closest_name": "Перекрёсток",
+      "closest_unnamed": false,
+      "count_operational": 93,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "parking": {
       "count": 292,
-      "closest_distance_m": 92.64933116088119
+      "closest_distance_m": 92.64933116088119,
+      "closest_name": null,
+      "closest_unnamed": true,
+      "count_operational": 292,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "park_forest": {
       "count": 332,
-      "closest_distance_m": 286.7325700767049
+      "closest_distance_m": 286.7325700767049,
+      "closest_name": null,
+      "closest_unnamed": true,
+      "count_operational": 332,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "medical": {
       "count": 100,
-      "closest_distance_m": 268.1688395257243
+      "closest_distance_m": 268.1688395257243,
+      "closest_name": "Озерки",
+      "closest_unnamed": false,
+      "count_operational": 100,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     }
   },
   "yunino": {
     "school": {
       "count": 17,
-      "closest_distance_m": 383.7785528648526
+      "closest_distance_m": 383.7785528648526,
+      "closest_name": "Школа № 2117",
+      "closest_unnamed": false,
+      "count_operational": 17,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "kindergarten": {
       "count": 19,
-      "closest_distance_m": 319.9176710613853
+      "closest_distance_m": 319.9176710613853,
+      "closest_name": "Детский сад №7 \"Золотая рыбка\"",
+      "closest_unnamed": false,
+      "count_operational": 19,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "shop": {
       "count": 63,
-      "closest_distance_m": 169.47238265854605
+      "closest_distance_m": 169.47238265854605,
+      "closest_name": "Светофор",
+      "closest_unnamed": false,
+      "count_operational": 63,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "parking": {
       "count": 330,
-      "closest_distance_m": 24.85220792554793
+      "closest_distance_m": 24.85220792554793,
+      "closest_name": null,
+      "closest_unnamed": true,
+      "count_operational": 311,
+      "count_under_construction": 19,
+      "closest_under_construction_m": 371.4482486746108,
+      "schema_version": 2
     },
     "park_forest": {
       "count": 34,
-      "closest_distance_m": 299.10839277456176
+      "closest_distance_m": 299.10839277456176,
+      "closest_name": null,
+      "closest_unnamed": true,
+      "count_operational": 34,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "medical": {
       "count": 48,
-      "closest_distance_m": 254.8281025842767
+      "closest_distance_m": 254.8281025842767,
+      "closest_name": "Горздрав",
+      "closest_unnamed": false,
+      "count_operational": 48,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     }
   },
   "ytnv": {
     "school": {
       "count": 21,
-      "closest_distance_m": 748.4162613825671
+      "closest_distance_m": 748.4162613825671,
+      "closest_name": "Школа № 924. Корпус школьного образования",
+      "closest_unnamed": false,
+      "count_operational": 21,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "kindergarten": {
       "count": 25,
-      "closest_distance_m": 510.6286886774072
+      "closest_distance_m": 510.6286886774072,
+      "closest_name": "Школа № 924. Корпус дошкольного образования №3",
+      "closest_unnamed": false,
+      "count_operational": 25,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "shop": {
       "count": 63,
-      "closest_distance_m": 131.84078118609247
+      "closest_distance_m": 131.84078118609247,
+      "closest_name": "Пятёрочка",
+      "closest_unnamed": false,
+      "count_operational": 63,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "parking": {
       "count": 243,
-      "closest_distance_m": 173.5931295616582
+      "closest_distance_m": 173.5931295616582,
+      "closest_name": null,
+      "closest_unnamed": true,
+      "count_operational": 243,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "park_forest": {
       "count": 90,
-      "closest_distance_m": 240.4672492726048
+      "closest_distance_m": 240.4672492726048,
+      "closest_name": null,
+      "closest_unnamed": true,
+      "count_operational": 90,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "medical": {
-      "count": 53,
-      "closest_distance_m": 184.3653310663632
+      "count": 52,
+      "closest_distance_m": 184.3653310663632,
+      "closest_name": "Горздрав",
+      "closest_unnamed": false,
+      "count_operational": 52,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     }
   },
   "spb/yanles": {
     "school": {
       "count": 3,
-      "closest_distance_m": 759.042275876476
+      "closest_distance_m": 759.042275876476,
+      "closest_name": "Янинский центр образования (2-я площадка)",
+      "closest_unnamed": false,
+      "count_operational": 3,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "kindergarten": {
       "count": 8,
-      "closest_distance_m": 600.2818337951516
+      "closest_distance_m": 600.2818337951516,
+      "closest_name": "Янинский центр образования (дошкольное отделение № 6)",
+      "closest_unnamed": false,
+      "count_operational": 8,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "shop": {
       "count": 31,
-      "closest_distance_m": 111.87836792000046
+      "closest_distance_m": 111.87836792000046,
+      "closest_name": "Магнит",
+      "closest_unnamed": false,
+      "count_operational": 31,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "parking": {
       "count": 310,
-      "closest_distance_m": 23.79340872163335
+      "closest_distance_m": 23.79340872163335,
+      "closest_name": null,
+      "closest_unnamed": true,
+      "count_operational": 310,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "park_forest": {
       "count": 36,
-      "closest_distance_m": 63.98923705132679
+      "closest_distance_m": 63.98923705132679,
+      "closest_name": null,
+      "closest_unnamed": true,
+      "count_operational": 36,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "medical": {
       "count": 20,
-      "closest_distance_m": 194.18003899324142
+      "closest_distance_m": 194.18003899324142,
+      "closest_name": "Здравсити",
+      "closest_unnamed": false,
+      "count_operational": 20,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     }
   },
   "zhiloi-raion-yaroslavskii": {
     "school": {
       "count": 24,
-      "closest_distance_m": 386.6676999668249
+      "closest_distance_m": 386.6676999668249,
+      "closest_name": "Школа № 31",
+      "closest_unnamed": false,
+      "count_operational": 23,
+      "count_under_construction": 1,
+      "closest_under_construction_m": 1324.8081528060416,
+      "schema_version": 2
     },
     "shop": {
       "count": 98,
-      "closest_distance_m": 148.12656124736426
+      "closest_distance_m": 148.12656124736426,
+      "closest_name": "Продукты",
+      "closest_unnamed": false,
+      "count_operational": 98,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "parking": {
       "count": 265,
-      "closest_distance_m": 100.58772244655962
+      "closest_distance_m": 100.58772244655962,
+      "closest_name": null,
+      "closest_unnamed": true,
+      "count_operational": 265,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "park_forest": {
       "count": 102,
-      "closest_distance_m": 220.63524175240963
+      "closest_distance_m": 220.63524175240963,
+      "closest_name": null,
+      "closest_unnamed": true,
+      "count_operational": 102,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "kindergarten": {
       "count": 45,
-      "closest_distance_m": 183.0532222964209
+      "closest_distance_m": 183.0532222964209,
+      "closest_name": "Цветочный город",
+      "closest_unnamed": false,
+      "count_operational": 42,
+      "count_under_construction": 3,
+      "closest_under_construction_m": 1202.561995842841,
+      "schema_version": 2
     },
     "medical": {
       "count": 80,
-      "closest_distance_m": 163.82568196611496
+      "closest_distance_m": 163.82568196611496,
+      "closest_name": null,
+      "closest_unnamed": true,
+      "count_operational": 80,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     }
   },
   "kvartal-yaroslavskii": {
     "school": {
       "count": 6,
-      "closest_distance_m": 701.311489111807
+      "closest_distance_m": 701.311489111807,
+      "closest_name": "Школа №3",
+      "closest_unnamed": false,
+      "count_operational": 6,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "kindergarten": {
       "count": 15,
-      "closest_distance_m": 814.3664482491598
+      "closest_distance_m": 814.3664482491598,
+      "closest_name": null,
+      "closest_unnamed": true,
+      "count_operational": 15,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "shop": {
       "count": 52,
-      "closest_distance_m": 473.2914392243143
+      "closest_distance_m": 473.2914392243143,
+      "closest_name": "Подсолнух",
+      "closest_unnamed": false,
+      "count_operational": 52,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "parking": {
       "count": 134,
-      "closest_distance_m": 284.2289274539313
+      "closest_distance_m": 284.2289274539313,
+      "closest_name": null,
+      "closest_unnamed": true,
+      "count_operational": 134,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "park_forest": {
       "count": 55,
-      "closest_distance_m": 633.7989545353506
+      "closest_distance_m": 633.7989545353506,
+      "closest_name": null,
+      "closest_unnamed": true,
+      "count_operational": 55,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "medical": {
       "count": 36,
-      "closest_distance_m": 790.5729373482787
+      "closest_distance_m": 790.5729373482787,
+      "closest_name": "Мытищинский противотуберкулезный диспансер",
+      "closest_unnamed": false,
+      "count_operational": 36,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     }
   },
   "yauza": {
     "school": {
       "count": 12,
-      "closest_distance_m": 592.226288927239
+      "closest_distance_m": 592.226288927239,
+      "closest_name": "Школа №14",
+      "closest_unnamed": false,
+      "count_operational": 12,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "kindergarten": {
       "count": 27,
-      "closest_distance_m": 503.7342054804495
+      "closest_distance_m": 503.7342054804495,
+      "closest_name": "Детский сад № 2 Солнышко",
+      "closest_unnamed": false,
+      "count_operational": 27,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "shop": {
       "count": 67,
-      "closest_distance_m": 230.95952765911895
+      "closest_distance_m": 230.95952765911895,
+      "closest_name": "Верный",
+      "closest_unnamed": false,
+      "count_operational": 67,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "parking": {
       "count": 158,
-      "closest_distance_m": 219.36578094292275
+      "closest_distance_m": 219.36578094292275,
+      "closest_name": null,
+      "closest_unnamed": true,
+      "count_operational": 158,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "park_forest": {
       "count": 97,
-      "closest_distance_m": 832.6685462963247
+      "closest_distance_m": 832.6685462963247,
+      "closest_name": null,
+      "closest_unnamed": true,
+      "count_operational": 97,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     },
     "medical": {
       "count": 53,
-      "closest_distance_m": 291.5850664335112
+      "closest_distance_m": 291.5850664335112,
+      "closest_name": null,
+      "closest_unnamed": true,
+      "count_operational": 53,
+      "count_under_construction": 0,
+      "closest_under_construction_m": null,
+      "schema_version": 2
     }
   }
 }

@@ -1,4 +1,5 @@
 import re
+from collections.abc import Iterable
 
 from app.geo.poi import POICategory
 from app.parsing.rules.core import (
@@ -9,6 +10,7 @@ from app.parsing.rules.core import (
     Span,
     _iter_free,
     _normalize,
+    _overlaps,
     _parse_distance_meters,
 )
 from app.parsing.schema import POIRequirement
@@ -18,13 +20,24 @@ from app.parsing.schema import POIRequirement
 #: Предлог «с/со» намеренно НЕ захватывается: это чисто грамматическая связка
 #: («рядом со школой»), не несущая фильтрующего смысла для pik.ru.
 PREFIX = r"(?:(?:с|со)\s+)?(?P<new>\bнов\w+\s+)?"
+#: Необязательный СПОСОБ ПЕРЕДВИЖЕНИЯ в хвосте дистанции: «не дальше 15 минут
+#: ПЕШКОМ», «до 10 минут ХОДЬБЫ», «5-10 минут ПЕШКОМ». Слово принадлежит той же
+#: дистанции до POI и обязано попадать в её спан: иначе, после того как правило
+#: времени перестало забирать эти минуты себе (см. guard в ``rules/time.py``),
+#: «пешком» оседало бы ложным warning'ом (инвариант 1). Расширяет спан только
+#: вправо и только вплотную к уже найденной дистанции — значение фильтра не
+#: меняется.
+_WALK_TAIL = r"(?:\s+(?:пешком|пешк\w+|ходьб\w+|идти|хода))?"
 #: Хвост после POI-категории. Слова «поблизости/рядом/близко» намеренно НЕ
 #: сохраняются: близость к POI — это и есть суть POI-требования, отдельного
 #: факта тут нет. Дистанцию («в 300 метрах», «не дальше 500 м», «в 1.5 км»)
 #: захватываем группами ``dist``/``dist_unit`` (общий фрагмент
 #: ``app.parsing.rules.core``, переиспользуемый и в ``station_class.py``) →
 #: :attr:`POIRequirement.max_distance_m`.
-_DISTANCE = rf"(?:\s+(?:{_DIST_MARKER}\s*)?(?P<dist>{_DIST_NUM})\s*(?P<dist_unit>{_DIST_UNIT}))?"
+_DISTANCE = (
+    rf"(?:\s+(?:{_DIST_MARKER}\s*)?(?P<dist>{_DIST_NUM})\s*(?P<dist_unit>{_DIST_UNIT})"
+    rf"{_WALK_TAIL})?"
+)
 #: Суффиксные формы близости синхронизированы с общим словарём маркеров
 #: (``core._PROXIMITY_MARKER``, Milestone AI-20): раньше «недалеко» (без «от»)
 #: и голое «рядом» здесь отсутствовали — «школа недалеко» теряла хвост.
@@ -61,7 +74,15 @@ _POI_PATTERNS: list[tuple[re.Pattern[str], POICategory]] = [
         # ``(?!ьник)`` отсекает «школьник/школьником/школьника» (человек, не объект):
         # открытый стем ``\bшкол\w+`` иначе ловит «со школьником» как school-POI.
         # Формы объекта «школа/школы/школьная» сохраняются.
-        re.compile(PREFIX + r"(?<!вид на )(?<!видом на )\bшкол(?!ьник)\w+" + SUFFIX),
+        #
+        # ``(?:\w+|\b)`` вместо ``\w+``: голый родительный падеж «школ» («до этих
+        # школ», «пять школ») — самая частая разговорная форма, а стем требовал
+        # хотя бы одну букву после корня, и требование молча оседало в остатке.
+        # Здесь выбран regex, а НЕ перечисление падежей по образцу
+        # ``_SAD_BARE_PLURAL``: у «сад» перечисление нужно по существу (отсекает
+        # омонимию с топонимом-станцией «Ботанический сад»), у «школ» омонимии
+        # нет, а guard ``(?!ьник)`` уже лексический.
+        re.compile(PREFIX + r"(?<!вид на )(?<!видом на )\bшкол(?!ьник)(?:\w+|\b)" + SUFFIX),
         POICategory.SCHOOL,
     ),
     (
@@ -104,13 +125,38 @@ _CENTER_PATTERN = re.compile(
     r"вблизи\s+центра|около\s+центра)(?:\s+москв\w*)?\b"
 )
 
-#: ВЕДУЩАЯ дистанция: проксимити-маркер + дистанция ДО категорий («рядом вблизи
-#: до 18 минут должны быть школы и сады»). Суффиксный ``_DISTANCE`` такое не
-#: ловит — там дистанция идёт ПОСЛЕ категории. Применяется к POI-требованиям без
-#: собственной дистанции (см. extract_poi_requirements).
+#: ВЕДУЩАЯ дистанция: дистанция ДО категорий («рядом вблизи до 18 минут должны
+#: быть школы и сады», «до 18 минут школы и сады»). Суффиксный ``_DISTANCE``
+#: такое не ловит — там дистанция идёт ПОСЛЕ категории. Применяется к
+#: POI-требованиям без собственной дистанции (см. extract_poi_requirements).
+#:
+#: Форма симметрична ``_TRAILING_DISTANCE`` и держится на трёх предохранителях:
+#: 1. Маркер близости НЕОБЯЗАТЕЛЕН (живое «квартира до 18 минут школы и сады»
+#:    его не содержит), зато маркер дистанции — ОБЯЗАТЕЛЕН: без него через
+#:    зазор слишком легко подобрать чужое число.
+#: 2. Зазор — без цифр и знаков препинания (как в хвостовой форме): цифра
+#:    обрывает попытку дотянуться через соседний числовой фильтр, запятая
+#:    отделяет соседнее пожелание.
+#: 3. Выражение ПРИЖАТО СПРАВА (``$``) — искать его нужно не по всему тексту, а
+#:    в ``norm[:poi_start]``, то есть вплотную к началу POI-спана (симметрично
+#:    хвостовой форме, которая считается от ``match.end()``).
+#: Прижатия справа мало: в обратном порядке («площадью от 35 до 45 метров рядом
+#: школа») зазор « рядом » цифр не содержит и «до 45 метров» было бы украдено —
+#: поэтому вызывающий код дополнительно сверяется с уже съеденными спанами.
+#:
+#: Ведущая ``\b`` перед маркером ОБЯЗАТЕЛЬНА. Голые предлоги внутри
+#: ``_PROXIMITY_MARKER`` («у», «к») имеют границу слова только СПРАВА, и без левой
+#: границы маркером становилась конечная буква предыдущего слова: в «однушкУ не
+#: более 12 минут до магазинов» спан ведущей дистанции начинался внутри спана
+#: комнатности, ``_overlaps`` считал число чужим фильтром и дистанция
+#: выбрасывалась целиком (+ ложный warning). Второй симптом мягче, но тоже
+#: виден: «квартирУ»/«ищУ» теряли последнюю букву в остатке (««квартир»»). Все
+#: альтернативы маркера начинаются с буквы, поэтому ``\b`` безопасен и отсекает
+#: ровно словно-внутренние «у»/«к». (В ``entity_match`` ``\b`` уже стоял.)
 _LEADING_DISTANCE = re.compile(
-    _PROXIMITY_MARKER
-    + rf"[\s\w]{{0,25}}?(?:{_DIST_MARKER}\s*)?(?P<dist>{_DIST_NUM})\s*(?P<dist_unit>{_DIST_UNIT})"
+    rf"(?:\b{_PROXIMITY_MARKER}\s+[^\d,;.!?()]{{0,25}}?)?"
+    rf"{_DIST_MARKER}\s*(?P<dist>{_DIST_NUM})\s*(?P<dist_unit>{_DIST_UNIT})"
+    r"[^\d,;.!?()]{0,15}$"
 )
 
 #: ХВОСТОВАЯ дистанция через разрыв: «до этих детских садов БЫЛО ИДТИ до 15-20
@@ -133,10 +179,26 @@ _LEADING_DISTANCE = re.compile(
 #: категорией и так на грани, распространять её на соседей нельзя.
 _TRAILING_DISTANCE = re.compile(
     rf"\s[^\d,;.!?()]{{0,22}}?{_DIST_MARKER}\s*(?P<dist>{_DIST_NUM})\s*(?P<dist_unit>{_DIST_UNIT})"
+    rf"{_WALK_TAIL}"
 )
 
+#: Разделитель ВНУТРИ перечисления категорий: только пробелы, запятые и союзы.
+#: Нужен, чтобы найденную ХВОСТОВУЮ дистанцию раздать всем категориям
+#: перечисления, а не только последней: «до магазинов, аптек и поликлиники было не
+#: более 12 минут» отдавал радиус лишь медицине, причём МОЛЧА — спан дистанции
+#: съеден последней категорией, покрытие текста полное, warning'а нет. Ровно тот
+#: класс дефекта, что уже чинили для «садов и школ», но с другой стороны.
+#:
+#: Любое иное слово между категориями («рядом парк, ДО садика идти не более 10
+#: минут», «рядом школа. магазины не дальше 500 метров») означает ДВА независимых
+#: пожелания — распространять дистанцию нельзя. Точка/точка с запятой в класс
+#: намеренно не входят по той же причине.
+_ENUM_SEPARATOR = re.compile(r"^[\s,]*(?:и|или|либо|а\s+также)?[\s,]*$")
 
-def extract_poi_requirements(text: str) -> tuple[list[POIRequirement], bool, list[Span]]:
+
+def extract_poi_requirements(
+    text: str, consumed: Iterable[Span] | None = None
+) -> tuple[list[POIRequirement], bool, list[Span]]:
     """Извлечь POI-потребности и требование 'в центре'.
 
     Каждое вхождение POI разбирается независимо (per-instance): один текст может
@@ -154,10 +216,22 @@ def extract_poi_requirements(text: str) -> tuple[list[POIRequirement], bool, lis
     без слова «детский» («новые сады», «садов») — см. комментарии у
     ``_SAD_BARE_PLURAL``/``_SAD_BARE_SINGULAR_WITH_MARKER`` о защите от
     ложных срабатываний на топонимы-станции метро («Ботанический сад»).
+
+    ``consumed`` — спаны, уже «съеденные» правилами, которые выполняются раньше
+    (цена/площадь/время/этаж, см. :func:`app.parsing.rules.apply_rules`). Нужны
+    ровно для ведущей дистанции: в «площадью от 35 до 45 метров рядом школа»
+    именно спан площади доказывает, что «до 45 метров» — чужое число. Приём
+    тот же, что у ``extract_floor(norm, consumed)``. Параметр необязателен —
+    прямые вызовы (тесты, отдельные аудиты) работают без него.
     """
     norm = _normalize(text)
+    external = list(consumed) if consumed is not None else []
     poi_reqs: list[POIRequirement] = []
     req_ends: list[tuple[POIRequirement, int]] = []
+    req_starts: list[tuple[POIRequirement, int]] = []
+    #: (требование, начало, конец) — нужны, чтобы раздать хвостовую дистанцию всему
+    #: перечислению, а не только последней категории (см. ``_ENUM_SEPARATOR``).
+    req_bounds: list[tuple[POIRequirement, int, int]] = []
     spans: list[Span] = []
 
     # Сначала проверяем 'в центре'
@@ -186,11 +260,13 @@ def extract_poi_requirements(text: str) -> tuple[list[POIRequirement], bool, lis
             # Конец спана нужен ниже, чтобы искать хвостовую дистанцию именно от
             # этой категории, а не «где-то в тексте».
             req_ends.append((req, match.end()))
+            req_starts.append((req, match.start()))
+            req_bounds.append((req, match.start(), match.end()))
             spans.append(match.span())
 
     # Хвостовая дистанция через разрыв («…садов было идти до 15-20 минут») —
     # строго от конца спана своей категории, см. комментарий у _TRAILING_DISTANCE.
-    for req, end in req_ends:
+    for req, start, end in req_bounds:
         if req.max_distance_m is not None:
             continue
         tail = _TRAILING_DISTANCE.match(norm, end)
@@ -199,26 +275,74 @@ def extract_poi_requirements(text: str) -> tuple[list[POIRequirement], bool, lis
         segment = tail.group(0)
         if "метро" in segment or "станц" in segment:
             continue  # время до метро (timeOnFoot), а не дистанция до POI
-        req.max_distance_m = _parse_distance_meters(tail.group("dist"), tail.group("dist_unit"))
+        meters = _parse_distance_meters(tail.group("dist"), tail.group("dist_unit"))
+        req.max_distance_m = meters
         spans.append(tail.span())
+        _spread_over_enumeration(norm, start, meters, req_bounds)
 
-    # Ведущая дистанция ДО категорий («до 18 минут ... школы и сады») —
-    # применяем к POI-требованиям, у которых нет собственной (суффиксной)
-    # дистанции. «метро»/«станция» в сегменте пропускаем: это время до метро
-    # (URL-фильтр timeOnFoot, rules/time.py), а не дистанция до POI.
-    if any(req.max_distance_m is None for req in poi_reqs):
-        for match in _iter_free(_LEADING_DISTANCE, norm, spans):
-            segment = match.group(0)
-            if "метро" in segment or "станц" in segment:
-                continue
-            meters = _parse_distance_meters(match.group("dist"), match.group("dist_unit"))
-            for req in poi_reqs:
-                if req.max_distance_m is None:
-                    req.max_distance_m = meters
-            spans.append(match.span())
-            break  # одной ведущей дистанции на фрагмент достаточно
+    # Ведущая дистанция ДО категорий («до 18 минут ... школы и сады») — ищем не
+    # «где-то в тексте», а вплотную ПЕРЕД началом спана первой (по позиции) из
+    # категорий без собственной дистанции: паттерн прижат к правому краю среза
+    # ``norm[:start]``. «метро»/«станция» в сегменте пропускаем: это время до
+    # метро (URL-фильтр timeOnFoot, rules/time.py), а не дистанция до POI.
+    for req, start in sorted(req_starts, key=lambda pair: pair[1]):
+        if req.max_distance_m is not None:
+            continue
+        lead = _LEADING_DISTANCE.search(norm, 0, start)
+        if lead is None:
+            break
+        segment = lead.group(0)
+        if "метро" in segment or "станц" in segment:
+            break
+        # Чужой фильтр (площадь/цена/время) уже занял этот текст — «до 45 метров»
+        # в «площадью от 35 до 45 метров рядом школа» дистанцией POI не является.
+        if _overlaps(lead.span(), spans) or _overlaps(lead.span(), external):
+            break
+        meters = _parse_distance_meters(lead.group("dist"), lead.group("dist_unit"))
+        for other in poi_reqs:
+            if other.max_distance_m is None:
+                other.max_distance_m = meters
+        spans.append(lead.span())
+        break  # одной ведущей дистанции на фрагмент достаточно
 
     return _dedupe(poi_reqs), center_requested, sorted(spans)
+
+
+def _spread_over_enumeration(
+    norm: str,
+    target_start: int,
+    meters: int,
+    bounds: list[tuple[POIRequirement, int, int]],
+) -> None:
+    """Раздать найденную ХВОСТОВУЮ дистанцию всему перечислению категорий.
+
+    «до магазинов, аптек и поликлиники было не более 12 минут»: дистанция найдена
+    от последней категории, но относится ко всем перечисленным. До правки её
+    получала только последняя, и МОЛЧА — спан дистанции съеден, покрытие текста
+    полное, warning'а нет (пользователь узнавал о потере только по выдаче).
+
+    Идём ВЛЕВО от получившей дистанцию категории, пока категории отделены друг от
+    друга лишь союзами/запятыми/пробелами (:data:`_ENUM_SEPARATOR`). Первое же
+    «содержательное» слово между ними («рядом парк, ДО садика идти не более 10
+    минут») обрывает обход: это уже второе, независимое пожелание. Спаны POI при
+    этом НЕ расширяются — правится только значение ``max_distance_m``.
+
+    Симметрично ведущей форме (``_LEADING_DISTANCE``), которая раздаёт дистанцию
+    всем категориям справа от себя.
+    """
+    ordered = sorted(bounds, key=lambda item: item[1])
+    index = next(
+        (i for i, (_req, start, _end) in enumerate(ordered) if start == target_start), None
+    )
+    if index is None:
+        return
+    cursor = target_start
+    for other, start, end in reversed(ordered[:index]):
+        if not _ENUM_SEPARATOR.match(norm[end:cursor]):
+            break
+        if other.max_distance_m is None:
+            other.max_distance_m = meters
+        cursor = start
 
 
 def _dedupe(poi_reqs: list[POIRequirement]) -> list[POIRequirement]:
