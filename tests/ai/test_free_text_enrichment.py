@@ -12,9 +12,10 @@ from unittest.mock import patch
 import pytest
 
 from app.ai.enrichment import enrich, resolve_free_text_criteria
-from app.ai.schema import FreeTextCriteriaAnswer
+from app.ai.prompts import build_free_text_context
+from app.ai.schema import FreeTextCriteriaAnswer, LandmarkMatch
 from app.config import get_settings
-from app.parsing.schema import Criteria, Rooms, Sort
+from app.parsing.schema import Criteria, LandmarkRequirement, Rooms, Sort
 
 _RESIDUAL = "«{}»: не удалось распознать, не попало в ссылку"
 
@@ -177,3 +178,156 @@ async def test_enrich_sets_ai_used_even_when_gate1_noop(mock_extractor, mock_set
     assert criteria.sort == Sort.PRICE_DESC  # criteria обогащён до гейта
     assert result.meta.ai_used is True  # ИИ реально повлиял
     assert result.meta.explanation == "дорогие вперёд"
+
+
+# --- Ориентиры (Milestone AI-22): экстрактор вправе резолвить landmark_requirements ---
+# Мотивация — живой прогон «двушку самую ближайшую к Политеху»: остаток был, ИИ
+# вызывался, но по конструкции не имел права трогать ориентиры → ai_used=false.
+# Инвариант 3 соблюдён: модель возвращает только slug, координаты берутся из
+# landmarks.json (sanitize_landmark_resolution), выдуманные slug отбрасываются.
+
+
+@pytest.mark.asyncio
+@patch("app.ai.enrichment.call_free_text_extractor")
+async def test_landmark_resolved_from_reference(mock_extractor, mock_settings):
+    """Валидный slug → LandmarkRequirement с координатами ИЗ СПРАВОЧНИКА, не от модели."""
+    mock_extractor.return_value = FreeTextCriteriaAnswer(
+        landmarks=[LandmarkMatch(phrase="около Бауманки", slug="bauman")],
+        consumed_fragments=["около Бауманки"],
+        explanation="ориентир — МГТУ",
+    )
+    criteria = Criteria()
+    warnings = [_RESIDUAL.format("около Бауманки")]
+
+    outcome = await resolve_free_text_criteria(criteria, "двушка около Бауманки", warnings, None)
+
+    assert outcome.changed is True
+    assert len(criteria.landmark_requirements) == 1
+    lm = criteria.landmark_requirements[0]
+    assert lm.name == "МГТУ им. Баумана"
+    assert (lm.lat, lm.lon) == (55.766043, 37.684917)  # из landmarks.json
+    assert lm.category == "university"
+    assert lm.raw_phrase == "около Бауманки"
+    assert warnings == []
+
+
+@pytest.mark.asyncio
+@patch("app.ai.enrichment.call_free_text_extractor")
+async def test_landmark_hallucinated_slug_rejected(mock_extractor, mock_settings):
+    """Slug вне справочника — галлюцинация: не применяем, warning остаётся."""
+    mock_extractor.return_value = FreeTextCriteriaAnswer(
+        landmarks=[LandmarkMatch(phrase="рядом с Атлантидой", slug="atlantis")],
+        consumed_fragments=["рядом с Атлантидой"],
+    )
+    criteria = Criteria()
+    warnings = [_RESIDUAL.format("рядом с Атлантидой")]
+
+    outcome = await resolve_free_text_criteria(
+        criteria, "двушка рядом с Атлантидой", warnings, None
+    )
+
+    assert criteria.landmark_requirements == []
+    assert outcome.changed is False
+    assert warnings == [_RESIDUAL.format("рядом с Атлантидой")]
+
+
+@pytest.mark.asyncio
+@patch("app.ai.enrichment.call_free_text_extractor")
+async def test_landmark_does_not_override_deterministic(mock_extractor, mock_settings):
+    """Детерминированный слой выигрывает и здесь: непустой список не трогаем."""
+    mock_extractor.return_value = FreeTextCriteriaAnswer(
+        landmarks=[LandmarkMatch(phrase="около Бауманки", slug="bauman")],
+        consumed_fragments=["около Бауманки"],
+    )
+    criteria = Criteria(
+        landmark_requirements=[
+            LandmarkRequirement(name="МГУ им. Ломоносова", lat=55.703, lon=37.530)
+        ]
+    )
+    warnings = [_RESIDUAL.format("около Бауманки")]
+
+    outcome = await resolve_free_text_criteria(criteria, "двушка около Бауманки", warnings, None)
+
+    assert [lm.name for lm in criteria.landmark_requirements] == ["МГУ им. Ломоносова"]
+    assert outcome.changed is False
+
+
+def test_free_text_context_includes_landmark_catalogue():
+    """Модель может вернуть только slug из каталога — значит каталог надо ей отдать.
+    Без этого ветка ориентиров мертва в проде (в юнит-тестах ответ замокан)."""
+    context = build_free_text_context("двушка около Бауманки", Criteria(), ["около Бауманки"])
+
+    assert "bauman" in {lm["slug"] for lm in context["landmarks"]}
+    # Отдаём только name+slug, как в build_option_context: координаты модели не нужны
+    # и не должны попадать в ответ (инвариант «LLM не считает дистанции»).
+    assert all(set(lm) == {"name", "slug"} for lm in context["landmarks"])
+
+
+@pytest.mark.asyncio
+@patch("app.ai.enrichment.call_free_text_extractor")
+async def test_landmark_rejected_slug_keeps_its_warning(mock_extractor, mock_settings):
+    """Отбитый санитайзером ориентир НЕ снимает свой warning (инвариант 1).
+
+    Тонкость: warning'и снимались по всем consumed_fragments, если изменилось
+    ХОТЬ ОДНО поле. Значит достаточно было модели заодно угадать сортировку —
+    и выдуманный ориентир исчезал молча вместе со своей фразой.
+    """
+    mock_extractor.return_value = FreeTextCriteriaAnswer(
+        sort=Sort.PRICE_DESC,
+        landmarks=[LandmarkMatch(phrase="рядом с Атлантидой", slug="atlantis")],
+        consumed_fragments=["подороже", "рядом с Атлантидой"],
+    )
+    criteria = Criteria()
+    warnings = [_RESIDUAL.format("подороже"), _RESIDUAL.format("рядом с Атлантидой")]
+
+    outcome = await resolve_free_text_criteria(
+        criteria, "двушка рядом с Атлантидой подороже", warnings, None
+    )
+
+    assert outcome.changed is True  # сортировка применена
+    assert criteria.landmark_requirements == []
+    assert warnings == [_RESIDUAL.format("рядом с Атлантидой")]  # фраза не потеряна
+
+
+@pytest.mark.asyncio
+@patch("app.ai.enrichment.call_free_text_extractor")
+async def test_landmark_phrase_must_come_from_fragments(mock_extractor, mock_settings):
+    """Реальный slug, привязанный к чужой фразе, — тоже недоверенный ответ.
+
+    Иначе на любом шуме в остатке («метро рядом») модель могла бы подставить
+    произвольный ориентир из каталога и молча сузить выдачу по нему.
+    """
+    mock_extractor.return_value = FreeTextCriteriaAnswer(
+        landmarks=[LandmarkMatch(phrase="какая-то отсебятина", slug="bauman")],
+        consumed_fragments=["метро рядом"],
+    )
+    criteria = Criteria()
+    warnings = [_RESIDUAL.format("метро рядом")]
+
+    outcome = await resolve_free_text_criteria(criteria, "двушка метро рядом", warnings, None)
+
+    assert criteria.landmark_requirements == []
+    assert outcome.changed is False
+    assert warnings == [_RESIDUAL.format("метро рядом")]
+
+
+@pytest.mark.asyncio
+@patch("app.ai.enrichment.call_free_text_extractor")
+async def test_landmark_from_ai_keeps_superlative(mock_extractor, mock_settings):
+    """Суперлатив в тексте не должен теряться, когда ориентир достал ИИ.
+
+    Детерминированное правило промахивается на части склонений («бауманке» —
+    QRatio 87.5 при пороге 88), фразу добирает ИИ — и без этого признака запрос
+    деградировал в «рядом» (радиус 5 км), ради ухода от которого и заведён
+    nearest_only.
+    """
+    mock_extractor.return_value = FreeTextCriteriaAnswer(
+        landmarks=[LandmarkMatch(phrase="самую ближайшую к Бауманке", slug="bauman")],
+        consumed_fragments=["самую ближайшую к Бауманке"],
+    )
+    criteria = Criteria()
+    warnings = [_RESIDUAL.format("самую ближайшую к Бауманке")]
+
+    await resolve_free_text_criteria(criteria, "однушка самую ближайшую к Бауманке", warnings, None)
+
+    assert criteria.landmark_requirements[0].nearest_only is True

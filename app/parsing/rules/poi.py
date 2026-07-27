@@ -113,6 +113,28 @@ _LEADING_DISTANCE = re.compile(
     + rf"[\s\w]{{0,25}}?(?:{_DIST_MARKER}\s*)?(?P<dist>{_DIST_NUM})\s*(?P<dist_unit>{_DIST_UNIT})"
 )
 
+#: ХВОСТОВАЯ дистанция через разрыв: «до этих детских садов БЫЛО ИДТИ до 15-20
+#: минут». Суффиксный ``_DISTANCE`` требует дистанцию вплотную к категории, а
+#: ведущий ``_LEADING_DISTANCE`` допускает зазор только ПЕРЕД категориями —
+#: получалась асимметрия: «до 18 минут … школы и сады» работало, а та же мысль в
+#: обратном порядке терялась.
+#:
+#: Две защиты от кражи чужого фильтра (риск ровно того класса, что «однушка у МЦД
+#: от 60 метров» = площадь):
+#: 1. Зазор БЕЗ цифр и знаков препинания. Это и есть главный предохранитель:
+#:    в «детский сад площадью от 35 до 45 метров» чтобы дотянуться до маркера
+#:    «до», зазору пришлось бы проглотить «35» — цифра его обрывает. Запятая
+#:    обрывает так же, отделяя соседнее пожелание.
+#: 2. Маркер дистанции ОБЯЗАТЕЛЕН (в суффиксной форме он необязателен): через
+#:    разрыв голое «N метров» слишком легко оказывается чужим числом.
+#:
+#: Применяется только к тому POI, чей спан непосредственно предшествует (а не ко
+#: всем без дистанции, как ведущая форма): через разрыв связь с конкретной
+#: категорией и так на грани, распространять её на соседей нельзя.
+_TRAILING_DISTANCE = re.compile(
+    rf"\s[^\d,;.!?()]{{0,22}}?{_DIST_MARKER}\s*(?P<dist>{_DIST_NUM})\s*(?P<dist_unit>{_DIST_UNIT})"
+)
+
 
 def extract_poi_requirements(text: str) -> tuple[list[POIRequirement], bool, list[Span]]:
     """Извлечь POI-потребности и требование 'в центре'.
@@ -135,6 +157,7 @@ def extract_poi_requirements(text: str) -> tuple[list[POIRequirement], bool, lis
     """
     norm = _normalize(text)
     poi_reqs: list[POIRequirement] = []
+    req_ends: list[tuple[POIRequirement, int]] = []
     spans: list[Span] = []
 
     # Сначала проверяем 'в центре'
@@ -153,15 +176,31 @@ def extract_poi_requirements(text: str) -> tuple[list[POIRequirement], bool, lis
                 if dist_raw is not None
                 else None
             )
-            poi_reqs.append(
-                POIRequirement(
-                    category=category,
-                    raw_phrase=phrase,
-                    only_new=only_new,
-                    max_distance_m=max_distance_m,
-                )
+            req = POIRequirement(
+                category=category,
+                raw_phrase=phrase,
+                only_new=only_new,
+                max_distance_m=max_distance_m,
             )
+            poi_reqs.append(req)
+            # Конец спана нужен ниже, чтобы искать хвостовую дистанцию именно от
+            # этой категории, а не «где-то в тексте».
+            req_ends.append((req, match.end()))
             spans.append(match.span())
+
+    # Хвостовая дистанция через разрыв («…садов было идти до 15-20 минут») —
+    # строго от конца спана своей категории, см. комментарий у _TRAILING_DISTANCE.
+    for req, end in req_ends:
+        if req.max_distance_m is not None:
+            continue
+        tail = _TRAILING_DISTANCE.match(norm, end)
+        if tail is None:
+            continue
+        segment = tail.group(0)
+        if "метро" in segment or "станц" in segment:
+            continue  # время до метро (timeOnFoot), а не дистанция до POI
+        req.max_distance_m = _parse_distance_meters(tail.group("dist"), tail.group("dist_unit"))
+        spans.append(tail.span())
 
     # Ведущая дистанция ДО категорий («до 18 минут ... школы и сады») —
     # применяем к POI-требованиям, у которых нет собственной (суффиксной)
@@ -179,4 +218,30 @@ def extract_poi_requirements(text: str) -> tuple[list[POIRequirement], bool, lis
             spans.append(match.span())
             break  # одной ведущей дистанции на фрагмент достаточно
 
-    return poi_reqs, center_requested, sorted(spans)
+    return _dedupe(poi_reqs), center_requested, sorted(spans)
+
+
+def _dedupe(poi_reqs: list[POIRequirement]) -> list[POIRequirement]:
+    """Схлопнуть повторные упоминания одной категории в одно требование.
+
+    Живой запрос «рядом должны быть детские сады, чтобы до этих детских садов…»
+    даёт два одинаковых KINDERGARTEN: категория упомянута дважды, но пожелание
+    одно. На URL дубль не влияет (``blocks`` те же), зато засоряет
+    ``build_query_signature`` — ключ семантического кэша, из-за чего один и тот
+    же запрос мог не попасть в собственный кэш.
+
+    Ключ — ``(категория, only_new)``: «новые сады» и просто «сады» остаются
+    РАЗНЫМИ требованиями (первое строго сильнее, схлопывать их — терять смысл).
+    Дистанции сливаются по минимуму — самое строгое ограничение побеждает, как
+    в :func:`app.geo.candidates._landmark_radius`.
+    """
+    merged: dict[tuple[str, bool], POIRequirement] = {}
+    for req in poi_reqs:
+        key = (req.category.value, req.only_new)
+        seen = merged.get(key)
+        if seen is None:
+            merged[key] = req
+            continue
+        distances = [d for d in (seen.max_distance_m, req.max_distance_m) if d is not None]
+        seen.max_distance_m = min(distances) if distances else None
+    return list(merged.values())

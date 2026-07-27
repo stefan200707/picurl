@@ -4,9 +4,13 @@ from app.parsing.schema import Criteria, Finish
 from app.pik.location_fallback import resolve_fallback_block_ids
 
 
-def build_url(criteria: Criteria) -> str:
+def build_url(criteria: Criteria, warnings: list[str] | None = None) -> str:
     """
     Строит URL pik.ru/search по переданным критериям.
+
+    ``warnings`` необязателен (множество вызовов в тестах и аудитах обходятся без
+    него), но рантайм обязан его передавать: пересечение гео-фолбэка с уже
+    выбранными ЖК может оказаться пустым, и об этом нельзя молчать (инвариант 1).
 
     Правило single-путь / multi-query:
     - Комнатность в путь, если выбрана ровно одна. Иначе в query.
@@ -91,9 +95,31 @@ def build_url(criteria: Criteria) -> str:
     # выпадали из ссылки выше — вместо этого сужаем ЖК по привязке/расстоянию.
     fallback = resolve_fallback_block_ids(criteria)
     if fallback.block_ids:
-        existing_blocks = query_params.get("blocks", "")
-        merged_ids = (existing_blocks.split(",") if existing_blocks else []) + fallback.block_ids
-        query_params["blocks"] = ",".join(dict.fromkeys(merged_ids))
+        existing_blocks = [b for b in query_params.get("blocks", "").split(",") if b]
+        if existing_blocks:
+            # ПЕРЕСЕЧЕНИЕ, а не объединение. Оба списка сужают одну и ту же ось
+            # («какие ЖК»), поэтому OR не складывал требования, а СТИРАЛ более
+            # узкое: «двушку внутри МКАД около Патриарших прудов» давало 8 ЖК от
+            # ориентира ∪ 27 ЖК внутри МКАД = все 27, то есть требование
+            # «около Патриарших» исчезало молча. Тот же класс, что потеря
+            # суперлатива при POI (AI-23), и то же правило AND, которое
+            # resolve_fallback_block_ids уже применяет внутри себя для МКАД и
+            # прочих локаций.
+            narrowed = [b for b in existing_blocks if b in set(fallback.block_ids)]
+            if not narrowed:
+                # Требования несовместимы. Расширяться до объединения нельзя (это
+                # и был баг), поэтому оставляем более специфичный список — тот,
+                # что пришёл из семантики запроса (ориентир/POI/названный ЖК), —
+                # и честно об этом предупреждаем.
+                if warnings is not None:
+                    warnings.append(
+                        "гео-условия запроса не пересекаются: ЖК, подходящие сразу под все "
+                        "локационные требования, не найдены — показаны подходящие под часть"
+                    )
+                narrowed = existing_blocks
+            query_params["blocks"] = ",".join(dict.fromkeys(narrowed))
+        else:
+            query_params["blocks"] = ",".join(dict.fromkeys(fallback.block_ids))
 
     # Общие query-параметры добавляем в конец
     query_params.update(criteria.to_query_dict())

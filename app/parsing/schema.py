@@ -152,6 +152,12 @@ class LandmarkRequirement(BaseModel):
     - ``max_distance_m`` — верхняя граница расстояния (по аналогии с
       :class:`POIRequirement`); ``None`` = дистанция не указана, тогда кандидаты
       только сортируются по близости, без жёсткой отсечки.
+    - ``nearest_only`` — запрос был суперлативным («самую ближайшую к МГУ», а не
+      «рядом с МГУ»). Разница существенная: «рядом» = попадание в «районный»
+      радиус (:data:`app.geo.candidates.LANDMARK_DEFAULT_RADIUS_M`, 5 км), тогда
+      как суперлатив просит МИНИМУМ дистанции и обязан вернуть результат, даже
+      если ближайший ЖК лежит за этим радиусом (см.
+      :func:`app.geo.candidates.landmark_nearest_ids`).
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -162,6 +168,7 @@ class LandmarkRequirement(BaseModel):
     category: str | None = None
     raw_phrase: str = ""
     max_distance_m: int | None = None
+    nearest_only: bool = False
 
 
 class StationClassRequirement(BaseModel):

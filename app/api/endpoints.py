@@ -66,7 +66,7 @@ async def build_url(
     ai_meta = enrichment.meta
 
     # 2. Построение URL
-    url = pik_build_url(criteria)
+    url = pik_build_url(criteria, warnings)
 
     # 3. Валидация выдачи
     try:

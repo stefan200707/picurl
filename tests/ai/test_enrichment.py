@@ -731,10 +731,14 @@ async def test_enrich_landmark_warns_when_no_coordinates(mock_build, mock_log, m
 @pytest.mark.asyncio
 @patch("app.ai.enrichment.log_ai_call", new_callable=AsyncMock)
 @patch("app.ai.enrichment.build_candidate_shortlist")
-async def test_enrich_landmark_warns_when_nothing_nearby(mock_build, mock_log, mock_settings):
-    """Координаты есть, но в радиусе «рядом» ничего не найдено — предупреждаем,
-    а не оставляем criteria молча ненасыщенными (иначе URL покажет весь город,
-    и пользователь решит, что фильтр применился)."""
+async def test_enrich_landmark_falls_back_to_nearest(mock_build, mock_log, mock_settings):
+    """В радиусе «рядом» пусто → показываем ближайшие ЖК и честно это называем.
+
+    Раньше ветка возвращала пустоту с warning'ом «не найдено» — формально верно
+    (criteria не оставались молча ненасыщенными), но бесполезно: у станций
+    класса такая же ситуация давно обслуживается фолбэком (Milestone AI-18).
+    Здесь тот же приём для ориентиров (AI-22).
+    """
     mock_settings.AI_ENRICHMENT_ENABLED = False
     mock_build.return_value = [
         ComplexCandidate(
@@ -753,6 +757,46 @@ async def test_enrich_landmark_warns_when_nothing_nearby(mock_build, mock_log, m
     warnings = []
 
     result = await enrich("рядом с мгу", criteria, warnings)
+
+    assert result.matched_complex_ids == ["1"]
+    assert any("показаны ближайшие" in w for w in warnings)
+    # Пользователь должен понимать, что «рядом» не выполнено — иначе решит, что
+    # фильтр применился как заказано.
+    assert any("в радиусе" in w for w in warnings)
+
+
+@pytest.mark.asyncio
+@patch("app.ai.enrichment.log_ai_call", new_callable=AsyncMock)
+@patch("app.ai.enrichment.build_candidate_shortlist")
+async def test_enrich_landmark_no_fallback_with_explicit_distance(
+    mock_build, mock_log, mock_settings
+):
+    """Явная дистанция («в 500 метрах от МГУ») — жёсткая отсечка: фолбэк молчит,
+    пустой результат и есть правильный ответ."""
+    mock_settings.AI_ENRICHMENT_ENABLED = False
+    mock_build.return_value = [
+        ComplexCandidate(
+            id="1",
+            name="Далеко",
+            district=None,
+            county=None,
+            metro=[],
+            is_center=None,
+            known_poi={},
+            lat=55.9000,
+            lon=37.4000,
+        ),
+    ]
+    criteria = Criteria(
+        landmark_requirements=[
+            LandmarkRequirement(
+                name="МГУ им. Ломоносова", lat=55.703326, lon=37.530762, max_distance_m=500
+            )
+        ]
+    )
+    warnings = []
+
+    result = await enrich("в 500 метрах от мгу", criteria, warnings)
 
     assert result.matched_complex_ids == []
     assert any("не найдено" in w for w in warnings)
@@ -804,6 +848,225 @@ async def test_enrich_landmark_combined_with_poi_resolves_deterministically(
     assert result.ai_used is False
     assert result.success is True
     assert result.matched_complex_ids == ["1"]
+
+
+# ---------------------------------------------------------------------------
+# Суперлатив ориентира В КОМБИНАЦИИ с POI
+# ---------------------------------------------------------------------------
+#
+# Живой прогон («трёшка ближайшая к Политеху … рядом детские сады»): парсер честно
+# ставил nearest_only=True, но landmark-ветка выше закрыта условием
+# `not poi_requirements`, и признак не читал НИКТО — запрос молча деградировал в
+# радиусные 5 км. На данных справочника это расхождение реально у 45 ориентиров
+# из 50; у МГИМО/МФТИ/ХХС радиус даёт 0 ЖК там, где суперлатив даёт 3.
+
+
+def _cand_at(cid: str, lat: float, lon: float, *, kindergarten: bool):
+    """Кандидат на заданных координатах с/без садика в кэше POI."""
+    return ComplexCandidate(
+        id=cid,
+        name=f"ЖК {cid}",
+        district=None,
+        county=None,
+        metro=[],
+        is_center=None,
+        known_poi={"kindergarten": kindergarten},
+        lat=lat,
+        lon=lon,
+    )
+
+
+# МГУ — 55.703326 / 37.530762. Смещение по широте: 1° ≈ 111 км.
+_NEAR_1KM = (55.712326, 37.530762)
+_FAR_10KM = (55.793326, 37.530762)
+_FAR_20KM = (55.883326, 37.530762)
+
+
+@pytest.mark.asyncio
+@patch("app.ai.enrichment.log_ai_call", new_callable=AsyncMock)
+@patch("app.ai.enrichment.call_model")
+@patch("app.ai.enrichment.lookup_semantic", return_value=None)
+@patch("app.ai.enrichment.build_candidate_shortlist")
+async def test_enrich_center_warns_when_no_central_complexes(
+    mock_build, mock_lookup, mock_call, mock_log, mock_settings
+):
+    """«В центре» невыполнимо у ПИК — говорим прямо, а не молчим.
+
+    is_center не заполнен ни у одного из 51 района, а ЦАО вовсе нет среди
+    округов ЖК. Требование молча испарялось: matched пуст, причина неизвестна.
+    """
+    mock_build.return_value = [_cand_at("a", 55.700, 37.600, kindergarten=False)]
+    mock_call.return_value = AIEnrichmentAnswer(
+        matched_complex_ids=[],
+        center_district_ids=[],
+        poi_findings={},
+        explanation="x",
+        confidence=0.9,
+    )
+    warnings: list[str] = []
+
+    await enrich("квартира в центре", Criteria(center_requested=True), warnings)
+
+    assert any("центральных районах" in w for w in warnings)
+
+
+@pytest.mark.asyncio
+@patch("app.ai.enrichment.log_ai_call", new_callable=AsyncMock)
+@patch("app.ai.enrichment.call_model")
+@patch("app.ai.enrichment.lookup_semantic", return_value=None)
+@patch("app.ai.enrichment.build_candidate_shortlist")
+async def test_enrich_center_silent_when_central_complex_exists(
+    mock_build, mock_lookup, mock_call, mock_log, mock_settings
+):
+    """Если центральный ЖК есть — предупреждение не выдаётся (защита от шума)."""
+    central = _cand_at("a", 55.700, 37.600, kindergarten=False)
+    central.is_center = True
+    mock_build.return_value = [central]
+    warnings: list[str] = []
+
+    await enrich("квартира в центре", Criteria(center_requested=True), warnings)
+
+    assert not any("центральных районах" in w for w in warnings)
+
+
+@pytest.mark.asyncio
+@patch("app.ai.enrichment.log_ai_call", new_callable=AsyncMock)
+@patch("app.ai.enrichment.call_model")
+@patch("app.ai.enrichment.lookup_semantic", return_value=None)
+@patch("app.ai.enrichment.build_candidate_shortlist")
+async def test_enrich_superlative_with_poi_ignores_radius(
+    mock_build, mock_lookup, mock_call, mock_log, mock_settings
+):
+    """«Ближайшая к X» + POI: радиус не применяется, POI применяется.
+
+    Ключевой инвариант правки — суперлатив НЕ отменяет POI-требование, он лишь
+    заменяет радиусную отсечку на минимум дистанции. Поэтому близкий ЖК без
+    садика не проходит, а далёкие с садиком — проходят и идут по возрастанию
+    дистанции. До правки результат был пуст: радиус 5 км отсекал оба.
+    """
+    mock_build.return_value = [
+        _cand_at("near_no_kg", *_NEAR_1KM, kindergarten=False),
+        _cand_at("far_kg", *_FAR_10KM, kindergarten=True),
+        _cand_at("farther_kg", *_FAR_20KM, kindergarten=True),
+    ]
+    criteria = Criteria(
+        landmark_requirements=[_MGU.model_copy(update={"nearest_only": True})],
+        poi_requirements=[
+            POIRequirement(category=POICategory.KINDERGARTEN, raw_phrase="детские сады")
+        ],
+    )
+    warnings: list[str] = []
+
+    result = await enrich("трёшка ближайшая к мгу, рядом детские сады", criteria, warnings)
+
+    mock_call.assert_not_called()
+    assert result.success is True
+    assert result.matched_complex_ids == ["far_kg", "farther_kg"]
+    assert any("ближайшие" in w for w in warnings)
+
+
+@pytest.mark.asyncio
+@patch("app.ai.enrichment.log_ai_call", new_callable=AsyncMock)
+@patch("app.ai.enrichment.call_model")
+@patch("app.ai.enrichment.lookup_semantic", return_value=None)
+@patch("app.ai.enrichment.build_candidate_shortlist")
+async def test_enrich_superlative_with_poi_warns_when_poi_never_satisfied(
+    mock_build, mock_lookup, mock_call, mock_log, mock_settings
+):
+    """Ни у одного ЖК нет садика — суперлатив не выдумывает результат.
+
+    Минимум дистанции ищется ТОЛЬКО среди удовлетворяющих POI. Если таких нет,
+    правильный ответ — пусто и честный warning, а не «ближайшие вообще».
+    """
+    mock_build.return_value = [
+        _cand_at("near_no_kg", *_NEAR_1KM, kindergarten=False),
+        _cand_at("far_no_kg", *_FAR_10KM, kindergarten=False),
+    ]
+    criteria = Criteria(
+        landmark_requirements=[_MGU.model_copy(update={"nearest_only": True})],
+        poi_requirements=[
+            POIRequirement(category=POICategory.KINDERGARTEN, raw_phrase="детские сады")
+        ],
+    )
+    warnings: list[str] = []
+
+    result = await enrich("трёшка ближайшая к мгу, рядом детские сады", criteria, warnings)
+
+    assert result.matched_complex_ids == []
+    assert any("не найдено" in w for w in warnings)
+
+
+@pytest.mark.asyncio
+@patch("app.ai.enrichment.log_ai_call", new_callable=AsyncMock)
+@patch("app.ai.enrichment.call_model")
+@patch("app.ai.enrichment.lookup_semantic", return_value=None)
+@patch("app.ai.enrichment.build_candidate_shortlist")
+async def test_enrich_superlative_with_poi_respects_explicit_distance(
+    mock_build, mock_lookup, mock_call, mock_log, mock_settings
+):
+    """Явная дистанция остаётся жёсткой отсечкой и в комбинации с POI.
+
+    Симметрично инварианту 16 и `station_class_nearest_fallback`: заданное
+    пользователем расстояние сильнее эвристики «покажем ближайшие».
+    """
+    mock_build.return_value = [
+        _cand_at("far_kg", *_FAR_10KM, kindergarten=True),
+    ]
+    criteria = Criteria(
+        landmark_requirements=[
+            _MGU.model_copy(update={"nearest_only": True, "max_distance_m": 2000})
+        ],
+        poi_requirements=[
+            POIRequirement(category=POICategory.KINDERGARTEN, raw_phrase="детские сады")
+        ],
+    )
+    warnings: list[str] = []
+
+    result = await enrich("ближайшая к мгу в пределах 2 км, детские сады", criteria, warnings)
+
+    assert result.matched_complex_ids == []
+    assert any("не найдено" in w for w in warnings)
+
+
+@pytest.mark.asyncio
+@patch("app.ai.enrichment.log_ai_call", new_callable=AsyncMock)
+@patch("app.ai.enrichment.call_model")
+@patch("app.ai.enrichment.lookup_semantic", return_value=None)
+@patch("app.ai.enrichment.build_candidate_shortlist")
+async def test_enrich_mixed_superlative_with_poi_keeps_radius(
+    mock_build, mock_lookup, mock_call, mock_log, mock_settings
+):
+    """Смешанный запрос с POI: радиусная семантика сохраняется + warning.
+
+    Тот же выбор, что уже сделан в чистой landmark-ветке: `any(nearest_only)`
+    отбрасывал бы радиусное требование целиком, поэтому суперлатив применяется,
+    только если суперлативны ВСЕ ориентиры.
+    """
+    mock_build.return_value = [
+        _cand_at("near_kg", *_NEAR_1KM, kindergarten=True),
+        _cand_at("far_kg", *_FAR_10KM, kindergarten=True),
+    ]
+    criteria = Criteria(
+        landmark_requirements=[
+            _MGU,
+            LandmarkRequirement(
+                name="Московский политех",
+                lat=55.781186,
+                lon=37.711553,
+                nearest_only=True,
+            ),
+        ],
+        poi_requirements=[
+            POIRequirement(category=POICategory.KINDERGARTEN, raw_phrase="детские сады")
+        ],
+    )
+    warnings: list[str] = []
+
+    result = await enrich("рядом с мгу и ближайшую к политеху, сады", criteria, warnings)
+
+    # Радиус (5 км от любого из двух ориентиров) оставляет только ближний ЖК.
+    assert result.matched_complex_ids == ["near_kg"]
+    assert any("вместе с другими ориентирами не" in w for w in warnings)
 
 
 @pytest.mark.asyncio
@@ -1118,3 +1381,200 @@ async def test_enrich_gate2_only_new_still_goes_to_ai(mock_model, mock_log, mock
     # ИИ-путь был выбран (и упал на нашей заглушке) — гейт 2 его не перекрыл.
     mock_model.assert_called_once()
     assert result.ai_failed is True
+
+
+@pytest.mark.asyncio
+@patch("app.ai.enrichment.log_ai_call", new_callable=AsyncMock)
+@patch("app.ai.enrichment.build_candidate_shortlist")
+async def test_enrich_landmark_superlative_returns_nearest(mock_build, mock_log, mock_settings):
+    """«Самую ближайшую к X» отдаёт ближайшие ЖК, а не пустоту (Milestone AI-22).
+
+    Контраст с test_enrich_landmark_warns_when_nothing_nearby: тот же далёкий ЖК,
+    но суперлативный запрос просит МИНИМУМ дистанции, а не попадание в радиус —
+    «ближайший» существует всегда, пока есть хоть один ЖК с координатами.
+    """
+    mock_settings.AI_ENRICHMENT_ENABLED = False
+    mock_build.return_value = [
+        ComplexCandidate(
+            id="1",
+            name="Далеко",
+            district=None,
+            county=None,
+            metro=[],
+            is_center=None,
+            known_poi={},
+            lat=55.9000,
+            lon=37.4000,
+        ),
+    ]
+    criteria = Criteria(
+        landmark_requirements=[
+            LandmarkRequirement(
+                name="МГУ им. Ломоносова", lat=55.703326, lon=37.530762, nearest_only=True
+            )
+        ]
+    )
+    warnings = []
+
+    result = await enrich("самую ближайшую к мгу", criteria, warnings)
+
+    assert result.matched_complex_ids == ["1"]
+    assert any("ближайш" in w for w in warnings)  # честно сообщаем, что это не «в радиусе»
+
+
+@pytest.mark.asyncio
+@patch("app.ai.enrichment.log_ai_call", new_callable=AsyncMock)
+@patch("app.ai.enrichment.build_candidate_shortlist")
+async def test_enrich_landmark_superlative_warning_has_distance(
+    mock_build, mock_log, mock_settings
+):
+    """Суперлативный warning обязан называть реальную дистанцию (инвариант 14).
+
+    Соседний landmark_nearest_fallback это делает; без числа пользователь не
+    узнает, что «ближайший» — за 23 км.
+    """
+    mock_settings.AI_ENRICHMENT_ENABLED = False
+    mock_build.return_value = [
+        ComplexCandidate(
+            id="1",
+            name="Далеко",
+            district=None,
+            county=None,
+            metro=[],
+            is_center=None,
+            known_poi={},
+            lat=55.9000,
+            lon=37.4000,
+        ),
+    ]
+    criteria = Criteria(
+        landmark_requirements=[
+            LandmarkRequirement(
+                name="МГУ им. Ломоносова", lat=55.703326, lon=37.530762, nearest_only=True
+            )
+        ]
+    )
+    warnings = []
+
+    await enrich("самую ближайшую к мгу", criteria, warnings)
+
+    assert any("км" in w for w in warnings)
+
+
+@pytest.mark.asyncio
+@patch("app.ai.enrichment.log_ai_call", new_callable=AsyncMock)
+@patch("app.ai.enrichment.build_candidate_shortlist")
+async def test_enrich_mixed_superlative_keeps_radius_semantics(mock_build, mock_log, mock_settings):
+    """Один суперлативный ориентир не должен отменять радиус остальных.
+
+    «Рядом с МГУ и ближайшую к Политеху»: раньше `any(nearest_only)` включал
+    суперлатив на весь запрос, требование «рядом с МГУ» отбрасывалось целиком, а
+    warning утверждал «ближайшие к обоим», хотя ни один ЖК не ближайший к обоим.
+    """
+    mock_settings.AI_ENRICHMENT_ENABLED = False
+    mock_build.return_value = [
+        ComplexCandidate(
+            id="1",
+            name="У МГУ",
+            district=None,
+            county=None,
+            metro=[],
+            is_center=None,
+            known_poi={},
+            lat=55.7050,
+            lon=37.5320,
+        ),
+        ComplexCandidate(
+            id="2",
+            name="Далеко от обоих",
+            district=None,
+            county=None,
+            metro=[],
+            is_center=None,
+            known_poi={},
+            lat=55.9000,
+            lon=37.4000,
+        ),
+    ]
+    criteria = Criteria(
+        landmark_requirements=[
+            LandmarkRequirement(name="МГУ им. Ломоносова", lat=55.703326, lon=37.530762),
+            LandmarkRequirement(
+                name="Московский политех", lat=55.781186, lon=37.711553, nearest_only=True
+            ),
+        ]
+    )
+    warnings = []
+
+    result = await enrich("рядом с мгу и ближайшую к политеху", criteria, warnings)
+
+    # Радиусная семантика сохранена: «Далеко от обоих» не попал.
+    assert result.matched_complex_ids == ["1"]
+    # Но и суперлатив не проглочен молча.
+    assert any("ближайш" in w for w in warnings)
+
+
+@pytest.mark.asyncio
+@patch("app.ai.enrichment.log_ai_call", new_callable=AsyncMock)
+@patch("app.ai.enrichment.build_candidate_shortlist")
+async def test_enrich_landmark_with_poi_warns_when_radius_empty(
+    mock_build, mock_log, mock_settings
+):
+    """Ориентир + POI: «рядом с X» не выполнено → предупреждаем (инвариант 1).
+
+    Landmark-ветка закрыта условием `not poi_requirements`, и в комбинированном
+    запросе ориентир, не нашедший ЖК в радиусе, исчезал совсем молча — один и тот
+    же запрос вёл себя противоположно в зависимости от наличия POI.
+    """
+    mock_settings.AI_ENRICHMENT_ENABLED = False
+    mock_build.return_value = [
+        ComplexCandidate(
+            id="1",
+            name="Далеко",
+            district=None,
+            county=None,
+            metro=[],
+            is_center=None,
+            known_poi={"school": True},
+            lat=55.9000,
+            lon=37.4000,
+        ),
+    ]
+    criteria = Criteria(
+        landmark_requirements=[_MGU],
+        poi_requirements=[POIRequirement(category=POICategory.SCHOOL, raw_phrase="школа рядом")],
+    )
+    warnings = []
+
+    await enrich("рядом с мгу со школой", criteria, warnings)
+
+    assert any("МГУ" in w for w in warnings)
+
+
+@pytest.mark.asyncio
+@patch("app.ai.enrichment.log_ai_call", new_callable=AsyncMock)
+@patch("app.ai.enrichment.build_candidate_shortlist", return_value=[])
+async def test_enrich_landmark_empty_shortlist_is_not_ai_failure(
+    mock_build, mock_log, mock_settings
+):
+    """Жёсткая отсечка по дистанции обнулила шорт-лист — это НЕ отказ ИИ.
+
+    `ai_failed=True` по контракту означает «попытка обратиться к ИИ была и
+    упала». Здесь ИИ не звали вовсе: фильтр честно ничего не нашёл. Плюс
+    «Список кандидатов пуст» пользователю ничего не говорит — нужен ориентир и
+    дистанция.
+    """
+    mock_settings.AI_ENRICHMENT_ENABLED = False
+    criteria = Criteria(
+        landmark_requirements=[
+            LandmarkRequirement(
+                name="МГУ им. Ломоносова", lat=55.703326, lon=37.530762, max_distance_m=1000
+            )
+        ]
+    )
+    warnings = []
+
+    result = await enrich("рядом с мгу не дальше 1 км", criteria, warnings)
+
+    assert result.ai_failed is False
+    assert any("МГУ" in w and "1000" in w for w in warnings)

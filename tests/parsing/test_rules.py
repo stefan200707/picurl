@@ -1450,3 +1450,404 @@ def test_official_line_name_e2e_troitskaya():
     assert result.warnings == []
     assert result.option_candidates == []
     assert result.criteria.rooms == [Rooms.TWO]
+
+
+def test_extract_landmark_moscow_polytech():
+    """«Политех» — Московский политех на Б. Семёновской (живой прогон AI-22).
+
+    Координаты — корпус по адресу Большая Семёновская, 38 (OSM way 1218498180),
+    а НЕ центроид отношения вуза: у Московского политеха кампусы разбросаны, и
+    центроид указывает в район Садовой-Спасской, то есть совсем не туда.
+    """
+    from app.parsing.rules.landmark import extract_landmark_requirements
+
+    reqs, _spans = extract_landmark_requirements("хочу двушку самую ближайшую к Политеху")
+
+    assert len(reqs) == 1
+    assert "олитех" in reqs[0].name
+    assert (round(reqs[0].lat, 4), round(reqs[0].lon, 4)) == (55.7812, 37.7116)
+    assert reqs[0].category == "university"
+
+
+def test_extract_landmark_superlative_marks_nearest_only():
+    """«самую ближайшую к X» — не то же самое, что «рядом с X» (Milestone AI-22).
+
+    Суперлатив просит МИНИМУМ дистанции, а не попадание в «районный» радиус
+    5 км. Раньше факт суперлатива нигде не сохранялся, и запрос деградировал до
+    обычного «рядом» — половина города считалась ответом.
+    """
+    from app.parsing.rules.landmark import extract_landmark_requirements
+
+    text = "хочу двушку самую ближайшую к МГУ"
+    reqs, spans = extract_landmark_requirements(text)
+
+    assert len(reqs) == 1
+    assert reqs[0].nearest_only is True
+    # «самую» тоже должно попасть в consumed: иначе слово уходит в остаток и
+    # порождает ложный warning «не удалось распознать».
+    assert text[spans[0][0] : spans[0][1]].startswith("самую")
+
+
+def test_extract_landmark_plain_marker_is_not_nearest_only():
+    """Обычный маркер близости суперлативом не считается."""
+    from app.parsing.rules.landmark import extract_landmark_requirements
+
+    reqs, _spans = extract_landmark_requirements("двушка рядом с МГУ")
+
+    assert len(reqs) == 1
+    assert reqs[0].nearest_only is False
+
+
+@pytest.mark.parametrize(
+    ("text", "expected_m"),
+    [
+        ("квартира рядом с МГУ не дальше 1 км", 1000),
+        ("квартира рядом с МГУ в 500 метрах", 500),
+        ("квартира рядом с МГУ в пределах 700 м", 700),
+        ("квартира рядом с МГУ в 10 минутах", 800),  # 10 × WALK_METERS_PER_MINUTE
+        ("квартира рядом с МГУ", None),  # без дистанции — дефолтный радиус
+    ],
+)
+def test_extract_landmark_distance_parsed(text, expected_m):
+    """Явная дистанция до ориентира заполняет max_distance_m (Milestone AI-22).
+
+    Поле было объявлено, учитывалось в `_landmark_radius`/`landmark_nearest_*`,
+    но НЕ заполнялось ни одним путём — «предохранитель без провода», ровно как
+    у станций класса в AI-19. Механизм переиспользован из `rules/core.py`.
+    """
+    from app.parsing.rules.landmark import extract_landmark_requirements
+
+    reqs, _spans = extract_landmark_requirements(text)
+
+    assert len(reqs) == 1
+    assert reqs[0].max_distance_m == expected_m
+
+
+def test_extract_landmark_distance_does_not_steal_area():
+    """«площадью от 35 до 45 метров» — площадь, а не дистанция до ориентира.
+
+    Поэтому суффиксная дистанция требует однозначный маркер («не дальше», «в»),
+    а голое «до N метров» после имени ориентира не считается дистанцией — тот же
+    класс коллизии, что «однушка у МЦД от 60 метров» в station_class.
+    """
+    from app.parsing.rules.landmark import extract_landmark_requirements
+
+    reqs, _spans = extract_landmark_requirements("трёшка рядом с МГУ площадью от 35 до 45 метров")
+
+    assert len(reqs) == 1
+    assert reqs[0].max_distance_m is None
+
+
+def test_extract_landmark_distance_e2e_no_warning():
+    """Дистанция съедена спаном — в остаток не попадает (инвариант 1)."""
+    from app.parsing.parser import parse
+
+    result = parse("квартира рядом с МГУ не дальше 1 км")
+
+    assert result.criteria.landmark_requirements[0].max_distance_m == 1000
+    assert result.warnings == []
+
+
+def test_extract_landmark_polytech_instrumental_case():
+    """«рядом с политехом» — самая естественная форма, творительный падеж.
+
+    Фаззи-порог 88 её не берёт (QRatio(«политехом», «политех») = 87.5), поэтому
+    падеж закрыт алиасом: в этом проекте склонения топонимов лечатся лексикой,
+    а не понижением порога (тот бы потянул за собой ложные срабатывания).
+    """
+    from app.parsing.rules.landmark import extract_landmark_requirements
+
+    reqs, _spans = extract_landmark_requirements("двушку рядом с политехом до 20 млн")
+
+    assert [r.name for r in reqs] == ["Московский политех"]
+
+
+# ---------------------------------------------------------------------------
+# Диапазон в дистанции: «не дальше 15-20 минут»
+# ---------------------------------------------------------------------------
+#
+# Живой прогон («…чтобы до этих детских садов было идти до 15-20 минут») показал:
+# `не дальше 20 минут` → 1600 м, а `не дальше 15-20 минут` отбрасывалось целиком.
+# Причина — `_DIST_NUM` в rules/core.py принимал одно число. Разговорная вилка
+# («5-10 минут», «1-2 км») в живых запросах встречается постоянно, поэтому чинится
+# в общем фрагменте, а не в каждом правиле по отдельности.
+
+
+@pytest.mark.parametrize(
+    ("text", "expected_m"),
+    [
+        ("детские сады не дальше 15-20 минут", 1600),  # верхняя граница × 80 м/мин
+        ("детские сады не дальше 5-10 минут", 800),
+        ("школа не дальше 1-2 км", 2000),
+        ("магазин в 300-500 метрах", 500),
+        ("детский сад не дальше 15–20 минут", 1600),  # тире вместо дефиса
+        ("детский сад не дальше 20 минут", 1600),  # одиночное число не сломано
+    ],
+)
+def test_poi_distance_accepts_range(text, expected_m):
+    """Вилка дистанции берётся по ВЕРХНЕЙ границе.
+
+    «Не дальше 15-20 минут» — это «не дальше двадцати»: нижняя граница ничего не
+    ограничивает, а взяв её, мы бы отсекли варианты, которые пользователь считает
+    подходящими. Тот же принцип, что у `_landmark_radius`, где из нескольких
+    ограничений берётся самое строгое — здесь строгим является верхнее.
+    """
+    from app.parsing.rules.poi import extract_poi_requirements
+
+    poi_reqs, _center, _spans = extract_poi_requirements(text)
+
+    assert len(poi_reqs) == 1
+    assert poi_reqs[0].max_distance_m == expected_m
+
+
+def test_landmark_distance_accepts_range():
+    """Тот же фрагмент дистанции работает и у ориентира (общий `_DIST_NUM`)."""
+    from app.parsing.rules.landmark import extract_landmark_requirements
+
+    reqs, _spans = extract_landmark_requirements("квартира рядом с МГУ не дальше 1-2 км")
+
+    assert reqs[0].max_distance_m == 2000
+
+
+def test_station_class_distance_accepts_range():
+    """И у класса станций — третий потребитель `_DIST_NUM`."""
+    from app.parsing.rules.station_class import extract_station_class_requirements
+
+    reqs, _spans = extract_station_class_requirements("однушка рядом с МЦД не дальше 500-800 м")
+
+    assert reqs[0].max_distance_m == 800
+
+
+def test_range_distance_does_not_steal_area_or_price():
+    """Диапазон БЕЗ дефиса («от 35 до 45 метров») остаётся площадью, не дистанцией.
+
+    Ключевая защита правки: вилка распознаётся только по дефису/тире между
+    числами. Форма «от X до Y» — это диапазон площади/цены, у неё свои правила, и
+    новый паттерн не должен её перехватывать (тот же класс коллизии, что уже
+    зафиксирован в test_extract_landmark_distance_does_not_steal_area).
+    """
+    from app.parsing.parser import parse
+
+    result = parse("трёшка рядом с МГУ площадью от 35 до 45 метров, цена от 15 до 30 миллионов")
+
+    assert result.criteria.landmark_requirements[0].max_distance_m is None
+    assert result.criteria.area_min == 35
+    assert result.criteria.area_max == 45
+    assert result.criteria.price_min == 15_000_000
+    assert result.criteria.price_max == 30_000_000
+
+
+# ---------------------------------------------------------------------------
+# Диапазон ЛЕТ заселения
+# ---------------------------------------------------------------------------
+#
+# Найдено харнессом сложных запросов. Форма через дефис была опаснее простой
+# потери: срабатывало правило EXACT на первом годе и выдавало from=to=2026, то
+# есть готовый URL-фильтр, ПРОТИВОРЕЧАЩИЙ запросу «в 2026-2027 годах».
+
+
+@pytest.mark.parametrize(
+    ("text", "expected_from", "expected_to"),
+    [
+        ("сдача в 2026-2027 годах", 2026, 2027),
+        ("заселение 2026-2028", 2026, 2028),
+        ("заселение с 2026 года по 2029 год", 2026, 2029),
+        ("заселение с 2026 по 2029", 2026, 2029),  # рабочая форма не сломана
+        ("сдача до 2029 года", None, 2029),
+        ("заселение в 2027 году", 2027, 2027),  # одиночный год остаётся точкой
+    ],
+)
+def test_settlement_year_range_forms(text, expected_from, expected_to):
+    from app.parsing.rules.misc import extract_settlement_year
+
+    y_from, y_to, _spans = extract_settlement_year(text)
+
+    assert (y_from, y_to) == (expected_from, expected_to)
+
+
+def test_settlement_year_range_consumed_from_residual():
+    """Вилка лет съедена спаном — «2027 годах» не оседает ложным warning'ом."""
+    from app.parsing.parser import parse
+
+    result = parse("трёшка, сдача в 2026-2027 годах")
+
+    assert result.criteria.settlement_year_to == 2027
+    assert result.warnings == []
+
+
+# ---------------------------------------------------------------------------
+# Суперлатив: «максимально близко», «как можно ближе»
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("text", "expected_nearest_only"),
+    [
+        ("двушку максимально близко к МФТИ", True),
+        ("квартиру как можно ближе к МГУ", True),
+        ("трёшку самую ближайшую к Политеху", True),
+        ("двушка рядом с МГУ", False),  # обычная близость не суперлатив
+    ],
+)
+def test_superlative_colloquial_forms(text, expected_nearest_only):
+    """«Максимально близко» — тот же суперлатив, что «самую ближайшую».
+
+    Без этих форм признак не ставился, и запрос деградировал в радиус 5 км: у
+    МФТИ в этом радиусе нет ни одного ЖК, то есть пользователь получал пустую
+    выдачу там, где правильный ответ существует.
+    """
+    from app.parsing.rules.landmark import extract_landmark_requirements
+
+    reqs, _spans = extract_landmark_requirements(text)
+
+    assert len(reqs) == 1
+    assert reqs[0].nearest_only is expected_nearest_only
+
+
+def test_superlative_prefix_consumed_from_residual():
+    """Усилитель входит в спан — «максимально» не оседает в остатке."""
+    from app.parsing.parser import parse
+
+    result = parse("двушку максимально близко к МФТИ")
+
+    assert result.criteria.landmark_requirements[0].nearest_only is True
+    assert result.warnings == []
+
+
+# ---------------------------------------------------------------------------
+# Хвостовая дистанция через разрыв
+# ---------------------------------------------------------------------------
+
+
+def test_poi_trailing_distance_across_gap():
+    """«…до этих детских садов было идти до 15-20 минут» → 1600 м.
+
+    Асимметрия: ведущая форма («до 18 минут … школы и сады») зазор допускала, а
+    та же мысль в обратном порядке дистанцию теряла.
+    """
+    from app.parsing.rules.poi import extract_poi_requirements
+
+    poi_reqs, _center, _spans = extract_poi_requirements(
+        "чтобы до этих детских садов было идти до 15-20 минут"
+    )
+
+    assert poi_reqs[0].max_distance_m == 1600
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "рядом детский сад площадью от 35 до 45 метров",  # площадь квартиры
+        "рядом детский сад, площадь от 35 до 45 метров",  # запятая отделяет
+        "рядом школа, цена до 15 миллионов",  # цена
+        "детский сад во дворе",  # дистанции нет вовсе
+    ],
+)
+def test_poi_trailing_distance_does_not_steal_other_filters(text):
+    """Главный риск правки: зазор не должен утащить чужое число.
+
+    Предохранители — зазор без цифр и знаков препинания плюс обязательный маркер
+    дистанции: чтобы дотянуться до «до 45 метров», зазору пришлось бы проглотить
+    «35», а цифра его обрывает.
+    """
+    from app.parsing.rules.poi import extract_poi_requirements
+
+    poi_reqs, _center, _spans = extract_poi_requirements(text)
+
+    assert all(r.max_distance_m is None for r in poi_reqs)
+
+
+def test_poi_leading_distance_still_works():
+    """Ведущая форма не сломана правкой хвостовой."""
+    from app.parsing.rules.poi import extract_poi_requirements
+
+    poi_reqs, _center, _spans = extract_poi_requirements("квартира до 18 минут школы и сады")
+
+    assert sorted(r.max_distance_m for r in poi_reqs) == [1440, 1440]
+
+
+# ---------------------------------------------------------------------------
+# Падежные алиасы ориентиров
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("квартира недалеко от Бауманки", "МГТУ им. Баумана"),
+        ("квартира рядом с Бауманкой", "МГТУ им. Баумана"),
+        ("квартира около Патриарших прудов", "Патриаршие пруды"),
+        ("однушку ближайшую к Киевскому вокзалу", "Киевский вокзал"),
+        ("квартира рядом с Воробьёвыми горами", "Воробьёвы горы"),
+        ("двушку недалеко от Останкинской телебашни", "Останкинская телебашня"),
+        ("однушку около Парка Сокольники", "Парк Сокольники"),
+    ],
+)
+def test_landmark_declension_aliases(text, expected):
+    """Склонения ориентиров лечатся ЛЕКСИКОЙ, а не понижением порога.
+
+    Замер QRatio: «бауманки»→«бауманка» 87.5, «патриарших прудов»→«патриаршие
+    пруды» 84.8, «киевскому вокзалу»→«киевский вокзал» 81.2 — все ниже порога 88.
+    Опустить порог до 81 значило бы впустить ложные срабатывания (та же линия,
+    что у stopwords и у творительного падежа Политеха).
+    """
+    from app.parsing.rules.landmark import extract_landmark_requirements
+
+    reqs, _spans = extract_landmark_requirements(text)
+
+    assert [r.name for r in reqs] == [expected]
+
+
+def test_poi_requirements_deduplicated():
+    """Дважды упомянутая категория даёт ОДНО требование.
+
+    Живой запрос «рядом должны быть детские сады, чтобы до этих детских садов…»
+    порождал два одинаковых KINDERGARTEN. На URL это не влияет, но дубль пачкает
+    `build_query_signature` — ключ семантического кэша.
+    """
+    from app.parsing.rules.poi import extract_poi_requirements
+
+    poi_reqs, _center, _spans = extract_poi_requirements(
+        "рядом должны быть детские сады, чтобы до этих детских садов было близко"
+    )
+
+    assert [r.category.value for r in poi_reqs] == ["kindergarten"]
+
+
+def test_poi_dedup_keeps_strictest_distance():
+    """При слиянии побеждает самое строгое расстояние (минимум)."""
+    from app.parsing.rules.poi import extract_poi_requirements
+
+    poi_reqs, _center, _spans = extract_poi_requirements(
+        "школа не дальше 2 км, а лучше школа не дальше 500 м"
+    )
+
+    assert len(poi_reqs) == 1
+    assert poi_reqs[0].max_distance_m == 500
+
+
+def test_poi_dedup_keeps_only_new_separate():
+    """«Новые сады» и просто «сады» — РАЗНЫЕ требования, не схлопываются.
+
+    only_new строго сильнее, слить их означало бы потерять смысл одного из двух.
+    """
+    from app.parsing.rules.poi import extract_poi_requirements
+
+    poi_reqs, _center, _spans = extract_poi_requirements("новые детские сады и детские сады")
+
+    assert sorted(r.only_new for r in poi_reqs) == [False, True]
+
+
+def test_range_distance_e2e_consumed_from_residual():
+    """Вилка съедается спаном — фраза не оседает ложным warning'ом (инвариант 1).
+
+    Регрессия ровно на живой запрос пользователя: до правки «не дальше 15-20
+    минут» уходило в остаток целиком, и требование пользователя молча не
+    применялось (warning был, но фильтр терялся).
+    """
+    from app.parsing.parser import parse
+
+    result = parse("двушка, детские сады не дальше 15-20 минут")
+
+    assert result.criteria.poi_requirements[0].max_distance_m == 1600
+    assert result.warnings == []

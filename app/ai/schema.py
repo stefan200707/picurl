@@ -54,6 +54,24 @@ class OptionResolutionAnswer(BaseModel):
     matches: list[OptionMatch] = []
 
 
+class LandmarkMatch(BaseModel):
+    """Сопоставление нераспознанной фразы с ориентиром из ``landmarks.json``.
+
+    Полный аналог :class:`OptionMatch`: модель возвращает ТОЛЬКО ``slug``, а
+    координаты берутся из справочника (:func:`app.ai.enrichment.
+    sanitize_landmark_resolution`). Просить у модели lat/lon нельзя — это прямое
+    нарушение инварианта «LLM не считает дистанции и не выдумывает фильтры»:
+    выдуманная точка молча сдвинула бы гео-сужение. Slug вне справочника
+    отбрасывается, фраза остаётся в ``warnings``.
+    """
+
+    #: Дословный фрагмент из ``unresolved_fragments`` — проверяется санитайзером,
+    #: а не принимается на веру: реальный slug на произвольной фразе иначе молча
+    #: сузил бы выдачу по случайному ориентиру.
+    phrase: str
+    slug: str | None = None
+
+
 class FreeTextCriteriaAnswer(BaseModel):
     """Извлечение недостающих СКАЛЯРНЫХ фильтров из свободного текста (ведро C).
 
@@ -69,6 +87,10 @@ class FreeTextCriteriaAnswer(BaseModel):
     лишь ПУСТЫЕ поля (см. :func:`app.ai.enrichment.resolve_free_text_criteria`).
     ``consumed_fragments`` — фрагменты из ``unresolved_fragments``, которые модель
     сопоставила с полем; по ним снимаются warning'и, как в option-резолвинге.
+
+    Исключение из «только скаляры» — ``landmarks`` (Milestone AI-22): ориентиры
+    резолвятся здесь же, но по той же схеме, что опции — модель отдаёт лишь slug
+    из переданного ей каталога, координаты подставляет справочник.
     """
 
     rooms: list[Rooms] = []
@@ -94,6 +116,8 @@ class FreeTextCriteriaAnswer(BaseModel):
     time_on_foot: int | None = None
     time_on_transport: int | None = None
     only_available: bool = False
+    #: Ориентиры («рядом с Политехом»): только slug из каталога, см. LandmarkMatch.
+    landmarks: list[LandmarkMatch] = []
     consumed_fragments: list[str] = []
     explanation: str = ""
     confidence: float = 0.0

@@ -15,6 +15,8 @@ from app.geo.candidates import (
     STATION_CLASS_FALLBACK_LIMIT,
     build_candidate_shortlist,
     fully_resolved,
+    landmark_nearest_fallback,
+    landmark_nearest_ids,
     resolve_known_facts,
     station_class_nearest_fallback,
 )
@@ -95,6 +97,40 @@ def test_shortlist_explicit_complexes_take_priority(ref_dir):
     criteria = Criteria(complexes=[MatchedEntity(name="Западный", id="3")])
     names = {c.name for c in build_candidate_shortlist(criteria)}
     assert names == {"Западный"}
+
+
+def test_shortlist_warns_when_falling_back_to_citywide(ref_dir):
+    """Откат на общегородской список — с предупреждением, а не молча.
+
+    Дефект был описан в CLAUDE.md как известный: локация, под которую в
+    справочнике нет ни одного ЖК, молча игнорировалась, и «ближайшие среди
+    митинских» превращались в общегородские без единого слова пользователю —
+    прямое ослабление инварианта 1.
+    """
+    criteria = Criteria(districts=[MatchedEntity(name="Митино", id="d9")])
+    warnings: list[str] = []
+
+    names = {c.name for c in build_candidate_shortlist(criteria, warnings)}
+
+    assert names == {"Центральный", "Восточный", "Западный"}
+    assert any("Митино" in w for w in warnings)
+
+
+def test_shortlist_silent_when_location_matches(ref_dir):
+    """Обычный случай (локация нашлась) предупреждений не добавляет."""
+    criteria = Criteria(districts=[MatchedEntity(name="Гольяново", id="d2")])
+    warnings: list[str] = []
+
+    build_candidate_shortlist(criteria, warnings)
+
+    assert warnings == []
+
+
+def test_shortlist_warnings_optional(ref_dir):
+    """Параметр необязателен — старые вызовы без warnings не ломаются."""
+    criteria = Criteria(districts=[MatchedEntity(name="Митино", id="d9")])
+
+    assert len(build_candidate_shortlist(criteria)) == 3
 
 
 def test_center_resolved_deterministically(ref_dir):
@@ -675,3 +711,93 @@ def test_poi_only_new_is_not_fully_resolved():
     )
     known = resolve_known_facts([cand], criteria)
     assert fully_resolved(known, criteria, [cand]) is False
+
+
+#: Тот же МГУ, но запрос суперлативный («самую ближайшую к МГУ»).
+_MGU_NEAREST = LandmarkRequirement(
+    name="МГУ им. Ломоносова", lat=55.703326, lon=37.530762, nearest_only=True
+)
+
+
+def test_landmark_nearest_ids_returns_top_n_beyond_default_radius(geo_ref_dir):
+    """Суперлатив игнорирует «районный» радиус: ближайшие есть всегда.
+
+    «В центре» лежит дальше LANDMARK_DEFAULT_RADIUS_M от МГУ и по обычному
+    «рядом» отсекается — но для «самой ближайшей» важен порядок, а не радиус.
+    Усечение до лимита — ПОСЛЕ сортировки (инвариант 13).
+    """
+    criteria = Criteria(landmark_requirements=[_MGU_NEAREST])
+    candidates = build_candidate_shortlist(criteria)
+
+    assert landmark_nearest_ids(candidates, criteria.landmark_requirements, limit=2) == ["1", "2"]
+
+
+def test_landmark_nearest_ids_respects_explicit_max_distance(geo_ref_dir):
+    """Явная дистанция — жёсткая отсечка и для суперлатива («ближайшую в 3 км»)."""
+    lm = LandmarkRequirement(
+        name="МГУ им. Ломоносова",
+        lat=55.703326,
+        lon=37.530762,
+        nearest_only=True,
+        max_distance_m=3000,
+    )
+    criteria = Criteria(landmark_requirements=[lm])
+    candidates = build_candidate_shortlist(criteria)
+
+    assert landmark_nearest_ids(candidates, criteria.landmark_requirements, limit=2) == ["1"]
+
+
+def test_landmark_nearest_ids_skips_candidates_without_coordinates(geo_ref_dir):
+    """ЖК без координат не может быть «ближайшим» — доказать нечем."""
+    criteria = Criteria(landmark_requirements=[_MGU_NEAREST])
+    candidates = build_candidate_shortlist(criteria)
+
+    assert "4" not in landmark_nearest_ids(candidates, criteria.landmark_requirements, limit=10)
+
+
+#: Ориентир, до которого ВСЕ ЖК фикстуры дальше LANDMARK_DEFAULT_RADIUS_M.
+_FAR_LANDMARK = LandmarkRequirement(name="Далёкий ориентир", lat=56.5, lon=38.5)
+
+
+def test_landmark_fallback_returns_nearest_when_radius_empty(geo_ref_dir):
+    """«Рядом с X», где в радиусе пусто → показываем ближайшие, а не тишину.
+
+    Тот же приём осмысленной деградации, что у station_class_nearest_fallback
+    (Milestone AI-18): пустая выдача формально верна, но бесполезна — сайт
+    вполне может показать ближайшие варианты.
+    """
+    criteria = Criteria(landmark_requirements=[_FAR_LANDMARK])
+    candidates = build_candidate_shortlist(criteria)
+    assert resolve_known_facts(candidates, criteria)["matched_complex_ids"] == []
+
+    fallback, warning = landmark_nearest_fallback(
+        candidates, criteria.landmark_requirements, "«Далёкий ориентир»"
+    )
+
+    assert warning is not None and "ближайшие" in warning
+    # Отсортированы по дистанции: «Далеко» ближе всех к северо-восточной точке.
+    assert [c.id for c in fallback] == ["3", "2", "1"]
+
+
+def test_landmark_fallback_disabled_with_explicit_max_distance(geo_ref_dir):
+    """Явная дистанция — жёсткая отсечка: пустой результат и есть правильный ответ."""
+    strict = LandmarkRequirement(name="Далёкий ориентир", lat=56.5, lon=38.5, max_distance_m=1000)
+    criteria = Criteria(landmark_requirements=[strict])
+    candidates = build_candidate_shortlist(criteria)
+
+    fallback, warning = landmark_nearest_fallback(candidates, [strict], "«Далёкий ориентир»")
+
+    assert fallback == []
+    assert warning is None
+
+
+def test_landmark_fallback_none_when_no_candidate_coordinates(geo_ref_dir):
+    """Показать нечего (ни у кого нет координат) → ([], None), без ложного warning."""
+    criteria = Criteria(landmark_requirements=[_FAR_LANDMARK])
+    nogeo = [c for c in build_candidate_shortlist(criteria) if c.lat is None]
+    assert nogeo  # в фикстуре есть ЖК без координат
+
+    fallback, warning = landmark_nearest_fallback(nogeo, [_FAR_LANDMARK], "«Далёкий ориентир»")
+
+    assert fallback == []
+    assert warning is None

@@ -17,7 +17,13 @@ import re
 
 from rapidfuzz import fuzz, process
 
-from app.parsing.rules.core import Span, _normalize
+from app.parsing.rules.core import (
+    _DIST_NUM,
+    _DIST_UNIT,
+    Span,
+    _normalize,
+    _parse_distance_meters,
+)
 from app.parsing.schema import LandmarkRequirement
 from app.reference.loader import RefEntry, load_landmarks, normalize
 
@@ -40,6 +46,60 @@ _MARKER = (
     r")\s+"
 )
 _MARKER_PATTERN = re.compile(_MARKER)
+
+#: Суперлативный хвост, стоящий ПЕРЕД маркером близости: «самую ближайшую к»,
+#: «ближе всего к». Отличать суперлатив от обычного «рядом с» обязательно — он
+#: просит МИНИМУМ дистанции, а не попадание в радиус (см.
+#: LandmarkRequirement.nearest_only). Окончания перечислены явно, а не через
+#: ``сам\w+``: открытый стем цеплял бы «самолёта у аэропорта» (ср. guard
+#: ``школ(?!ьник)`` в rules/poi.py — та же линия «лексикой, а не порогом»).
+#: Совпадение расширяет consumed-span влево, иначе «самую» оседает в остатке и
+#: даёт ложный warning «не удалось распознать».
+#: «максимально»/«как можно» добавлены по живому прогону («максимально близко к
+#: МФТИ», «как можно ближе к МГУ»): семантически это тот же суперлатив, но без
+#: них признак не ставился, и запрос молча деградировал в радиус 5 км — а у МФТИ
+#: в радиусе 5 км нет ни одного ЖК, то есть пользователь получал пустую выдачу
+#: там, где правильный ответ существует.
+_SUPERLATIVE_PREFIX = re.compile(
+    r"(?:\b(?:сам(?:ый|ая|ую|ое|ые|ых|ым|ыми|ой|ому|ом)|наиболее|максимально)"
+    r"\s+(?:близк\w+\s+)?"
+    r"|\bближе\s+всего\s+|\bкак\s+можно\s+)$"
+)
+
+#: Тот же признак суперлатива, но без привязки к позиции маркера — для случая,
+#: когда ориентир достал ИИ, а не regex (склонения ниже SCORE_THRESHOLD:
+#: «бауманке» → QRatio 87.5). Без него ИИ-путь всегда давал nearest_only=False,
+#: и запрос молча деградировал в «рядом» (радиус 5 км).
+#: Guard `(?!\s+врем|\s+будущ)`: «сдача в ближайшее время» — это про срок, а не
+#: про дистанцию (лексикой, в духе `школ(?!ьник)` в rules/poi.py).
+_SUPERLATIVE_CUE = re.compile(
+    r"\b(?:ближайш\w+(?!\s+(?:врем|будущ))|ближе\s+всего|как\s+можно\s+ближе"
+    r"|(?:наиболее|максимально|сам(?:ый|ая|ую|ое|ые|ых|ым|ыми|ой|ому|ом))\s+близк\w+)"
+)
+
+
+def has_superlative_cue(text: str) -> bool:
+    """Есть ли в тексте признак суперлатива («самую ближайшую», «ближе всего»).
+
+    Нужен там, где ориентир пришёл не из этого правила (ИИ-экстрактор,
+    :func:`app.ai.enrichment.sanitize_landmark_resolution`), а признак
+    ``LandmarkRequirement.nearest_only`` выставить всё равно надо.
+    """
+    return _SUPERLATIVE_CUE.search(_normalize(text)) is not None
+
+
+#: Суффиксная дистанция ПОСЛЕ имени ориентира («рядом с МГУ не дальше 1 км»).
+#: Механизм общий с poi/station_class (`rules/core.py`), но маркер здесь —
+#: суженный: из `_DIST_MARKER` исключены «до» и вариант «без маркера вообще».
+#: Причина в коллизии с площадью: имя ориентира ищется нечётким окном, а не
+#: regex'ом, поэтому после него легко идёт «площадью до 45 метров» — и голое
+#: «до N метров» увело бы площадь в дистанцию (тот же класс, что «однушка у МЦД
+#: от 60 метров» = площадь, зафиксированный в station_class). Лучше не распознать
+#: дистанцию, чем украсть чужой фильтр.
+_LANDMARK_DIST_MARKER = r"(?:не\s+дальше|не\s+более|не\s+далее|в\s+пределах|максимум|в)"
+_DISTANCE_SUFFIX = re.compile(
+    rf"\s+{_LANDMARK_DIST_MARKER}\s*(?P<dist>{_DIST_NUM})\s*(?P<dist_unit>{_DIST_UNIT})"
+)
 
 #: Токен слова-кандидата после маркера (буквы/цифры/точка/дефис).
 _WORD = re.compile(r"[а-яёa-z0-9]+(?:[.-][а-яёa-z0-9]+)*")
@@ -123,15 +183,38 @@ def extract_landmark_requirements(text: str) -> tuple[list[LandmarkRequirement],
             continue
         seen_names.add(entry.name)
 
+        # Суперлатив: либо сам маркер («ближайшую к»), либо усилитель перед ним
+        # («самую ближайшую к», «ближе всего к» — там маркером работает голое
+        # «к», и признак виден только слева). Начало спана сдвигаем на усилитель.
+        start_offset = marker.start()
+        prefix = _SUPERLATIVE_PREFIX.search(norm[:start_offset])
+        nearest_only = prefix is not None or marker.group().startswith("ближайш")
+        if prefix is not None:
+            start_offset = prefix.start()
+
+        # Явная дистанция сразу за именем ориентира — расширяем спан на неё,
+        # иначе «не дальше 1 км» осядет в остатке ложным warning'ом. У poi/
+        # station_class дистанция входит в тот же regex и попадает в span
+        # бесплатно; здесь имя ищется нечётким окном, поэтому доклеиваем вручную.
+        max_distance_m: int | None = None
+        distance = _DISTANCE_SUFFIX.match(norm, end_offset)
+        if distance is not None:
+            max_distance_m = _parse_distance_meters(
+                distance.group("dist"), distance.group("dist_unit")
+            )
+            end_offset = distance.end()
+
         reqs.append(
             LandmarkRequirement(
                 name=entry.name,
                 lat=entry.lat,
                 lon=entry.lon,
                 category=entry.category,
-                raw_phrase=text[marker.start() : end_offset],
+                raw_phrase=text[start_offset:end_offset],
+                nearest_only=nearest_only,
+                max_distance_m=max_distance_m,
             )
         )
-        spans.append((marker.start(), end_offset))
+        spans.append((start_offset, end_offset))
 
     return reqs, spans

@@ -36,12 +36,15 @@ from app.geo.candidates import (
     build_candidate_shortlist,
     build_query_signature,
     fully_resolved,
+    landmark_nearest,
+    landmark_nearest_fallback,
     resolve_known_facts,
     station_class_nearest_fallback,
     station_class_points,
 )
-from app.parsing.schema import Criteria
-from app.reference.loader import load_option_groups, load_options, normalize
+from app.parsing.rules.landmark import has_superlative_cue
+from app.parsing.schema import Criteria, LandmarkRequirement
+from app.reference.loader import load_landmarks, load_option_groups, load_options, normalize
 
 #: fact_type для логирования сопоставлений «фраза → slug фильтра» в
 #: ai_structured_facts (переиспользуем карту памяти промпта 17). Промоушен этих
@@ -315,6 +318,58 @@ def sanitize_option_resolution(
     return resolved
 
 
+def sanitize_landmark_resolution(
+    answer: FreeTextCriteriaAnswer,
+    fragments: list[str],
+    nearest_only: bool = False,
+) -> list[LandmarkRequirement]:
+    """Превратить ответ модели по ориентирам в требования, взяв координаты из
+    ``landmarks.json``.
+
+    Тот же рубеж, что :func:`sanitize_option_resolution`: доверяем не строке
+    модели, а справочнику. Slug вне справочника — галлюцинация, отбрасывается
+    (фраза остаётся в ``warnings``). Записи без ``lat``/``lon`` пропускаем: без
+    координат гео-сужение физически невозможно (см.
+    :mod:`app.parsing.rules.landmark`), а выдумывать точку нельзя — инвариант
+    «LLM не считает дистанции».
+
+    ``phrase`` тоже проверяется — она обязана быть ОДНИМ ИЗ переданных модели
+    ``fragments``. Промпт этого требует, но требование без проверки ничего не
+    стоит: реальный slug, привязанный к произвольной фразе, иначе прошёл бы
+    насквозь и на любом шуме в остатке молча сузил бы выдачу по случайному
+    ориентиру.
+
+    ``nearest_only`` прокидывается из текста запроса
+    (:func:`app.parsing.rules.landmark.has_superlative_cue`): «самую ближайшую»
+    остаётся суперлативом, даже когда ориентир достал ИИ, а не regex.
+    """
+    by_slug = {e.slug: e for e in load_landmarks() if e.slug}
+    allowed_phrases = set(fragments)
+
+    requirements: list[LandmarkRequirement] = []
+    seen: set[str] = set()
+    for match in answer.landmarks:
+        if not match.slug or match.phrase not in allowed_phrases:
+            continue
+        entry = by_slug.get(match.slug)
+        if entry is None or entry.lat is None or entry.lon is None:
+            continue
+        if entry.name in seen:
+            continue
+        seen.add(entry.name)
+        requirements.append(
+            LandmarkRequirement(
+                name=entry.name,
+                lat=entry.lat,
+                lon=entry.lon,
+                category=entry.category,
+                raw_phrase=match.phrase,
+                nearest_only=nearest_only,
+            )
+        )
+    return requirements
+
+
 async def resolve_options(
     criteria: Criteria,
     option_candidates: list[str],
@@ -411,6 +466,7 @@ def _apply_free_text_answer(
     answer: FreeTextCriteriaAnswer,
     fragments: list[str],
     warnings: list[str],
+    text: str = "",
 ) -> bool:
     """Применить ответ экстрактора к criteria. Детерминированный слой выигрывает:
     заполняем ТОЛЬКО пустые поля; невалидное значение отбрасывает pydantic
@@ -436,6 +492,22 @@ def _apply_free_text_answer(
             except Exception as e:
                 logger.warning(f"free-text {field}={value!r} rejected: {e}")
 
+    # Ориентиры — единственное неcкалярное поле, доверенное экстрактору
+    # (Milestone AI-22). Как и везде: детерминированный слой выигрывает (пишем
+    # только в пустой список), координаты берёт справочник, а не модель.
+    accepted_landmark_phrases: set[str] = set()
+    if answer.landmarks and not criteria.landmark_requirements:
+        resolved_landmarks = sanitize_landmark_resolution(
+            answer, fragments, nearest_only=has_superlative_cue(text)
+        )
+        if resolved_landmarks:
+            try:
+                criteria.landmark_requirements = resolved_landmarks
+                accepted_landmark_phrases = {lm.raw_phrase for lm in resolved_landmarks}
+                changed = True
+            except Exception as e:
+                logger.warning(f"free-text landmarks rejected: {e}")
+
     # Булевы флаги — включаем только True поверх дефолтного False.
     for field in _FREE_TEXT_BOOL_FIELDS:
         if getattr(answer, field) and not getattr(criteria, field):
@@ -447,9 +519,15 @@ def _apply_free_text_answer(
 
     # Снимаем warning'и по фрагментам, которые модель заявила разобранными —
     # но только среди реально переданных ей fragments (не доверяем строке слепо).
+    # Фразы ориентиров, отбитых санитайзером, из снятия исключены: иначе хватало
+    # модели заодно угадать любое другое поле (changed=True), чтобы выдуманный
+    # ориентир исчез молча вместе со своей фразой — прямое нарушение инварианта 1.
+    rejected_landmark_phrases = {
+        m.phrase for m in answer.landmarks if m.phrase not in accepted_landmark_phrases
+    }
     if changed:
         for frag in answer.consumed_fragments:
-            if frag in fragments:
+            if frag in fragments and frag not in rejected_landmark_phrases:
                 stale = f"«{frag}{_UNRECOGNIZED_SUFFIX}"
                 if stale in warnings:
                     warnings.remove(stale)
@@ -496,7 +574,7 @@ async def resolve_free_text_criteria(
         logger.error(f"AI free-text extraction failed: {e}", exc_info=True)
         return FreeTextOutcome(called=True)
 
-    changed = _apply_free_text_answer(criteria, answer, fragments, warnings)
+    changed = _apply_free_text_answer(criteria, answer, fragments, warnings, text)
     return FreeTextOutcome(
         called=True,
         changed=changed,
@@ -543,6 +621,48 @@ def _differs_from_deterministic(result: EnrichmentResult, known: dict) -> bool:
     return set(result.matched_complex_ids) != set(known.get("matched_complex_ids", [])) or set(
         result.center_district_ids
     ) != set(known.get("center_district_ids", []))
+
+
+def _all_superlative(landmarks: list[LandmarkRequirement]) -> bool:
+    """Суперлативны ли ВСЕ ориентиры запроса («самую ближайшую к X»).
+
+    Именно «все», а не «хотя бы один»: смешанный запрос («рядом с МГУ и
+    ближайшую к Политеху») при `any()` отбрасывал радиусное требование целиком,
+    а warning утверждал «ближайшие к обоим», хотя ни один ЖК не может быть
+    ближайшим к обоим сразу.
+    """
+    return bool(landmarks) and all(lm.nearest_only for lm in landmarks)
+
+
+def _apply_superlative(
+    eligible: list[ComplexCandidate],
+    landmarks: list[LandmarkRequirement],
+    names: str,
+    warnings: list[str],
+) -> list[str]:
+    """id ближайших ЖК для суперлативного запроса + warning об этом.
+
+    Общий для обеих веток (ориентир один и ориентир вместе с POI/центром), чтобы
+    текст предупреждения и лимит жили в одном месте. ``eligible`` — кандидаты,
+    уже прошедшие остальные требования: суперлатив заменяет РАДИУС, а не весь
+    фильтр, поэтому сужать список обязан вызывающий, а не эта функция.
+    """
+    nearest_ids, nearest_m = landmark_nearest(eligible, landmarks)
+    if nearest_ids:
+        warnings.append(
+            f"ближайшие к {names}: у pik.ru такого фильтра нет — показаны "
+            f"{len(nearest_ids)} ближайших ЖК, от {nearest_m / 1000:.2f} км"
+        )
+    return nearest_ids
+
+
+def _warn_mixed_superlative(superlative: list[LandmarkRequirement], warnings: list[str]) -> None:
+    """Смешанный запрос: суперлатив не применяем, но и не проглатываем молча."""
+    sup_names = ", ".join(f"«{lm.name}»" for lm in superlative)
+    warnings.append(
+        f"«ближайшие к {sup_names}» вместе с другими ориентирами не "
+        f"поддерживается — все ориентиры учтены как «рядом»"
+    )
 
 
 async def enrich(
@@ -635,8 +755,23 @@ async def enrich(
     ):
         return await _log(EnrichmentResult.noop())
 
-    candidates = build_candidate_shortlist(criteria)
+    candidates = build_candidate_shortlist(criteria, warnings)
     if not candidates:
+        # Ориентир с явной дистанцией мог законно обнулить шорт-лист
+        # (`_rank_by_landmark` применяет max_distance_m как жёсткую отсечку).
+        # Это НЕ отказ ИИ: ai_failed=True по контракту означает «попытка была и
+        # упала», а здесь модель не звали вовсе. Плюс «Список кандидатов пуст»
+        # пользователю ничего не объясняет — называем ориентир и дистанцию.
+        if criteria.landmark_requirements:
+            landmark_names = ", ".join(f"«{lm.name}»" for lm in criteria.landmark_requirements)
+            declared = [
+                lm.max_distance_m
+                for lm in criteria.landmark_requirements
+                if lm.max_distance_m is not None
+            ]
+            limit_note = f" в пределах {min(declared)} м" if declared else ""
+            warnings.append(f"рядом с {landmark_names}{limit_note} подходящих ЖК не найдено")
+            return await _log(EnrichmentResult.noop())
         warnings.append("Список кандидатов пуст")
         return await _log(EnrichmentResult.failed())
 
@@ -645,6 +780,20 @@ async def enrich(
     # fully_resolved() вычисляется ВСЕГДА (даже пока гейт 2 закомментирован) —
     # это и есть измерение «что было бы, если включить гейт 2».
     log_fields["fully_resolved_deterministically"] = fully_resolved(known, criteria, candidates)
+
+    # «В центре» не выполнимо в принципе — говорим об этом прямо. Замер по
+    # справочникам: у ЖК ПИК встречаются округа ВАО/ЗАО/САО/СВАО/СЗАО/ЮАО/ЮВАО/
+    # ЮЗАО/Новомосковский/Щербинка, ЦАО отсутствует полностью; из районов ЦАО в
+    # districts.json есть только Таганский, и ЖК в нём тоже нет. Это факт
+    # портфеля застройщика (тот же класс, что «внутри Садового кольца новостроек
+    # ПИК нет» из AI-18), а не пробел справочника, поэтому лечится честным
+    # предупреждением, а не проставлением is_center. Без него требование
+    # «в центре» исчезало совсем молча: matched пуст, а причина неизвестна.
+    if criteria.center_requested and not any(c.is_center for c in candidates):
+        warnings.append(
+            "«в центре»: у pik.ru нет новостроек в центральных районах Москвы — "
+            "требование не применено"
+        )
 
     # Сужение по ориентиру («рядом с МГУ» и т.п.) — чистая математика
     # (haversine на lat/lon, см. app/geo/candidates.resolve_known_facts), а не
@@ -671,16 +820,90 @@ async def enrich(
             )
             return await _log(EnrichmentResult.noop())
 
-        if not known["matched_complex_ids"]:
+        matched_complex_ids = known["matched_complex_ids"]
+
+        # Суперлатив («самую ближайшую к Политеху») — не радиус, а минимум
+        # дистанции (Milestone AI-22). resolve_known_facts выше отвечает на
+        # вопрос «в радиусе ли», а спрошено было другое, поэтому его ответ здесь
+        # заменяется целиком: и когда радиус пуст (ближайший дальше 5 км), и
+        # когда в него попало полгорода (все «рядом», но спрошены ближайшие).
+        # ВСЕ ориентиры суперлативные — только тогда меняем семантику. Смешанный
+        # запрос («рядом с МГУ и ближайшую к Политеху») раньше проходил по `any`
+        # и отбрасывал радиусное требование целиком, а warning утверждал
+        # «ближайшие к обоим», хотя ни один ЖК не ближайший к обоим сразу.
+        superlative = [lm for lm in criteria.landmark_requirements if lm.nearest_only]
+        if _all_superlative(criteria.landmark_requirements):
+            # Здесь сужать нечем — POI/центра в этой ветке по условию нет, поэтому
+            # «прошедшие остальные требования» это и есть все кандидаты. Пусто
+            # бывает, только если координат нет вовсе или явная дистанция отсекла
+            # всё — тогда честный warning ниже по общему пути.
+            matched_complex_ids = _apply_superlative(
+                candidates, criteria.landmark_requirements, names, warnings
+            )
+        else:
+            if superlative:
+                _warn_mixed_superlative(superlative, warnings)
+
+            if not matched_complex_ids:
+                # Обычное «рядом с X», радиус дал пусто — осмысленная деградация
+                # вместо тишины, ровно как у станций класса ниже (Milestone AI-18).
+                # Фолбэк сам вернёт ([], None), если задана явная дистанция: тогда
+                # это жёсткая отсечка, и пустой ответ правильный.
+                fallback_candidates, fallback_warning = landmark_nearest_fallback(
+                    candidates, criteria.landmark_requirements, names
+                )
+                if fallback_warning:
+                    warnings.append(fallback_warning)
+                    matched_complex_ids = [c.id for c in fallback_candidates]
+
+        if not matched_complex_ids:
             warnings.append(f"рядом с {names} подходящих ЖК не найдено")
 
         result = EnrichmentResult(
             ai_used=False,
             cache_hit=False,
             success=True,
-            matched_complex_ids=known["matched_complex_ids"],
+            matched_complex_ids=matched_complex_ids,
         )
         return await _log(result)
+
+    # Ориентир В КОМБИНАЦИИ с POI/центром: ветка выше пропущена по условию, но
+    # радиус ориентира уже применён внутри resolve_known_facts. Если он не
+    # оставил ни одного ЖК — сказать об этом надо здесь и сейчас: дальше по коду
+    # пустой matched неотличим от «ИИ ничего не нашёл», и требование «рядом с X»
+    # исчезало совсем молча. Один и тот же запрос вёл себя противоположно в
+    # зависимости от того, добавил ли пользователь «со школой рядом»
+    # (инвариант 1: ничего не отбрасывается молча).
+    if criteria.landmark_requirements:
+        landmark_names = ", ".join(f"«{lm.name}»" for lm in criteria.landmark_requirements)
+        superlative = [lm for lm in criteria.landmark_requirements if lm.nearest_only]
+
+        if _all_superlative(criteria.landmark_requirements):
+            # Суперлатив теряется здесь исторически: признак nearest_only читала
+            # ТОЛЬКО ветка выше, закрытая условием `not poi_requirements`. Живой
+            # прогон «трёшка ближайшая к Политеху … рядом детские сады»: признак
+            # выставлен парсером, но запрос молча деградировал в радиус 5 км. На
+            # данных справочника трактовки расходятся у 45 ориентиров из 50, а у
+            # МГИМО/МФТИ/ХХС радиус даёт 0 ЖК там, где суперлатив даёт 3.
+            #
+            # resolve_known_facts ответил на вопрос «в радиусе ли», а спрошен был
+            # минимум дистанции — поэтому пересчитываем. Кандидатов сужаем теми же
+            # requirements, но БЕЗ ориентира: POI/центр/класс станций остаются
+            # обязательными (суперлатив заменяет радиус, а не весь фильтр), а
+            # радиусная отсечка ориентира уходит.
+            without_landmarks = criteria.model_copy(update={"landmark_requirements": []})
+            eligible_ids = set(
+                resolve_known_facts(candidates, without_landmarks)["matched_complex_ids"]
+            )
+            eligible = [c for c in candidates if c.id in eligible_ids]
+            known["matched_complex_ids"] = _apply_superlative(
+                eligible, criteria.landmark_requirements, landmark_names, warnings
+            )
+        elif superlative:
+            _warn_mixed_superlative(superlative, warnings)
+
+        if not known["matched_complex_ids"]:
+            warnings.append(f"рядом с {landmark_names} подходящих ЖК не найдено")
 
     # Сужение по классу станций («рядом с МЦД не важно какой станции», «у
     # любого метро» — Milestone AI-15) — то же обобщение ориентира на КЛАСС

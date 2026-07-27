@@ -31,6 +31,24 @@ SHORTLIST_LIMIT = 50
 #: ещё и его) остаётся выбор шире одного жёсткого радиуса.
 LANDMARK_DEFAULT_RADIUS_M = CENTER_RADIUS_M
 
+#: Сколько ближайших ЖК отдавать на СУПЕРЛАТИВНЫЙ запрос («самую ближайшую к
+#: Политеху»), см. :func:`landmark_nearest_ids`. Буквальный ответ — один ЖК, но
+#: ЖК ≠ квартира: сверху ещё лягут комнатность/цена/этаж, и единственный
+#: «ближайший» дом легко даёт нулевую выдачу — ровно ту бесполезность, ради
+#: борьбы с которой заведён STATION_CLASS_FALLBACK_LIMIT. N=3 — компромисс:
+#: пользователь видит именно ближайшие варианты (а не «районные» полгорода в
+#: радиусе 5 км) и всё же имеет из чего выбрать. Эвристика, требующая
+#: калибровки на живых прогонах, а не точная величина.
+LANDMARK_NEAREST_LIMIT = 3
+
+#: Сколько ближайших ЖК показывать, когда обычное «рядом с X» дало пусто в
+#: радиусе по умолчанию (:func:`landmark_nearest_fallback`). Здесь пользователь
+#: НЕ просил минимума дистанции — он просил «рядом», и мы честно сообщаем, что
+#: рядом ничего нет, показывая варианты пошире. Отсюда лимит больше, чем у
+#: суперлатива, и совпадает со станционным STATION_CLASS_FALLBACK_LIMIT: тот же
+#: повод (осмысленная деградация вместо тишины) — тот же масштаб выборки.
+LANDMARK_FALLBACK_LIMIT = 8
+
 #: Радиус «рядом» по умолчанию для класса станций (Milestone AI-15: «рядом с
 #: МЦД не важно какой станции», «у любого метро») — тот же детерминированный
 #: механизм (haversine), что и у ориентиров выше, но точка не одна, а ближайшая
@@ -149,7 +167,16 @@ def _location_filter(criteria: Criteria) -> set[str] | None:
     return names or None
 
 
-def build_candidate_shortlist(criteria: Criteria) -> list[ComplexCandidate]:
+def build_candidate_shortlist(
+    criteria: Criteria, warnings: list[str] | None = None
+) -> list[ComplexCandidate]:
+    """Шорт-лист ЖК-кандидатов для гео-сужения.
+
+    ``warnings`` необязателен (много вызовов в тестах обходятся без него), но
+    вызывающий рантайм обязан его передавать: при откате гео-фильтра на
+    общегородской список пользователь должен узнать, что его локация не
+    применилась (инвариант 1) — см. :func:`_get_candidates` ниже.
+    """
     ref_data = load_all()
     poi_cache_path = DATA_DIR / "poi_cache.json"
     poi_cache = json.loads(poi_cache_path.read_text("utf-8")) if poi_cache_path.exists() else {}
@@ -215,9 +242,23 @@ def build_candidate_shortlist(criteria: Criteria) -> list[ComplexCandidate]:
     candidates = _get_candidates(location_names)
 
     # Fallback: если жесткий гео-фильтр отсёк всех кандидатов (например, ложное
-    # срабатывание fuzzy-поиска метро), пробуем без него.
+    # срабатывание fuzzy-поиска метро), пробуем без него. Молчать при этом
+    # нельзя: пользователь просил «в Митино», получает варианты со всего города,
+    # и без предупреждения выдача выглядит как ответ на его запрос (инвариант 1 —
+    # ничего не отбрасывается молча). Именно так «ближайшие среди митинских»
+    # незаметно становились «ближайшими вообще».
     if not candidates and location_names is not None and not allowed_ids:
         candidates = _get_candidates(None)
+        if warnings is not None and candidates:
+            requested = ", ".join(
+                f"«{e.name}»"
+                for field in ("districts", "counties", "metro")
+                for e in getattr(criteria, field)
+            )
+            warnings.append(
+                f"ЖК с привязкой к {requested} в справочнике нет — "
+                f"локация не применена, показаны варианты по всему городу"
+            )
 
     if rank_by_landmark:
         candidates = _rank_by_landmark(candidates, criteria.landmark_requirements)
@@ -262,6 +303,115 @@ def _rank_by_landmark(
     if max_distance is None:
         ranked.extend(unknown)
     return ranked
+
+
+def _landmark_distances(
+    candidates: list[ComplexCandidate], landmarks: list[LandmarkRequirement]
+) -> list[tuple[float, ComplexCandidate]]:
+    """Дистанции (метры) до БЛИЖАЙШЕГО из ориентиров, по возрастанию.
+
+    Аналог :func:`_station_class_distances`. Кандидаты без координат или без
+    ``id`` в расчёт не берутся: «ближайшим» их назвать нечем, а без ``id`` они
+    всё равно не попадут в ``blocks=``. Явный ``max_distance_m`` (минимальный
+    среди требований — самое строгое) остаётся жёсткой отсечкой.
+    """
+    if not landmarks:
+        # Публичная точка входа: без ориентиров считать нечего, а `min()` по
+        # пустой последовательности внутри цикла упал бы ValueError.
+        return []
+
+    max_distance = min(
+        (lm.max_distance_m for lm in landmarks if lm.max_distance_m is not None),
+        default=None,
+    )
+
+    scored: list[tuple[float, ComplexCandidate]] = []
+    for c in candidates:
+        if c.lat is None or c.lon is None or not c.id:
+            continue
+        dist = min(haversine(lm.lat, lm.lon, c.lat, c.lon) for lm in landmarks)
+        if max_distance is not None and dist > max_distance:
+            continue
+        scored.append((dist, c))
+
+    scored.sort(key=lambda pair: pair[0])
+    return scored
+
+
+def landmark_nearest_ids(
+    candidates: list[ComplexCandidate],
+    landmarks: list[LandmarkRequirement],
+    limit: int = LANDMARK_NEAREST_LIMIT,
+) -> list[str]:
+    """id ближайших к ориентиру ЖК для суперлативного запроса (Milestone AI-22).
+
+    «Самую ближайшую к Политеху» — это не «рядом с Политехом»:
+    :data:`LANDMARK_DEFAULT_RADIUS_M` тут не применяется вовсе. Пользователь
+    просит МИНИМУМ дистанции, и ответ существует всегда, пока есть хоть один ЖК
+    с координатами — даже если ближайший лежит за «районным» радиусом. Радиусная
+    трактовка на живом прогоне давала одно из двух: полгорода в 5 км либо пустую
+    выдачу там, где рядом действительно ничего нет.
+
+    Явный ``max_distance_m`` («ближайшую в пределах 3 км») остаётся жёсткой
+    отсечкой — то же правило, что у :func:`station_class_nearest_fallback`:
+    заданная пользователем дистанция сильнее эвристики. Кандидаты без координат
+    пропускаются — «ближайшим» их назвать нечем. Усечение до ``limit`` — ПОСЛЕ
+    сортировки (инвариант 13).
+    """
+    ids, _nearest_m = landmark_nearest(candidates, landmarks, limit)
+    return ids
+
+
+def landmark_nearest(
+    candidates: list[ComplexCandidate],
+    landmarks: list[LandmarkRequirement],
+    limit: int = LANDMARK_NEAREST_LIMIT,
+) -> tuple[list[str], float | None]:
+    """То же, что :func:`landmark_nearest_ids`, плюс дистанция до ближайшего (м).
+
+    Дистанция нужна вызывающему коду для честного warning'а: «показаны
+    ближайшие» без числа скрывает от пользователя, что «ближайший» — за 23 км
+    (инвариант 14 — дистанции реальные, не шаблонный текст).
+    """
+    scored = _landmark_distances(candidates, landmarks)
+    if not scored:
+        return [], None
+    return [c.id for _dist, c in scored[:limit]], scored[0][0]
+
+
+def landmark_nearest_fallback(
+    candidates: list[ComplexCandidate],
+    landmarks: list[LandmarkRequirement],
+    names: str,
+) -> tuple[list[ComplexCandidate], str | None]:
+    """N ближайших ЖК, когда в радиусе «рядом с X» не нашлось ни одного.
+
+    Полный аналог :func:`station_class_nearest_fallback` (Milestone AI-18), но
+    точка — конкретный ориентир: пустая выдача формально верна (инвариант
+    «ничего не теряется» соблюдён — warning есть), но бесполезна пользователю,
+    если ЖК просто лежат чуть дальше «районного» радиуса.
+
+    Отличие от :func:`landmark_nearest_ids` — в поводе, а не в математике: там
+    суперлатив («самую ближайшую»), где радиус не применяется НИКОГДА; здесь
+    обычное «рядом с X», где радиус применён и дал пусто. Явная
+    ``max_distance_m`` — жёсткая отсечка: фолбэк не запускается, и прежнее
+    поведение (пусто + честный warning) остаётся правильным ответом.
+
+    Возвращает ``(кандидаты, warning)``; усечение до лимита — ПОСЛЕ сортировки.
+    """
+    if any(lm.max_distance_m is not None for lm in landmarks):
+        return [], None
+
+    scored = _landmark_distances(candidates, landmarks)
+    if not scored:
+        return [], None
+
+    nearest = scored[:LANDMARK_FALLBACK_LIMIT]
+    warning = (
+        f"в радиусе {LANDMARK_DEFAULT_RADIUS_M / 1000:g} км от {names} ЖК нет; "
+        f"показаны ближайшие — от {nearest[0][0] / 1000:.2f} км"
+    )
+    return [c for _dist, c in nearest], warning
 
 
 def _rank_by_station_class(

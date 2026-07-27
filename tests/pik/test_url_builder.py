@@ -156,3 +156,59 @@ def test_build_url_other_query_params():
     assert "options=vidNaVodu" in url
     assert "type=1" in url
     assert "status=free" in url
+
+
+# ---------------------------------------------------------------------------
+# Гео-фолбэк ПЕРЕСЕКАЕТСЯ с уже выбранными ЖК, а не объединяется с ними
+# ---------------------------------------------------------------------------
+#
+# Найдено при проверке отчёта по сложному корпусу: «двушку внутри МКАД около
+# Патриарших прудов» давало 8 ЖК от ориентира ∪ 27 ЖК внутри МКАД = все 27, то
+# есть более узкое требование «около Патриарших» исчезало молча. Объединение не
+# складывало два сужения одной и той же оси («какие ЖК»), а стирало сильнейшее —
+# тот же класс дефекта, что потеря суперлатива при POI.
+
+
+def test_geo_fallback_intersects_with_selected_complexes():
+    """ЖК внутри МКАД + он же выбран семантикой запроса → остаётся один, не 27."""
+    from app.geo.candidates import complexes_in_mkad
+
+    inside = complexes_in_mkad(True)
+    assert inside, "нет ЖК внутри МКАД — тест потерял смысл, проверь mkad_ring.json"
+    chosen = inside[0]
+
+    url = build_url(Criteria(within_mkad=True, complexes=[MatchedEntity(name="X", id=chosen)]))
+
+    assert f"blocks={chosen}&" in url or url.endswith(f"blocks={chosen}")
+
+
+def test_geo_fallback_empty_intersection_warns_and_keeps_specific():
+    """Несовместимые гео-условия: не расширяемся до объединения, а предупреждаем.
+
+    Расширение и было багом. Оставляем более специфичный список (тот, что пришёл
+    из семантики запроса), и говорим об этом вслух — инвариант 1.
+    """
+    from app.geo.candidates import complexes_in_mkad
+
+    outside = complexes_in_mkad(False)
+    assert outside, "нет ЖК за МКАД — тест потерял смысл"
+    chosen = outside[0]
+    warnings: list[str] = []
+
+    # ЖК заведомо ЗА МКАД, а запрос требует ВНУТРИ — пересечение пусто.
+    url = build_url(
+        Criteria(within_mkad=True, complexes=[MatchedEntity(name="X", id=chosen)]), warnings
+    )
+
+    assert f"blocks={chosen}" in url
+    assert any("не пересекаются" in w for w in warnings)
+
+
+def test_geo_fallback_alone_still_fills_blocks():
+    """Без выбранных ЖК фолбэк по-прежнему наполняет blocks целиком."""
+    from app.geo.candidates import complexes_in_mkad
+
+    url = build_url(Criteria(within_mkad=True))
+
+    assert "blocks=" in url
+    assert len(url.split("blocks=")[1].split("&")[0].split(",")) == len(complexes_in_mkad(True))
