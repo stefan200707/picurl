@@ -12,7 +12,9 @@
 - **ИИ-обогащение (опционально)**: подключение LLM (Antigravity / Gemini или Claude) для сложного пространственного и контекстного поиска ("рядом с школами", "в центре Москвы").
 - **Самообучение**: накопление знаний в векторной памяти (`pgvector`) и их автоматический промоушен в быстрые локальные справочники.
 
-Подробное пошаговое руководство по настройке вы найдете в **[SETUP.md](file:///Users/stefan/Desktop/picurl/SETUP.md)**.
+Подробное пошаговое руководство по настройке вы найдете в **[SETUP.md](SETUP.md)**, а
+пошаговый онбординг именно по ИИ-обогащению через Antigravity (Gemini) — в
+**[ENABLE_ANTIGRAVITY.md](ENABLE_ANTIGRAVITY.md)**.
 
 ---
 
@@ -26,19 +28,23 @@ uv sync
 ```
 
 ### 2. Запуск базы данных (для ИИ-обогащения)
-Запустите PostgreSQL с расширением `pgvector` через Docker:
+ИИ-обогащение — опциональный слой; базовый пайплайн (парсинг → URL → валидация)
+работает без БД. Если он нужен, запустите PostgreSQL с расширением `pgvector`
+через Docker и накатите обе миграции (карта памяти + наблюдаемость вызовов ИИ):
 ```bash
 docker compose up -d postgres
 docker exec -i picurl-postgres psql -U postgres -d picurl_ai < app/ai/migrations/01_memory_tables.sql
+docker exec -i picurl-postgres psql -U postgres -d picurl_ai < app/ai/migrations/02_ai_call_log.sql
 ```
 
 ### 3. Настройка окружения (`.env`)
-Создайте файл `.env` в корне проекта:
+Создайте файл `.env` в корне проекта (полный список переменных — в `SETUP.md`):
 ```env
 AI_ENRICHMENT_ENABLED=true
 AI_PROVIDER=antigravity
 AI_MODEL_NAME=gemini-3.5-flash
 DATABASE_URL=postgresql://postgres:password@localhost:5432/picurl_ai
+INTERNAL_REFRESH_TOKEN=your_super_secret_token_here
 ```
 
 ### 4. Запуск сервера
@@ -85,7 +91,8 @@ uv run pytest
 ### Проверка и форматирование кода
 ```bash
 uv run ruff check
-uv run ruff format
+uv run ruff format          # автоформатирование
+uv run ruff format --check  # только проверка (как в CI)
 ```
 
 ### Обновление справочников
@@ -96,10 +103,19 @@ uv run python -m app.reference.refresh
 # Гео-данные POI (парки, школы из OpenStreetMap)
 uv run python -m app.geo.refresh_poi
 ```
+Тот же скрипт `refresh` доступен и по HTTP: `POST /internal/refresh-dicts` с
+заголовком `X-Internal-Token`, совпадающим с `INTERNAL_REFRESH_TOKEN` из `.env`.
 
 ### Промоушен знаний ИИ (Самообучение)
 ```bash
-uv run python -m app.ai.promotion
+uv run python -m app.ai.promotion            # промоушен фактов/алиасов в JSON-справочники
+uv run python -m app.ai.promotion --report   # только отчёт по неоднозначным алиасам
+```
+
+### Наблюдаемость вызовов ИИ
+```bash
+uv run python -m app.ai.usage_report            # сколько запросов дошло до ИИ, cache-hit, польза
+uv run python -m app.ai.usage_report --days 7    # за последние N дней
 ```
 
 ---
@@ -109,17 +125,27 @@ uv run python -m app.ai.promotion
 ```text
 .
 ├── app/
-│   ├── main.py            # Точка входа FastAPI, эндпоинт POST /build-url
-│   ├── api/               # Pydantic-модели API (schemas.py) и роуты
-│   ├── ai/                # ИИ-слой (клиенты LLM, промоушен, векторы, миграции)
-│   ├── geo/               # Гео-вычисления и интеграция с OpenStreetMap POI
-│   ├── knowledge_base/    # Хранилище векторных знаний
-│   ├── parsing/           # Regex-правила извлечения фактов и fuzzy-матчер
-│   ├── reference/         # Локальные JSON-справочники + скрипт обновления
-│   └── pik/               # url_builder (генератор URL) и validator (проверка)
-├── tests/                 # Автоматические unit и E2E тесты
-├── docs/                  # Документация (URL-схема, архитектура ИИ)
-├── SETUP.md               # Подробная инструкция по развертыванию
-└── ENABLE_ANTIGRAVITY.md  # Инструкция по настройке провайдера Antigravity
+│   ├── main.py           # Точка входа FastAPI-приложения, health-роут
+│   ├── config.py         # pydantic-settings: чтение .env (AI_*, DATABASE_URL, токены)
+│   ├── api/              # endpoints.py (POST /build-url, /internal/refresh-dicts),
+│   │                     # schemas.py (BuildUrlRequest/BuildUrlResponse)
+│   ├── ai/               # ИИ-слой: client.py (Claude/Antigravity), enrichment.py,
+│   │                     # prompts.py, embeddings.py, memory.py (pgvector),
+│   │                     # promotion.py (самообучение), usage_report.py (наблюдаемость),
+│   │                     # migrations/ (SQL-миграции)
+│   ├── geo/              # distance.py (haversine), poi.py/refresh_poi.py (OSM),
+│   │                     # candidates.py (шорт-лист ЖК для ИИ)
+│   ├── knowledge_base/   # Заготовка для локального векторного хранилища/весов
+│   ├── parsing/          # schema.py (Criteria), parser.py (фасад parse),
+│   │                     # entity_match.py (rapidfuzz), rules/ (regex-правила), stopwords.py
+│   ├── reference/        # *.json справочники (метро/округа/районы/ЖК/опции/ориентиры)
+│   │                     # + loader.py, refresh.py
+│   └── pik/              # url_builder.py (генератор URL) и validator.py (проверка)
+├── tests/                # pytest: parsing/, reference/, geo/, ai/, pik/, api/,
+│                         # integration/ (E2E), test_health.py (smoke)
+├── docs/                 # pik-url-schema.md (URL-схема), ai-enrichment-architecture.md
+├── prompts/              # Декомпозиция задачи на пронумерованные промпты сборки
+├── SETUP.md              # Подробная инструкция по развертыванию
+└── ENABLE_ANTIGRAVITY.md # Инструкция по настройке провайдера Antigravity
 ```
 
