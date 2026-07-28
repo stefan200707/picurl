@@ -20,18 +20,48 @@ UNVERIFIED_LOCATION_PARAMS: tuple[str, ...] = (
     "districtCounties",
 )
 
-#: НЕлокационные параметры, которые бэкенд игнорирует так же молча (живые замеры
-#: 2026-07-27): ``blocks=477&rooms=1`` → 54; ``+settlementYearFrom=2030&
-#: settlementYearTo=2031`` → 54; ``+finish=0`` → 54. Контроль, что бэкенд не
-#: «сломан вообще»: ``blocks=411&timeOnFoot=12`` → 0 — то есть игнорируются именно
-#: эти параметры. Без них ``validate()`` выдавал за полноценную проверку число,
-#: не учитывающее 2 из 6 фильтров ссылки — ровно то нарушение инварианта, ради
+#: НЕлокационные параметры, которые бэкенд игнорирует так же молча. Живые замеры
+#: 2026-07-28 (без прочих фильтров, baseline = 8191): ``settlementYearFrom=2030&
+#: settlementYearTo=2031`` → 8191; ``settlementYearFrom=2026&settlementYearTo=2026``
+#: → 8191; ``settlementMonthFrom=1&settlementMonthTo=2`` → 8191;
+#: ``settlementMonthFrom=12&settlementMonthTo=12`` → 8191. Контроль, что бэкенд не
+#: «сломан вообще»: ``timeOnFoot=5`` → 1985 — то есть игнорируются именно эти
+#: параметры. Без них ``validate()`` выдавал за полноценную проверку число, не
+#: учитывающее часть фильтров ссылки — ровно то нарушение инварианта, ради
 #: которого константа и заведена.
+#:
+#: ``settlementMonthFrom``/``To`` дописаны 2026-07-28: ``to_query_dict()`` шлёт их
+#: наравне с годом, и игнорируются они так же — отсутствие в константе было
+#: пробелом, а не решением.
+#:
+#: ``finish`` из константы УБРАН (2026-07-28): он попал сюда по итогам замера,
+#: который на самом деле мерил нашу опечатку — валидатор слал ``finish=1``, а
+#: пользовательская ссылка ``hasFinish``. Параметра ``finish`` бэкенд не знает,
+#: поэтому и «игнорировал» (``finish=2`` → 8191 = baseline). Настоящий
+#: ``hasFinish`` он применяет — см. HAS_FINISH_VERIFIABLE_VALUES.
 UNVERIFIED_NON_LOCATION_PARAMS: tuple[str, ...] = (
-    "finish",
     "settlementYearFrom",
     "settlementYearTo",
+    "settlementMonthFrom",
+    "settlementMonthTo",
 )
+
+#: Значения ``hasFinish``, которые ``api.pik.ru/v2/filter`` РЕАЛЬНО применяет —
+#: и только по одному за запрос. Живые замеры 2026-07-28, baseline = 8191:
+#: ``hasFinish=1`` → 6791, ``hasFinish=2`` → 1318, ``hasFinish=3`` → 0.
+#:
+#: Ноль в набор не входит: ``hasFinish=0`` → 8191, ровно как заведомый мусор
+#: ``hasFinish=9`` и ``hasFinish=abc``. Мусор возвращает baseline, а не ноль —
+#: именно поэтому ``hasFinish=3`` → 0 читается как «фильтр применён, квартир
+#: нет», а не «значение не понято».
+#:
+#: Списка бэкенд тоже не понимает: ``hasFinish=1,2`` → 8191 (а не 6791+1318).
+#: Ловушка: ``hasFinish=0,1`` → 6791 и ``hasFinish=0,2`` → 1318, то есть
+#: отдельные списки он всё же применяет — но НЕ как OR, а как одно значение.
+#: Поэтому непроверяемый случай (ноль или несколько значений) в запрос не
+#: отправляется вовсе: молчаливое сужение count не тем фильтром хуже, чем
+#: честное «не проверено».
+HAS_FINISH_VERIFIABLE_VALUES: frozenset[int] = frozenset({1, 2, 3})
 
 #: Все параметры, не отражённые в ``result_count``. Если хоть один уходит в
 #: запрос, соответствующий фильтр НЕ отражён в count — это не «квартиры не
@@ -164,8 +194,23 @@ async def validate(criteria: Criteria, client: httpx.AsyncClient) -> ValidationR
         params["rooms"] = ",".join(r.id for r in criteria.rooms)
 
     # 2. Отделка и заселение
+    #
+    # Имя параметра — ``hasFinish``, то же самое, что уходит в пользовательскую
+    # ссылку (``url_builder``). Раньше здесь стояло ``finish="1"``: имя не то,
+    # да ещё и значение захардкожено единицей независимо от criteria.finish.
+    # Бэкенд такого параметра не знает — отделка считалась непроверяемой всегда.
+    #
+    # Отправляем ровно то, что бэкенд применяет: одиночное значение 1|2|3.
+    # Ноль и списки он либо игнорирует, либо применяет не как OR (см.
+    # HAS_FINISH_VERIFIABLE_VALUES) — такие случаи не отправляем и помечаем
+    # непроверенными.
+    finish_not_verified = False
     if criteria.finish:
-        params["finish"] = "1"
+        values = [int(f.value) for f in criteria.finish]
+        if len(values) == 1 and values[0] in HAS_FINISH_VERIFIABLE_VALUES:
+            params["hasFinish"] = str(values[0])
+        else:
+            finish_not_verified = True
     if criteria.ready is True:
         params["ready"] = "1"
 
@@ -205,10 +250,15 @@ async def validate(criteria: Criteria, client: httpx.AsyncClient) -> ValidationR
     location_filters_not_verified = any(key in params for key in UNVERIFIED_LOCATION_PARAMS)
     unverified_present = [key for key in UNVERIFIED_NON_LOCATION_PARAMS if key in params]
     labels: list[str] = []
-    if "finish" in unverified_present:
+    # Отделка — единственный из непроверяемых, чей признак НЕ «параметр ушёл в
+    # запрос»: проверяемое значение мы отправляем, непроверяемое не отправляем
+    # вовсе (см. HAS_FINISH_VERIFIABLE_VALUES), поэтому признак — отдельный флаг.
+    if finish_not_verified:
         labels.append("отделку")
-    if any(key.startswith("settlementYear") for key in unverified_present):
-        labels.append("год заселения")
+    # «Срок», а не «год»: месяцы заселения бэкенд игнорирует наравне с годами,
+    # и запрос может нести только их.
+    if any(key.startswith("settlement") for key in unverified_present):
+        labels.append("срок заселения")
 
     def compose_warnings(*, validated: bool) -> list[str]:
         """Собирает предупреждения ОБЕИХ веток из одних и тех же фактов.

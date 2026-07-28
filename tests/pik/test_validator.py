@@ -200,7 +200,9 @@ async def test_validate_failure_names_the_check_that_was_actually_lost():
     def fail(_request: httpx.Request) -> httpx.Response:
         raise httpx.ConnectError("unreachable")
 
-    criteria = Criteria(rooms=[Rooms.ONE], finish=[Finish.READY])
+    # Отделка ДВУМЯ значениями: одиночную бэкенд проверяет (hasFinish=1|2|3),
+    # а список — нет, и именно она остаётся вечно непроверяемой.
+    criteria = Criteria(rooms=[Rooms.ONE], finish=[Finish.READY, Finish.WHITE_BOX])
     result = await validate(criteria, make_mock_client(fail))
 
     loss = next(w for w in result.warnings if w.startswith("выдача не проверена"))
@@ -259,13 +261,14 @@ def test_build_url_publishes_geo_fallback_notes_without_network():
 
 @pytest.mark.asyncio
 async def test_validate_reports_finish_and_settlement_year_as_unverified():
-    """D6: бэкенд ИГНОРИРУЕТ ``finish`` и ``settlementYear*`` — молчать нельзя.
+    """D6: срок заселения бэкенд ИГНОРИРУЕТ, список отделок не применяет.
 
-    Живой замер (2026-07-27): ``blocks=477&rooms=1`` → 54;
-    ``+settlementYearFrom=2030&settlementYearTo=2031`` → 54; ``+finish=0`` → 54.
-    Контроль, что бэкенд не «сломан вообще»: ``blocks=411&timeOnFoot=12`` → 0.
-    Значит result_count не учитывает 2 фильтра ссылки и выдавать его за
-    полноценную проверку — то же нарушение, ради которого константа и заведена.
+    Живые замеры 2026-07-28 (baseline = 8191): ``settlementYearFrom=2030&
+    settlementYearTo=2031`` → 8191; ``settlementMonthFrom=1&settlementMonthTo=2``
+    → 8191; ``hasFinish=1,2`` → 8191 (а не 6791+1318). Контроль, что бэкенд не
+    «сломан вообще»: ``timeOnFoot=5`` → 1985. Значит result_count не учитывает
+    эти фильтры ссылки, и выдавать его за полноценную проверку — то же
+    нарушение, ради которого константа и заведена.
     """
     from app.parsing.schema import Finish
 
@@ -275,7 +278,7 @@ async def test_validate_reports_finish_and_settlement_year_as_unverified():
     client = make_mock_client(handler)
     criteria = Criteria(
         rooms=[Rooms.ONE],
-        finish=[Finish.READY],
+        finish=[Finish.READY, Finish.WHITE_BOX],
         settlement_year_from=2026,
         settlement_year_to=2027,
     )
@@ -285,9 +288,59 @@ async def test_validate_reports_finish_and_settlement_year_as_unverified():
     assert result.result_count == 71
     # Оба ярлыка — в ОДНОМ элементе: это один факт «бэкенд игнорирует вот эти
     # параметры», перечисление внутри него дроблению не подлежит.
-    assert any("отделку" in w and "год заселения" in w for w in result.warnings)
+    assert any("отделку" in w and "срок заселения" in w for w in result.warnings)
     # Контракт API не меняется: поле — про ЛОКАЦИИ, а их в запросе нет.
     assert result.location_filters_not_verified is False
+
+
+@pytest.mark.asyncio
+async def test_validate_sends_has_finish_and_stays_silent_for_single_value():
+    """Одиночная отделка 1|2|3 проверяема — уходит как ``hasFinish``, без warning.
+
+    Дефект: валидатор слал ``finish=<...>``, а пользовательская ссылка —
+    ``hasFinish``. Параметра ``finish`` бэкенд не знает (замер 2026-07-28:
+    ``finish=2`` → 8191 = baseline), поэтому «непроверяемость отделки» была
+    свойством нашей опечатки, а не потолком pik.ru: ``hasFinish=2`` → 1318.
+    """
+    from app.parsing.schema import Finish
+
+    seen: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(str(request.url))
+        return httpx.Response(200, json={"count": 12})
+
+    result = await validate(
+        Criteria(rooms=[Rooms.ONE], finish=[Finish.WHITE_BOX]), make_mock_client(handler)
+    )
+
+    assert "hasFinish=2" in seen[0]
+    assert "finish=2" not in seen[0].replace("hasFinish=2", "")
+    assert all("отделку" not in w for w in result.warnings), result.warnings
+
+
+@pytest.mark.asyncio
+async def test_validate_keeps_finish_unverified_for_zero_and_for_lists():
+    """Ноль и список остаются непроверяемыми — и в запрос не уходят вовсе.
+
+    ``hasFinish=0`` → 8191 = baseline, ровно как заведомый мусор ``hasFinish=9``:
+    бэкенд его не применяет. Список опаснее молчаливой бесполезности:
+    ``hasFinish=0,1`` → 6791 (= как одиночная «1»), то есть отправка сузила бы
+    count не тем фильтром, о котором просил пользователь.
+    """
+    from app.parsing.schema import Finish
+
+    for finish in ([Finish.NONE], [Finish.NONE, Finish.READY], [Finish.READY, Finish.FURNISHED]):
+        seen: list[str] = []
+
+        def handler(request: httpx.Request, seen: list[str] = seen) -> httpx.Response:
+            seen.append(str(request.url))
+            return httpx.Response(200, json={"count": 12})
+
+        result = await validate(Criteria(finish=finish), make_mock_client(handler))
+
+        assert "hasFinish" not in seen[0], finish
+        assert any("отделку" in w for w in result.warnings), (finish, result.warnings)
 
 
 @pytest.mark.asyncio

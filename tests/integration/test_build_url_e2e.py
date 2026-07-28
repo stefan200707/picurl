@@ -56,11 +56,13 @@ def test_e2e_full_cycle_success(client, mock_validator_client):
     # игнорирует metroStations/districtLocations/districtCounties, поэтому при
     # локационном фильтре валидатор ОБЯЗАН предупредить, что число не учитывает
     # метро — раньше это молча выдавалось за полноценную проверку.
-    # Два непроверяемых слоя — метро и отделка — это ДВА факта, и лежат они
-    # двумя элементами. Раньше склейка через "; " делала их одним неделимым.
-    assert len(data["warnings"]) == 2
+    # Непроверяемый слой здесь РОВНО ОДИН — метро. Про отделку тут стояло второе
+    # предупреждение, и оно было ложным: валидатор слал несуществующий параметр
+    # ``finish``, а не ``hasFinish``, который бэкенд применяет (замер 2026-07-28).
+    # Одиночная готовая отделка проверяется — предупреждать не о чем.
+    assert len(data["warnings"]) == 1
     assert any("result_count не учитывает фильтр по метро" in w for w in data["warnings"])
-    assert any("отделку" in w for w in data["warnings"])
+    assert all("отделку" not in w for w in data["warnings"]), data["warnings"]
     assert all("; " not in w for w in data["warnings"]), data["warnings"]
 
     criteria = data["criteria"]

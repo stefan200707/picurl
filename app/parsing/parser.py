@@ -352,14 +352,43 @@ def _classify_residual(text_chunk: str) -> WarningCategory:
     return WarningCategory.UNKNOWN
 
 
+def _entity_number_spans(text: str) -> list[Span]:
+    """Спаны сущностей справочника, чьё НАЗВАНИЕ содержит число («Руставели 14»).
+
+    Пре-пасс против класса «сфабрикованный фильтр». Основной порядок в
+    :func:`parse` однонаправлен: правила отрабатывают первыми, и спана сущности
+    в момент их работы ещё не существует. Поэтому «Руставели 14 до 21 млн»
+    отдавало ``_PRICE_RANGE`` матч «14 до 21 млн» → ``price_min=14 млн``,
+    которого пользователь не просил, а ЖК потом всё равно находился нечётко по
+    остатку «Руставели» — спаны не пересекались, выживали оба.
+
+    Матчинг переиспользуется целиком (:func:`match_entities` по СЫРОМУ тексту),
+    своей эвристики поиска названий здесь нет. Отбираются только спаны, где
+    число есть и в названии из справочника, и в самом фрагменте текста: резерв
+    должен закрывать ровно «число как часть имени», а не имя вообще.
+
+    Дважды названное число законно: «Руставели 14 от 14 до 21 млн» — резерв
+    накрывает лишь первое вхождение, второе остаётся правилу цены.
+    """
+    if not any(char.isdigit() for char in text):
+        return []
+    matches, _ = match_entities(text)
+    return [
+        match.span
+        for match in matches
+        if any(char.isdigit() for char in match.entity.name)
+        and any(char.isdigit() for char in text[match.span[0] : match.span[1]])
+    ]
+
+
 def parse(text: str) -> ParseResult:
     """Единая точка входа парсинга.
 
     Извлекает структурные факты и сущности, собирает их в Criteria.
     Всё нераспознанное или неподдерживаемое отправляет в warnings.
     """
-    # 1. Прогоняем регулярные правила
-    rules_outcome = apply_rules(text)
+    # 1. Прогоняем регулярные правила, закрыв от них числа внутри названий ЖК
+    rules_outcome = apply_rules(text, reserved=_entity_number_spans(text))
     criteria = rules_outcome.criteria
     consumed = rules_outcome.consumed.copy()
     warnings = []

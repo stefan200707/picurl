@@ -1,5 +1,6 @@
 """Regex-правила извлечения структурных фактов из свободного текста (промпт 04)."""
 
+from collections.abc import Iterable
 from typing import NamedTuple
 
 from app.parsing.schema import Criteria
@@ -41,9 +42,33 @@ class RulesOutcome(NamedTuple):
     fallback_metro: list[tuple[str, Span]]
 
 
-def apply_rules(text: str) -> RulesOutcome:
-    """Прогнать все правила по тексту и собрать итоговый Criteria."""
-    norm = _normalize(text)
+def _blank(norm: str, spans: Iterable[Span]) -> str:
+    """Забелить пробелами участки ``spans``, сохранив длину (индексы не съезжают).
+
+    Тот же приём, что в :func:`app.parsing.parser.parse` при подготовке текста
+    для матчера сущностей, но в обратную сторону: там правила закрывают свои
+    участки от сущностей, здесь сущности — от правил.
+    """
+    chars = list(norm)
+    for start, end in spans:
+        chars[start:end] = [" "] * (end - start)
+    return "".join(chars)
+
+
+def apply_rules(text: str, reserved: Iterable[Span] = ()) -> RulesOutcome:
+    """Прогнать все правила по тексту и собрать итоговый Criteria.
+
+    ``reserved`` — участки, уже занятые названием сущности справочника
+    («Руставели 14»). Они забеливаются в нормализованной копии ДО прогона
+    правил, поэтому число внутри названия недоступно ни одному правилу:
+    защита от сфабрикованного фильтра — механизм общий, а не пер-правило
+    (см. :func:`app.parsing.parser._entity_number_spans`).
+
+    В возвращаемый ``consumed`` ``reserved`` НЕ попадает: этот список
+    вычитается из текста перед матчингом сущностей, и, забелив там название,
+    мы потеряли бы сам ЖК.
+    """
+    norm = _blank(_normalize(text), reserved)
     criteria = Criteria()
     consumed: list[Span] = []
 

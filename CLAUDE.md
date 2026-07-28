@@ -51,6 +51,8 @@ uv run python -m app.ai.promotion [--report]     # неоднозначные а
 uv run python scripts/parse_audit.py             # аудит парсера (198 коротких)
 uv run python scripts/complex_audit.py           # аудит полного пути (31 длинный)
 uv run python scripts/landmark_alias_audit.py    # падежное покрытие ориентиров
+uv run python scripts/outcome_audit.py           # аудит ВЫДАЧИ: ссылка ↔ значения в карточках (сеть, не pytest)
+uv run python scripts/reference_audit.py         # аудит справочных id: живой/мёртвый/невалидный (сеть, не pytest)
 ```
 
 ## Структура каталогов
@@ -193,19 +195,37 @@ ai_cache_hit, ai_explanation}`. `ai_used=True` = ИИ **реально повл�
 Подробности механик (ориентиры, суперлативы, класс станций, МКАД) —
 `docs/geo-narrowing.md`.
 
-## Потолок pik.ru — что валидатор НЕ проверяет
+## Потолок — свойство ВЫБРАННОГО эндпоинта, а не pik.ru
 
-`api.pik.ru/v2/filter` **игнорирует** `metroStations`, `districtLocations`,
-`districtCounties`, `finish`, `settlementYearFrom/To` — реальный GUID и `deadbeef` дают
-одинаковый count. Реально проверяется только `blocks`. Поэтому `validator.py` держит
-`UNVERIFIED_LOCATION_PARAMS` (поле `location_filters_not_verified`) и
-`UNVERIFIED_NON_LOCATION_PARAMS` (отдельный warning про отделку и год);
-`UNVERIFIED_BY_BACKEND_PARAMS` — их сумма. **`result_count` при локационном фильтре
-ничего не доказывает** — не делать из него выводов.
+У ПИК **два** бэкенда фильтрации, и ограничения у них разные:
 
-Из 183 локационных id живыми данными подтверждены 72 (все — ЖК/`blocks`). GUID станций
-и id округов докуриваются вручную. Прочие факты внешнего мира (OSM-теги, зеркала Overpass,
-квоты ИИ, POI-кэш) — `docs/external-facts.md`.
+| | `api.pik.ru/v2/filter` — куда ходит наш валидатор | `flat.pik-service.ru/api/v1/filter/block-with-flats` — чем живёт сайт |
+|---|---|---|
+| `metroStations`/`districtLocations`/`districtCounties` | игнорирует | **применяет** |
+| `hasFinish` | применяет (только `1\|2\|3`) | применяет (и `0`, и списки) |
+| `settlementYear*` / `Month*` | игнорирует | **тоже игнорирует** |
+| `rooms=3`, `2,3` | **HTTP 500** | 200 |
+
+Поэтому `validator.py` держит `UNVERIFIED_LOCATION_PARAMS` (поле
+`location_filters_not_verified`) и `UNVERIFIED_NON_LOCATION_PARAMS`;
+`UNVERIFIED_BY_BACKEND_PARAMS` — их сумма. **Пока рантайм ходит в `v2/filter`,
+`result_count` при локационном фильтре ничего не доказывает.**
+
+**Отделка исправлена 2026-07-28:** валидатор шлёт `hasFinish` (а не несуществующий
+`finish`) и потому реально проверяет одиночные `1|2|3`; ноль и списки в запрос не
+уходят вовсе и остаются помеченными — их `v2/filter` либо игнорирует, либо применяет
+не как OR. Признак непроверяемости у отделки — отдельный флаг, а не «параметр ушёл в
+запрос». **Срок сдачи не применяется нигде** — единственный из пяти, где прежнее
+утверждение устояло (`settlementMonth*` дописаны в константу).
+**Справочники сверены с настоящим эндпоинтом 2026-07-28** (`scripts/reference_audit.py`,
+вариант Б шага J — только аудит, рантайм не мигрирует: эвристика отбора UA не понята,
+а деградирует молча). Из **176** локационных id живы **158**: `metroStations` 58/61,
+`districtLocations` 33/34, `blocks` 67/71, `districtCounties` **0/10**. Невалидных нет
+ни одного — все потери вида «id признан, предложений нет». `counties.json` содержит
+**чужую номенклатуру**: фасет отдаёт другой ряд id, 7 замен выводятся автоматически,
+2 требуют ручной сверки, ЦАО/Троицкий АО/Щербинка не выводятся ничем. Проверка — только
+**сужением выдачи**: отсутствие id в фасете невалидность не доказывает. Разбор, вердикты
+и оба рубежа детектора заглушки — `docs/measurements/2026-07-28-reference-audit.md`.
 
 ## Пороги
 
@@ -254,6 +274,8 @@ Env-настраиваемые ключи — `app/config.py`. Гео-порог
 | `docs/external-facts.md` | OSM-теги, зеркала Overpass, потолок данных, квоты ИИ |
 | `docs/data-allowlists.md` | Удалённые/восстановленные GUID, коллизии алиасов, metro-integrity |
 | `docs/thresholds-rationale.md` | Обоснования порогов и лимитов |
+| `docs/outcome-audit.md` | Аудит выдачи: сверка ссылки с карточками, его границы |
+| `docs/measurements/2026-07-28-reference-audit.md` | Аудит справочных id, разбор округов, детектор заглушки |
 | `docs/history.md` | Полная хронология милстоунов и пост-мортемов |
 | `ENABLE_ANTIGRAVITY.md` | Онбординг ИИ/БД |
 
