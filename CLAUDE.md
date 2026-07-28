@@ -58,7 +58,8 @@ uv run python scripts/landmark_alias_audit.py    # падежное покрыт
 ```text
 app/
   main.py            # FastAPI-app, health, POST /build-url
-  api/               # endpoints.py + schemas.py (BuildUrlRequest/Response)
+  warnings.py        # TaggedWarning/WarningCategory/WarningSeverity — категории warnings (Г6)
+  api/               # endpoints.py + pydantic-модели API (schemas.py)
   parsing/           # schema.py — Criteria; rules/ — regex-правила; parser.py — фасад parse;
                      #   entity_match.py — rapidfuzz-матчинг; stopwords.py
   reference/         # *.json справочники; loader.py — загрузка/кэш; refresh*.py
@@ -68,8 +69,9 @@ app/
                      #   memory.py (pgvector); promotion.py; usage_report.py; prompts.py; schema.py
   knowledge_base/    # локальное векторное хранилище/кэш ИИ
 tests/               # integration/ — E2E; parsing/ reference/ geo/ ai/;
-                     #   corpus/queries.txt (198) + corpus/complex_queries.txt (31);
-                     #   test_parse_audit_regression.py; test_complex_queries_regression.py
+                     #   corpus/queries.txt (198 коротких) + corpus/complex_queries.txt (36 длинных);
+                     #   test_parse_audit_regression.py; test_complex_queries_regression.py;
+                     #   test_warning_categories.py (категории warnings)
 docs/                # см. «Источники правды»
 prompts/             # декомпозиция задачи (00→10, README, _conventions, _open-questions)
 scripts/             # parse_audit.py; complex_audit.py; landmark_alias_audit.py; cleanup_metro_duplicates.py
@@ -90,13 +92,45 @@ scripts/             # parse_audit.py; complex_audit.py; landmark_alias_audit.py
 4. `validate(criteria)` → проверочный запрос к `api.pik.ru/v2/filter` (единственный
    сетевой вызов рантайма, best-effort). 0 результатов → warning.
 
-Ответ: `{url, criteria, result_count, warnings, ai_used, ai_failed, ai_cache_hit,
-ai_explanation}`. `ai_used=True` = ИИ **реально повлиял**; `ai_failed=True` = попытка
+Ответ: `{url, criteria, result_count, warnings, warnings_detailed, ai_used, ai_failed,
+ai_cache_hit, ai_explanation}`. `ai_used=True` = ИИ **реально повлиял**; `ai_failed=True` = попытка
 была и упала (**любая** ветка ИИ, включая free-text до гейтов); оба `False` = ИИ не
 звали вовсе (гейт / выключен / нечего обогащать). Провал = модель **не ответила**:
 исключение вызова или cooldown circuit breaker'а. «Ответила и ничего не заполнила»
 и «значения отбиты валидацией» — успешный вызов без пользы (`ai_failed=False`),
 различает лог. Нет кредов / ИИ выключен — не провал (инвариант 9).
+
+## Категории warnings (задача Г6, внедряется порциями)
+
+Дизайн целиком — **`docs/warnings-severity-proposal.md`** (там же статус порций).
+Реализованы шаги 1-2 из пяти.
+
+- **`warnings` — не выходной буфер, а внутренний канал данных.** Один мутируемый список
+  передаётся по ссылке; `enrichment` удаляет из него элементы **по точному равенству
+  строк**, `_residual_fragments` разбирает строки регексом, `scripts/parse_audit.py` матчит
+  суффикс «не удалось распознать, не попало в ссылку» — и на нём держатся пороги QA.
+  Поэтому носитель категории — **подкласс `str`** (`app/warnings.py::TaggedWarning`):
+  несёт `category`, но для `==`, `in`, `remove()`, регекса, `deepcopy`, `json` и pydantic
+  остаётся строкой. Ломать эту совместимость нельзя — ошибка была бы молчаливой.
+- **Категорий семь** (`WarningCategory`): `lost` (распознали, но в ссылку не доехало) /
+  `unknown` (природа неизвестна) / `noise` (корректно отброшено) / `capped` (такого фильтра
+  у pik.ru нет) / `unverified` (`result_count` фильтр не учитывает) / `degraded` (не
+  применили по своей вине — повтор осмыслен) / `info` (справка о сужении). `severity` —
+  **производная**: `lost`/`unknown` → `error`, `degraded`/`capped` → `warning`, остальные →
+  `info`.
+- **Неразмеченная точка = `unknown`** — нормальный промежуточный статус, а не дефект:
+  размечено пока только `parser._classify_residual`, остальные ~61 точка ждут порций 3-5.
+- **`warnings_detailed` собирается ДО конструирования `BuildUrlResponse`** — pydantic v2
+  коэрсит подкласс `str` к обычному `str`, внутрь модели категория не доезжает. Плоский
+  `warnings` **выводится из** `warnings_detailed`, чтобы источник правды был один.
+- **Новая строка категорию не наследует** (конкатенация, срез, `.strip()`, f-строка). На
+  этом канале таких операций нет; правило зафиксировано в докстринге `app/warnings.py`.
+- **Различитель остатка асимметричен намеренно** (`parser._classify_residual`): `lost` — по
+  предметному признаку (слово-параметр или число с единицей), `noise` — только если
+  **каждое** слово приветствие/вежливость/стоп-слово, всё спорное → `unknown`. `unknown` и
+  `lost` дают один severity, спутать их дёшево; `noise` на реальной потере гасит сигнал и
+  хуже плоского списка. Приветствия — **отдельный** `_GREETING_WORDS`, не `STOP_WORDS`:
+  тот переиспользуется `entity_match`, и пополнение изменило бы поведение парсинга.
 
 ## Контракты
 
