@@ -11,7 +11,7 @@ from unittest.mock import patch
 
 import pytest
 
-from app.ai.enrichment import enrich, resolve_free_text_criteria
+from app.ai.enrichment import _FREE_TEXT_REJECTED_WARNING, enrich, resolve_free_text_criteria
 from app.ai.prompts import build_free_text_context
 from app.ai.schema import FreeTextCriteriaAnswer, LandmarkMatch
 from app.config import get_settings
@@ -79,7 +79,9 @@ async def test_invalid_value_rejected(mock_extractor, mock_settings):
 
     assert criteria.price_min is None  # брак не применён
     assert outcome.changed is False
-    assert warnings == [_RESIDUAL.format("хрень")]  # warning остался — ничего не разобрано
+    # Фраза осталась + строка о том, ПОЧЕМУ: «не удалось распознать» само по себе
+    # врёт — распознано как раз было, отброшено значение.
+    assert warnings == [_RESIDUAL.format("хрень"), _FREE_TEXT_REJECTED_WARNING]
 
 
 @pytest.mark.asyncio
@@ -331,3 +333,63 @@ async def test_landmark_from_ai_keeps_superlative(mock_extractor, mock_settings)
     await resolve_free_text_criteria(criteria, "однушка самую ближайшую к Бауманке", warnings, None)
 
     assert criteria.landmark_requirements[0].nearest_only is True
+
+
+# --- Отбитое валидацией значение не снимает warning'и (инварианты 1 и 3) ---
+
+
+@pytest.mark.asyncio
+@patch("app.ai.enrichment.call_free_text_extractor")
+async def test_rejected_value_keeps_all_fragment_warnings(mock_extractor, mock_settings):
+    """Частичный случай: одно значение доехало, другое отбито валидацией.
+
+    `consumed_fragments` — заявка модели, а не доказательство: до правки хватало
+    одного удачного поля, чтобы снялись warning'и ВСЕХ заявленных фрагментов,
+    включая тот, чьё значение отбил pydantic. Значения нет, предупреждения нет —
+    фильтр исчезал бесследно.
+
+    Снимаем все или ничего: какой фрагмент породил отбитое поле, из ответа
+    невосстановимо (у скаляров нет `phrase`, в отличие от `LandmarkMatch`), а
+    лишний warning дешевле молчаливой потери.
+    """
+    mock_extractor.return_value = FreeTextCriteriaAnswer(
+        floor_min=0,  # Criteria.floor_min имеет ge=1 → validate_assignment отобьёт
+        settlement_year_to=2029,
+        consumed_fragments=["этаж от нулевого", "заселение до 2029"],
+        explanation="этаж и срок",
+    )
+    criteria = Criteria()
+    warnings = [_RESIDUAL.format("этаж от нулевого"), _RESIDUAL.format("заселение до 2029")]
+
+    result = await enrich(
+        "трёшка этаж от нулевого заселение до 2029", criteria, warnings, pool=None
+    )
+
+    assert criteria.floor_min is None  # значение не доехало
+    assert criteria.settlement_year_to == 2029  # валидное по-прежнему применяется
+    assert _RESIDUAL.format("этаж от нулевого") in warnings  # фраза не потеряна
+    assert _RESIDUAL.format("заселение до 2029") in warnings
+    assert _FREE_TEXT_REJECTED_WARNING in warnings  # видно, ПОЧЕМУ они остались
+    assert result.ai_failed is False  # отбивка — не провал вызова (граница Г5)
+
+
+@pytest.mark.asyncio
+@patch("app.ai.enrichment.call_free_text_extractor")
+async def test_two_valid_values_still_clear_both_warnings(mock_extractor, mock_settings):
+    """Контроль: без отбивки снятие warning'ов по нескольким фрагментам работает
+    как раньше и лишней строки не появляется."""
+    mock_extractor.return_value = FreeTextCriteriaAnswer(
+        floor_min=7,
+        settlement_year_to=2029,
+        consumed_fragments=["этаж от седьмого", "заселение до 2029"],
+    )
+    criteria = Criteria()
+    warnings = [_RESIDUAL.format("этаж от седьмого"), _RESIDUAL.format("заселение до 2029")]
+
+    outcome = await resolve_free_text_criteria(
+        criteria, "трёшка этаж от седьмого заселение до 2029", warnings, None
+    )
+
+    assert outcome.changed is True
+    assert criteria.floor_min == 7
+    assert warnings == []

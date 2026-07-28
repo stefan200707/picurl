@@ -56,8 +56,12 @@ def test_e2e_full_cycle_success(client, mock_validator_client):
     # игнорирует metroStations/districtLocations/districtCounties, поэтому при
     # локационном фильтре валидатор ОБЯЗАН предупредить, что число не учитывает
     # метро — раньше это молча выдавалось за полноценную проверку.
-    assert len(data["warnings"]) == 1
-    assert "result_count не учитывает фильтр по метро" in data["warnings"][0]
+    # Два непроверяемых слоя — метро и отделка — это ДВА факта, и лежат они
+    # двумя элементами. Раньше склейка через "; " делала их одним неделимым.
+    assert len(data["warnings"]) == 2
+    assert any("result_count не учитывает фильтр по метро" in w for w in data["warnings"])
+    assert any("отделку" in w for w in data["warnings"])
+    assert all("; " not in w for w in data["warnings"]), data["warnings"]
 
     criteria = data["criteria"]
     assert criteria["rooms"] == "2"
@@ -197,8 +201,39 @@ def test_e2e_network_unavailable(client, mock_validator_client):
     assert response.status_code == 200
     data = response.json()
     assert data["result_count"] is None
-    assert "выдача не проверена" in data["warnings"]
+    # Акцент отказа — на потерянной проверке (blocks), а не на параметрах,
+    # которые не подтверждаются никогда.
+    loss = [w for w in data["warnings"] if w.startswith("выдача не проверена")]
+    assert loss, data["warnings"]
+    assert "blocks" in loss[0]
     assert "search/studio" in data["url"]
+
+
+def test_e2e_network_unavailable_keeps_location_warning(client, mock_validator_client):
+    """Г6, граница endpoints.py: сбой сети НЕ съедает предупреждение о локациях.
+
+    Живой инцидент: в логе «выдача не проверена», result_count=null — и ни
+    строчки про непроверенные локационные фильтры, хотя фильтр по метро в
+    запросе был. Пользователь получал ссылку, локационная часть которой не
+    проверена ДВАЖДЫ (бэкенд её игнорирует + запрос не прошёл), и узнавал
+    только про второе. Обе строки обязаны доехать до ответа.
+    """
+    mock_validator_client.mock_state["error"] = httpx.RequestError(
+        "Timeout", request=httpx.Request("GET", "https://api.pik.ru")
+    )
+    response = client.post(
+        "/build-url",
+        json={"text": "двушка у метро Аэропорт Внуково до 15 млн"},
+    )
+    assert response.status_code == 200
+    data = response.json()
+
+    assert data["result_count"] is None
+    joined = " | ".join(data["warnings"])
+    assert "выдача не проверена" in joined
+    assert "метро/округу/району" in joined
+    # Успешная формулировка про result_count здесь неуместна — его нет.
+    assert "result_count не учитывает" not in joined
 
 
 def test_e2e_ambiguity_typos(client):

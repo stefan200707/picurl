@@ -1092,6 +1092,85 @@ def test_station_class_flows_into_criteria():
     assert outcome.criteria.station_class_requirements[0].line_prefix == "МЦД"
 
 
+@pytest.mark.parametrize(
+    "text,line",
+    [
+        ("рядом с любым метро коричневой ветки", "Кольцевая"),
+        ("у любого метро коричневой линии", "Кольцевая"),
+        ("недалеко от любой станции метро коричневой ветки", "Кольцевая"),
+        ("рядом с любым метро зелёной ветки", "Замоскворецкая"),
+    ],
+)
+def test_station_class_sentinel_absorbed_by_adjacent_line(text: str, line: str):
+    """Примыкающая конкретная линия ПОГЛОЩАЕТ sentinel «любое метро».
+
+    Раньше оставались два требования, а `station_class_points` трактует их как
+    OR: sentinel разворачивался во все станции справочника, и union «все ∪ 12»
+    делал вклад линии нулевым — уточнение молча умирало.
+    """
+    from app.parsing.rules.station_class import extract_station_class_requirements
+
+    reqs, _ = extract_station_class_requirements(text)
+    assert [r.line_prefix for r in reqs] == [line]
+
+
+def test_station_class_absorbed_sentinel_text_stays_consumed():
+    """Поглощение убирает ЗНАЧЕНИЕ, но не текст: спан sentinel'а остаётся
+    съеденным, иначе «рядом с любым метро» уехало бы в warnings (инвариант 1).
+    """
+    from app.parsing.rules.station_class import extract_station_class_requirements
+
+    text = "рядом с любым метро коричневой ветки"
+    reqs, spans = extract_station_class_requirements(text)
+
+    assert [r.line_prefix for r in reqs] == ["Кольцевая"]
+    consumed = "".join(text[s:e] for s, e in spans)
+    assert "любым метро" in consumed
+    assert "коричневой ветки" in consumed
+
+
+@pytest.mark.parametrize(
+    "text,lines",
+    [
+        ("рядом с любым метро ИЛИ с кольцевой", ["метро", "Кольцевая"]),
+        ("рядом с любым метро, но лучше коричневая ветка", ["метро", "Кольцевая"]),
+        ("рядом с любым метро или зелёная ветка", ["метро", "Замоскворецкая"]),
+        ("у любого метро, желательно коричневой ветки", ["метро", "Кольцевая"]),
+    ],
+)
+def test_station_class_sentinel_survives_non_adjacent_line(text: str, lines: list[str]):
+    """Негативный контроль области слияния: поглощение только при ПРИМЫКАНИИ.
+
+    Союз, запятая или любое слово в зазоре между спанами — это дизъюнкция или
+    предпочтение, а не уточнение. Схлопнуть их значило бы молча сузить запрос:
+    «любое метро ИЛИ Кольцевая» превратилось бы в «только Кольцевая».
+    """
+    from app.parsing.rules.station_class import extract_station_class_requirements
+
+    reqs, _ = extract_station_class_requirements(text)
+    assert [r.line_prefix for r in reqs] == lines
+
+
+def test_station_class_sentinel_alone_is_not_touched():
+    """Контроль: «любое метро» без уточнения линии работает как раньше."""
+    from app.parsing.rules.station_class import extract_station_class_requirements
+
+    reqs, _ = extract_station_class_requirements("рядом с любым метро")
+    assert [r.line_prefix for r in reqs] == ["метро"]
+
+
+def test_station_class_exact_duplicates_collapse():
+    """«коричневая ветка» и «кольцо» — два спана, одна и та же линия.
+
+    Дубликат не менял смысл (OR X с X = X), но множил точки в
+    station_class_points и дважды попадал в текст warning'а.
+    """
+    from app.parsing.rules.station_class import extract_station_class_requirements
+
+    reqs, _ = extract_station_class_requirements("хочу у метро коричневой ветки, оно же кольцо")
+    assert [r.line_prefix for r in reqs] == ["Кольцевая"]
+
+
 def test_station_class_bug_regression_no_warning_leftover():
     """Регрессия исходного бага: «рядом с МЦД не важно какой станции» больше не
     попадает в warnings как нераспознанный текст."""

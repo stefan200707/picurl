@@ -156,7 +156,7 @@ _CENTER_PATTERN = re.compile(
 _LEADING_DISTANCE = re.compile(
     rf"(?:\b{_PROXIMITY_MARKER}\s+[^\d,;.!?()]{{0,25}}?)?"
     rf"{_DIST_MARKER}\s*(?P<dist>{_DIST_NUM})\s*(?P<dist_unit>{_DIST_UNIT})"
-    r"[^\d,;.!?()]{0,15}$"
+    r"[^\d,;.!?()]{0,20}$"
 )
 
 #: ХВОСТОВАЯ дистанция через разрыв: «до этих детских садов БЫЛО ИДТИ до 15-20

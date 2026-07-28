@@ -75,8 +75,9 @@ async def build_url(
         if validation.result_count == 0:
             warnings.append("под критерии ничего не найдено")
 
-        if validation.warning:
-            warnings.append(validation.warning)
+        # extend, а не append: валидатор отдаёт СПИСОК фактов, каждый из которых
+        # должен остаться отдельным элементом ответа (один элемент — один факт).
+        warnings.extend(validation.warnings)
         result_count = validation.result_count
     except Exception as e:
         logger.error("Ошибка при валидации выдачи: %s", e, exc_info=True)

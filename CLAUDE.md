@@ -1,776 +1,241 @@
 # CLAUDE.md
 
-Проект: picurl (GitHub: stefan200707/picurl).
+Проект: **picurl** (GitHub: stefan200707/picurl).
 
-> Это лаконичный справочник актуального состояния. Подробная хронология милстоунов
-> (пост-мортемы, live-прогоны, мотивация решений) вынесена в **`docs/history.md`**.
-> **При каждом изменении проекта — обновлять этот файл.**
+> Это карта и правила решений — то, что нужно в **любой** задаче.
+> Мотивация конкретных регексов, пост-мортемы дефектов и хронология —
+> в `docs/` (см. «Источники правды»). Правила обновления файла — в конце.
 
-## Описание проекта
+## Навигация по коду
 
-**picurl** — микросервис: превращает свободный русский текст о желаемой квартире
-(«хочу двушку у метро до 15 млн») в рабочую ссылку на pik.ru/search с применёнными
-фильтрами и сортировкой. Логика детерминированная: regex + нечёткий поиск (rapidfuzz)
-по локальным JSON-справочникам. ИИ-обогащение — опциональный ограниченный fallback для
-сложных контекстных/пространственных запросов; базовый пайплайн самодостаточен и в
-рантайме LLM не требует. Интерфейс — Swagger UI (`http://127.0.0.1:8000/docs`), своего
-фронтенда нет.
+**Вопрос о коде → сперва `graphify query "<вопрос>"`** (дешевле grep и
+`GRAPH_REPORT.md`). Также `graphify path "<A>" "<B>"`, `graphify explain "<концепт>"`.
+Навигация — `graphify-out/wiki/index.md`. После изменений кода — `graphify update .`.
 
-## Технологический стек
+## Описание
+
+Микросервис: превращает свободный русский текст о желаемой квартире
+(«хочу двушку у метро до 15 млн») в рабочую ссылку `pik.ru/search` с применёнными
+фильтрами. Логика **детерминированная**: regex + rapidfuzz по локальным JSON-справочникам.
+ИИ — опциональный ограниченный fallback, в рантайме не обязателен. Интерфейс — Swagger UI
+(`http://127.0.0.1:8000/docs`), своего фронтенда нет. pik.ru продаёт только новостройки.
+
+## Стек и конвенции
 
 - Python 3.12+, FastAPI + Uvicorn, менеджер пакетов `uv`.
-- Ключевое: `pydantic` v2, `rapidfuzz`, `httpx`.
-- Тесты: `pytest` + `pytest-asyncio` (режим `auto`). Линтер/форматтер: `ruff`.
-- ИИ-стек: `claude-agent-sdk` (транспорт claude), `google-antigravity` (CLI `agy`),
-  PostgreSQL 15+ с pgvector, `sentence-transformers`, `asyncpg`, `pydantic-settings`.
+- `pydantic` v2, `rapidfuzz`, `httpx`. Тесты `pytest` + `pytest-asyncio` (`asyncio_mode=auto`).
+- ИИ-стек: `claude-agent-sdk`, `google-antigravity` (CLI `agy`), PostgreSQL 15+ с pgvector,
+  `sentence-transformers`, `asyncpg`, `pydantic-settings`.
+- Строгая типизация и валидация через Pydantic. Длина строки — 100.
+- Ruff select: `E`, `W`, `F`, `I`, `UP`, `B`, `SIM`, `C4`, `RUF`. Кириллица в строках
+  намеренная — `RUF001/002/003` отключены.
 
-## Конвенции кода
+## Команды
 
-- Строгая типизация и валидация через Pydantic. Длина строки — 100 символов.
-- Ruff select: `E`, `W`, `F`, `I`, `UP`, `B`, `SIM`, `C4`, `RUF`. Кириллица в
-  строках/докстрингах намеренная — `RUF001/002/003` отключены.
-- Асинхронные тесты — `pytest-asyncio`, `asyncio_mode=auto`.
+```
+uv sync                                          # зависимости
+uv run fastapi dev                               # dev-сервер
+uv run pytest                                    # тесты (гоняют оба QA-корпуса)
+uv run ruff check | uv run ruff format [--check] # линт | формат
 
-## Основные команды
+docker compose up -d postgres                    # БД ИИ (pgvector)
+psql $DATABASE_URL -f app/ai/migrations/01_memory_tables.sql   # и 02_*, 03_*
 
-- Установка зависимостей: `uv sync`
-- Dev-сервер: `uv run fastapi dev` (или `uv run uvicorn app.main:app --reload`)
-- БД ИИ (pgvector): `docker compose up -d postgres`
-- Миграции: `psql $DATABASE_URL -f app/ai/migrations/01_memory_tables.sql` и
-  `... 02_ai_call_log.sql`
-- Обновление JSON-справочников: `uv run python -m app.reference.refresh`
-- Гео-обогащение метро из OSM: `uv run python -m app.reference.refresh_metro_geo`
-- Пересборка полигона МКАД из OSM: `uv run python -m app.reference.refresh_mkad`
-  (снапшот `mkad_ring.json` закоммичен и по умолчанию — **приближение** по bbox кольца;
-  точный контур — только когда доступно full-planet зеркало Overpass)
-- Обновление POI-кэша: `uv run python -m app.geo.refresh_poi` (`--force` — пересобрать
-  всё; без флага дособерутся только отсутствующие и записи устаревшей схемы v1).
-  Ретраит транзиентные отказы Overpass с backoff; при провале записи СТАРОЕ значение
-  остаётся, отказы перечисляются в конце и дают exit code 1
-- Отчёт вызовов ИИ: `uv run python -m app.ai.usage_report [--days N]`
-- Отчёт неоднозначных алиасов: `uv run python -m app.ai.promotion [--report]`
-- Аудит парсера (198 коротких): `uv run python scripts/parse_audit.py`
-- Аудит сложных запросов (30 длинных, «запрос → ссылка»): `uv run python scripts/complex_audit.py`
-- Аудит падежного покрытия ориентиров: `uv run python scripts/landmark_alias_audit.py`
-- Тесты: `uv run pytest`. Линт: `uv run ruff check`. Формат: `uv run ruff format [--check]`
+uv run python -m app.reference.refresh           # JSON-справочники (api.pik.ru)
+uv run python -m app.reference.refresh_metro_geo # координаты/линии метро из OSM
+uv run python -m app.reference.refresh_mkad      # полигон МКАД (снапшот — приближение)
+uv run python -m app.geo.refresh_poi             # POI-кэш (--force = всё; без флага — v1 и отсутствующие)
+
+uv run python -m app.ai.usage_report [--days N]  # отчёт вызовов ИИ
+uv run python -m app.ai.promotion [--report]     # неоднозначные алиасы
+uv run python scripts/parse_audit.py             # аудит парсера (198 коротких)
+uv run python scripts/complex_audit.py           # аудит полного пути (31 длинный)
+uv run python scripts/landmark_alias_audit.py    # падежное покрытие ориентиров
+```
 
 ## Структура каталогов
 
 ```text
 app/
   main.py            # FastAPI-app, health, POST /build-url
-  api/               # endpoints.py + pydantic-модели API (schemas.py)
+  api/               # endpoints.py + schemas.py (BuildUrlRequest/Response)
   parsing/           # schema.py — Criteria; rules/ — regex-правила; parser.py — фасад parse;
                      #   entity_match.py — rapidfuzz-матчинг; stopwords.py
-  reference/         # *.json справочники; loader.py — загрузка/кэш; refresh*.py — обновление
+  reference/         # *.json справочники; loader.py — загрузка/кэш; refresh*.py
   pik/               # url_builder.py; validator.py; id_trust.py; location_fallback.py
-  geo/               # distance.py (haversine); candidates.py (шорт-лист/сужение); poi.py; refresh_poi.py
-  ai/                # client.py (провайдеры); enrichment.py (enrich/resolve_options, гейты);
-                     #   embeddings.py; memory.py (pgvector); promotion.py; usage_report.py; prompts.py; schema.py
+  geo/               # distance.py (haversine); candidates.py (шорт-лист); poi.py; mkad.py; refresh_poi.py
+  ai/                # client.py; enrichment.py (enrich/resolve_options, гейты); embeddings.py;
+                     #   memory.py (pgvector); promotion.py; usage_report.py; prompts.py; schema.py
   knowledge_base/    # локальное векторное хранилище/кэш ИИ
 tests/               # integration/ — E2E; parsing/ reference/ geo/ ai/;
-                     #   corpus/queries.txt (198 коротких) + corpus/complex_queries.txt (30 длинных);
+                     #   corpus/queries.txt (198) + corpus/complex_queries.txt (31);
                      #   test_parse_audit_regression.py; test_complex_queries_regression.py
-docs/                # pik-url-schema.md; ai-enrichment-architecture.md; history.md (архив)
+docs/                # см. «Источники правды»
 prompts/             # декомпозиция задачи (00→10, README, _conventions, _open-questions)
-scripts/             # parse_audit.py (парсер); complex_audit.py (полный путь); cleanup_metro_duplicates.py
+scripts/             # parse_audit.py; complex_audit.py; landmark_alias_audit.py; cleanup_metro_duplicates.py
 ```
 
-Порядок сборки (в `prompts/`): 00 каркас → 01 URL-схема → 02 Criteria → 03 справочники →
-04 regex → 05 rapidfuzz → 06 фасад parse → 07 url_builder → 08 валидатор → 09 POST
-/build-url → 10 E2E. Общие инварианты — `prompts/_conventions.md`.
+Порядок сборки (`prompts/`): 00 каркас → 01 URL-схема → 02 Criteria → 03 справочники →
+04 regex → 05 rapidfuzz → 06 фасад parse → 07 url_builder → 08 валидатор →
+09 POST /build-url → 10 E2E. Инварианты сборки — `prompts/_conventions.md`.
 
-## URL-схема pik.ru — источник правды
+## Поток обработки запроса
 
-**`docs/pik-url-schema.md`** — единственный источник правды по фильтрам `pik.ru/search`.
-Центральное правило — **single-путь / multi-query**: одно значение фильтра → слаг в пути
-URL; два и более → query-параметр с id/GUID через запятую. Решённые open-questions:
-№1 — без явной сортировки `sortBy`/`orderBy` не добавляются (дефолт сайта); №2 —
-одиночные `optionGroups` всегда идут в query (не в путь).
+`POST /build-url`, поле `text`:
 
-## Контракт Criteria и модели API
-
-- **`app/parsing/schema.py`** — pydantic-модель `Criteria` (+ `Rooms`, `Sort`,
-  `HousingType`, `Finish`, `POIRequirement`, `LandmarkRequirement`,
-  `StationClassRequirement`). «Пустой» `Criteria()` валиден. `rooms` — всегда список
-  (single vs multi решает url_builder). `finish` — `list[Finish]`. `sort` — ключ
-  `price_asc|price_desc|area_asc|area_desc` с properties `field`/`order`.
-  `to_public_dict()` — человекочитаемое представление. `location_query_dict()` — общий
-  сбор id локаций (переиспользуется url_builder/validator).
-- **Модели API** `BuildUrlRequest`/`BuildUrlResponse` — в `app/api/schemas.py`.
-
-## API — пользовательский поток
-
-Интерфейс — Swagger `/docs` → `POST /build-url`, поле `text`. Поток обработки:
 1. `parse(text)` → `Criteria` + `warnings` (+ `option_candidates`).
-2. **ИИ-обогащение (опционально)** — если есть `poi_requirements`/`center_requested`/
-   `landmark_requirements`/`station_class_requirements`/`option_candidates`. При выключенном
-   ИИ или ошибке процесс продолжается с исходными criteria.
-3. `build_url(criteria)` → URL.
+2. **ИИ-обогащение (опционально)** — при выключенном ИИ или ошибке процесс продолжается
+   с исходными criteria. Гейты и ветки — `docs/ai-enrichment-architecture.md`.
+3. `build_url(criteria, warnings=None)` → URL. Рантайм обязан передавать `warnings`.
 4. `validate(criteria)` → проверочный запрос к `api.pik.ru/v2/filter` (единственный
    сетевой вызов рантайма, best-effort). 0 результатов → warning.
 
 Ответ: `{url, criteria, result_count, warnings, ai_used, ai_failed, ai_cache_hit,
-ai_explanation}`. `ai_used=True` = ИИ **реально повлиял** на результат; `ai_failed=True`
-= попытка была и упала; `ai_used=False, ai_failed=False` = ИИ не звали вовсе (гейт/выкл/
-нечего обогащать).
+ai_explanation}`. `ai_used=True` = ИИ **реально повлиял**; `ai_failed=True` = попытка
+была и упала (**любая** ветка ИИ, включая free-text до гейтов); оба `False` = ИИ не
+звали вовсе (гейт / выключен / нечего обогащать). Провал = модель **не ответила**:
+исключение вызова или cooldown circuit breaker'а. «Ответила и ничего не заполнила»
+и «значения отбиты валидацией» — успешный вызов без пользы (`ai_failed=False`),
+различает лог. Нет кредов / ИИ выключен — не провал (инвариант 9).
 
-## Справочники
+## Контракты
 
-Локальный JSON-слой в `app/reference/*.json`: `metro`, `counties`, `districts`,
-`complexes`, `benefits`, `option_groups`, `options`, `landmarks`, `mkad_ring` (полигон
-границы МКАД для гео-сужения «внутри/за МКАД», см. `app/geo/mkad.py`).
-
-- **Формат записи** — `RefEntry` (`app/reference/loader.py`): `{name, slug, id,
-  aliases[]}`. `id` хранится строкой (единый формат для GUID и числовых id). Нужны **обе
-  URL-формы**: `slug` (single → путь), `id`/GUID (multi → query). У `complexes` также
-  `lat`/`lon`/`district`/`county`/`metro`; у `metro` — `lat`/`lon`/`line`; у `landmarks` —
-  обязательные `lat`/`lon`/`category` (`university|employer|landmark`), `slug` там —
-  стабильный ключ, не путь.
-- **Загрузка** — `load_all() -> ReferenceData`; кэш `functools.cache` + `clear_cache()`;
-  точный поиск `find_by_name()` c `normalize()` (casefold, ё→е, схлопывание пробелов);
-  нечёткий — rapidfuzz (промпт 05).
-- **Обновление** — `refresh` тянет `api.pik.ru/v2/block` и перезаписывает
-  `complexes/counties/metro/districts` (мёрж сохраняет кураторские поля, стабильная
-  сортировка). НЕ трогает `benefits/option_groups/options/landmarks`. `refresh_metro_geo` —
-  **отдельная** офлайн-команда (OSM Overpass, не в `REFRESHABLE`): проставляет
-  `lat`/`lon`/`line`. Эндпоинт `/internal/refresh-dicts` защищён заголовком
-  `X-Internal-Token` (сверяется с env `INTERNAL_REFRESH_TOKEN`).
-
----
+- **`app/parsing/schema.py`** — pydantic-модель `Criteria` (+ `Rooms`, `Sort`, `HousingType`,
+  `Finish`, `POIRequirement`, `LandmarkRequirement`, `StationClassRequirement`). Пустой
+  `Criteria()` валиден. `rooms` — всегда список (single vs multi решает url_builder).
+  `finish` — `list[Finish]`. `sort` — ключ `price_asc|price_desc|area_asc|area_desc`.
+  `to_public_dict()` — человекочитаемое представление. `location_query_dict()` — общий сбор
+  id локаций (переиспользуют url_builder и validator).
+- **Справочники** `app/reference/*.json`: `metro`, `counties`, `districts`, `complexes`,
+  `benefits`, `option_groups`, `options`, `landmarks`, `mkad_ring`. Формат записи — `RefEntry`
+  (`loader.py`): `{name, slug, id, aliases[]}`, `id` строкой. Нужны **обе URL-формы**:
+  `slug` (single → путь), `id`/GUID (multi → query). Загрузка — `load_all() -> ReferenceData`,
+  кэш `functools.cache` + `clear_cache()`; точный поиск `find_by_name()` c `normalize()`.
+- `refresh` перезаписывает только `complexes/counties/metro/districts` (мёрж сохраняет
+  кураторские поля). Эндпоинт `/internal/refresh-dicts` защищён `X-Internal-Token`
+  (env `INTERNAL_REFRESH_TOKEN`).
 
 ## Инварианты (нарушать нельзя)
 
 1. **Ничего не отбрасывается молча.** Любой нераспознанный/неподдерживаемый фрагмент →
-   `warnings` (или `option_candidates`). Span покрывает и «проигравший» фрагмент —
-   отбрасывается значение, а не текст.
-2. **Single-путь / multi-query** (см. URL-схему выше).
+   `warnings` (или `option_candidates`). Span покрывает и «проигравший» фрагмент.
+2. **Single-путь / multi-query** — одно значение → слаг в пути, два и более → query
+   с id/GUID через запятую. Источник правды — `docs/pik-url-schema.md`.
 3. **LLM не считает дистанции и не выдумывает фильтры.** Гео-сужение — чистый haversine;
-   координаты уходят модели лишь как факт. Любой ответ ИИ валидируется против реального
-   справочника (`sanitize_against_shortlist`, `sanitize_option_resolution`) — выдуманные
-   slug и `null` отбрасываются, фраза остаётся в `warnings`.
-4. **Мёрж не затирает кураторские `name`/`slug`/`id`/`aliases`** (обновляются только
-   целевые поля; стабильная сортировка для читаемых диффов).
-5. **Слияние записи с непустым `id`/`slug` в другую ЗАПРЕЩЕНО** — теряет её GUID
-   (даже «слияние-как-алиас» теряет id дубля, если у цели уже есть свой). `cleanup()` в
-   `scripts/cleanup_metro_duplicates.py` обязан проверять `dup.id`/`dup.slug` и падать
-   `ValueError`. Каждый GUID станции — отдельное значение фильтра `metroStations` (разные
-   платформы одного узла), потеря сужает выдачу до одной платформы.
-6. **Runtime читает JSON только с диска, в сеть за справочниками не ходит.** Сеть — только
-   у `refresh*` и валидатора.
+   координаты уходят модели лишь как факт, обратно не принимаются. Любой ответ ИИ
+   валидируется против справочника (`sanitize_against_shortlist`, `sanitize_option_resolution`,
+   `sanitize_landmark_resolution`); выдуманное отбрасывается, фраза остаётся в `warnings`.
+4. **Мёрж не затирает кураторские `name`/`slug`/`id`/`aliases`.** Стабильная сортировка.
+5. **Слияние записи с непустым `id`/`slug` в другую ЗАПРЕЩЕНО** — теряет её GUID.
+   Каждый GUID станции = отдельное значение фильтра `metroStations` (разные платформы
+   одного узла); потеря сужает выдачу до одной платформы. `cleanup()` в
+   `scripts/cleanup_metro_duplicates.py` обязан падать `ValueError` при `dup.id`/`dup.slug`.
+6. **Runtime читает JSON только с диска.** Сеть — только `refresh*` и валидатор.
 7. **Отсутствующая URL-форма (`slug`/`id`) → `warning`, не молчание.**
 8. **`agy` — всегда `--print`, НИКОГДА `--dangerously-skip-permissions`** (сырой
    `user_query` — поверхность prompt injection).
-9. **Нет учётных данных ИИ = выключить ИИ-слой (не ошибка);** базовый пайплайн работает.
+9. **Нет учётных данных ИИ = ИИ-слой выключен (не ошибка);** базовый пайплайн работает.
 10. **Промоушен факта — по числу независимых наблюдений** (одна уверенная галлюцинация не
-    промоутит). Алиас — только при согласованности фразы (по умолчанию единогласие);
-    расходящиеся не промоутятся никогда.
-11. **Гомоглифы латиница→кириллица нормализуются 1:1** (длина строки не меняется,
-    индексы валидны).
+    промоутит). Алиас — только при единогласии фразы→slug; расходящиеся не промоутятся.
+11. **Гомоглифы латиница→кириллица нормализуются 1:1** (длина строки не меняется).
 12. **`fully_resolved` консервативен** — любой неизвестный факт уводит в ИИ, не додумывает.
 13. **Усечение до лимита — ПОСЛЕ сортировки по дистанции** (везде в ранжирующем коде).
 14. **Дистанции фолбэка — реальный haversine**, не шаблонный текст.
-15. **`aclosing` вокруг стрима SDK** — иначе недоеденный async-генератор добивается GC на
-    живом loop (`RuntimeError` + утечка процесса CLI).
-16. **Station-class фолбэк только при дефолтном радиусе** (явная `max_distance_m` =
-    жёсткая отсечка, фолбэк выключается). Данные reference — только из официальных
-    источников, GUID/id не подбирать (иначе нерабочие ссылки).
+15. **`aclosing` вокруг стрима SDK** — иначе недоеденный async-генератор добивается GC
+    на живом loop (`RuntimeError` + утечка процесса CLI).
+16. **Station-class фолбэк только при дефолтном радиусе** (явная `max_distance_m` = жёсткая
+    отсечка). Данные reference — только из официальных источников, GUID/id не подбирать.
 
-## Факты внешнего мира / потолок pik.ru и данных
+## Гео-сужение: правило AND
 
-- **`api.pik.ru/v2/filter` ИГНОРИРУЕТ `metroStations`/`districtLocations`/
-  `districtCounties`** — baseline, реальный GUID и `deadbeef` дают одинаковый count.
-  Реально проверяется только `blocks` (`blocks=999999` → 0). Значит `result_count` при
-  локационном фильтре отражает только комнатность/цену → `validate` честно предупреждает
-  (`ValidationResult.location_filters_not_verified`).
-- **Тот же бэкенд ИГНОРИРУЕТ `finish` и `settlementYearFrom`/`settlementYearTo`** (замер
-  2026-07-27: `blocks=477&rooms=1` → 54; `+settlementYearFrom=2030&settlementYearTo=2031`
-  → 54; `+finish=0` → 54; контроль «бэкенд не сломан вообще» — `blocks=411&timeOnFoot=12`
-  → 0). Поэтому в `validator.py` две тупли: `UNVERIFIED_LOCATION_PARAMS` (питает поле
-  `location_filters_not_verified` — контракт API не менялся) и
-  `UNVERIFIED_NON_LOCATION_PARAMS` (даёт отдельный warning «result_count не учитывает
-  отделку и год заселения», перечисляя только реально ушедшие параметры);
-  `UNVERIFIED_BY_BACKEND_PARAMS` — их сумма. Иначе `validate` выдавал за полноценную
-  проверку число, не учитывающее 2 из 6 фильтров ссылки.
-- Из **183 локационных id живыми данными подтверждены только 72** (все — ЖК/`blocks`).
-  111 id метро/районов/округов непроверяемы, пока front-API `www.pik.ru` за Qrator; наши
-  id округов расходятся со всеми живыми `locations.child.id`. GUID станций / id округов
-  докуриваются **вручную** (открытый backend их не отдаёт).
-- pik.ru продаёт **только новостройки**.
-- OSM-теги: метро `route=subway network="Московский метрополитен"`; МЦК `route=train
-  ref=14` (**не** `light_rail`); МЦД `route=train network="МЦД"`. Публичный Overpass под
-  нагрузкой отдаёт 429/504 (транзиент, ретраить). Один запрос «сады в радиусе 2 км»
-  отвечает **~20-25 с** — таймаут HTTP-клиента 30 с рвался по ReadTimeout раньше ответа
-  (`OVERPASS_TIMEOUT_S`=120).
-- **`amenity=kindergarten|school` в OSM ≠ работающий объект.** Живой замер (ЖК 1165
-  «Нарвин», проверено вручную по карте + Overpass): «сад в 186 м» = `relation/13512774`
-  с тегами `amenity=kindergarten` + `construction=education` +
-  `construction:type=construction` + `landuse=construction` и **без `name`** — это
-  огороженная СТРОЙПЛОЩАДКА; первый работающий сад — «Детский сад №2044» в 300 м. У
-  «Кронштадтского 9» сад в 248 м = «Sun School» (`ownership=private`, встроенное
-  помещение частной сети), настоящий «Детский сад №2» — в 266 м. Отсюда правило:
-  строящееся/проектируемое (`construction*`/`planned:*`/`proposed:*`/
-  `landuse=construction`) в дистанцию НЕ входит.
-- **Дошкольные корпуса школьных комплексов — настоящие детсады.** «Школа № 1576. Корпус
-  № 16» в 893 м от ЖК 1372 подписана как школа, но это дошкольное отделение (московская
-  система образования). Не исключаем и не понижаем в приоритете — только показываем имя.
-  То же с безымянными полигонами (4 из 19 садов у «Нарвина» — `barrier=fence` без
-  названия, на карте просто двор) и частными сетями: остаются, но признак виден в данных.
-- **Overpass — только full-planet зеркала.** Региональные (`overpass.osm.ch`, Швейцария)
-  на московские координаты отвечают 200 + count=0 — **молча врут**. Рабочее зеркало —
-  `maps.mail.ru/osm/tools/overpass`; `overpass-api.de` из этой сети недоступен.
-- **OAuth/`setup-token` делят квоту с самим Claude Code** → под активной работой в
-  терминале возможен 429. Гарантированно без 429 под нагрузкой — только отдельный
-  `ANTHROPIC_API_KEY`. CLI `claude` проверен на v2.1.218, SDK `claude-agent-sdk` 0.2.126.
+Гео-фолбэк **ПЕРЕСЕКАЕТСЯ** с уже выбранными ЖК, а не объединяется: оба списка сужают
+одну ось («какие ЖК»), OR стирал более узкое требование. Пустое пересечение — **не** повод
+расширяться: оставляем более специфичный список + warning «гео-условия не пересекаются».
+Общая логика — `app.pik.location_fallback.combine_with_fallback`; **и `build_url`, и
+`validate` обязаны проходить через неё** (раньше расходились, `result_count` завышался
+в 6.5 раза). Флаг `Criteria.complexes_matched_empty` отличает «посчитали и получили ноль»
+от «не считали вовсе» — служебный, в `to_public_dict()`/`to_query_dict()` не попадает.
 
-## ИИ-слой — текущее поведение
+Подробности механик (ориентиры, суперлативы, класс станций, МКАД) —
+`docs/geo-narrowing.md`.
 
-- **Транспорт `claude` = Claude Agent SDK поверх локального Claude Code CLI** (`query()` +
-  `ClaudeAgentOptions`; `app/ai/client.py::call_claude`). Один ход (`tools=[]`,
-  `setting_sources=[]`), structured output нативно (`output_format` json-schema →
-  `ResultMessage.structured_output`, текстовый фолбэк из `.result`). Порядок кредов
-  `_claude_sdk_env`: `ANTHROPIC_API_KEY` → `CLAUDE_OAUTH_TOKEN` (в env CLI как
-  `CLAUDE_CODE_OAUTH_TOKEN`) → keychain-логин. Гейт «настроен ли ИИ» —
-  `claude_credentials_available()`. Транзиентность `_is_transient_claude_sdk`: сбои CLI
-  (`CLIConnectionError`/`ProcessError`/`CLIJSONDecodeError`/`ClaudeStreamError`) и
-  `api_error_status` 429/5xx → ретрай; `CLINotFoundError`/брак валидации → фатал.
-  (Заменил прежний прямой HTTP-Anthropic + сырой OAuth-заголовок.)
-- **Гейт 1 — ВКЛЮЧЁН**, **гейт 2 — ВКЛЮЧЁН.** `enrich()` не идёт в POI/шорт-лист ИИ-путь,
-  если нет ни `poi_requirements`, ни `center_requested`, ни `landmark_requirements`, ни
-  `station_class_requirements`. `option_candidates` гейт 1 **не** пропускает
-  (`resolve_options()` отрабатывает до гейта). Гейт 2: `from_deterministic` только при
-  непустых `poi_requirements`/`center_requested` (иначе vacuous-truth сливал полкаталога).
-- **Экстрактор свободного текста (`resolve_free_text_criteria`) — ОСЛАБЛЕНИЕ гейтов
-  (ведро C).** Отдельная ветка ДО гейта 1 и независимо от него: если детерминированный
-  парсер оставил значимый остаток (`_residual_fragments` из warning'ов «не удалось
-  распознать»), фрагменты + текст уходят в модель, и она заполняет **только пустые
-  СКАЛЯРНЫЕ** поля Criteria (`_FREE_TEXT_SCALAR_FIELDS`/`_FREE_TEXT_BOOL_FIELDS`: rooms,
-  price, area, floor+флаги, sort, housing_type, ready, settlement_year, only_available,
-  **time_on_foot/time_on_transport** — страховка на случай, если детерминированная идиома
-  времени до метро промахнётся).
-  Метро/районы/округа/ЖК/опции **не трогает** (остаются на детерминированных путях +
-  `sanitize_*`). **Исключение — ориентиры (AI-22):** поле `landmarks` в
-  `FreeTextCriteriaAnswer` (`LandmarkMatch`: `phrase`+`slug`), каталог `name`/`slug` уходит
-  в модель через `build_free_text_context`, ответ валидируется
-  `sanitize_landmark_resolution` против `landmarks.json` — **координаты берёт справочник, у
-  модели их не спрашивают и не принимают** (иначе выдуманная точка сдвинула бы гео-сужение);
-  выдуманный slug и записи без `lat`/`lon` отбрасываются, фраза остаётся в `warnings`.
-  Пишем только в ПУСТОЙ `landmark_requirements`. Мотивация — живой прогон «двушку самую
-  ближайшую к Политеху»: остаток был, ИИ вызывался, но прав на ориентиры не имел, и
-  `ai_used` честно оставался `false`.
-  Инварианты: детерминированное всегда выигрывает (пишем только `None`-поля);
-  невалидное значение отбрасывает `validate_assignment` Criteria; ведро B
-  (`не поддерживается pik.ru`) в остаток НЕ попадает → вызов не жжётся. `ai_used`/
-  `criteria_changed_by_ai` честно выставляются в True, даже если ниже сработал
-  `noop()`/`from_deterministic`. Схема ответа — `FreeTextCriteriaAnswer`, промпт —
-  `FREE_TEXT_SYSTEM_PROMPT`. (Мотивация: 429 решён отдельным ключом, строгость гейтов
-  ослаблена; см. `docs/history.md`.)
-- **Landmark и station-class — всегда включённые детерминированные ветки** (чистый
-  haversine, ниже гейтов, ИИ не зовут; работают без учётных данных Claude).
-- **Суперлатив ориентира (`LandmarkRequirement.nearest_only`, AI-22).** «Самую ближайшую к
-  X» ≠ «рядом с X»: радиус (`LANDMARK_DEFAULT_RADIUS_M`) не применяется вовсе, отдаём
-  `LANDMARK_NEAREST_LIMIT` ближайших ЖК (`landmark_nearest_ids`, сортировка → усечение,
-  инвариант 13). Ответ существует всегда, пока есть хоть один ЖК с координатами; явная
-  `max_distance_m` остаётся жёсткой отсечкой. Признак ставит `rules/landmark.py`: сам маркер
-  `ближайш\w+\s+к` **или** усилитель слева (`_SUPERLATIVE_PREFIX`: «самую…», «ближе всего»,
-  где маркером работает голое «к») — усилитель включается в consumed-span, иначе «самую»
-  оседает в остатке ложным warning'ом. Окончания перечислены явно, без открытого стема
-  `сам\w+` (тот цеплял бы «самолёта у аэропорта»).
-- **Фолбэк «рядом с X» при пустом радиусе** (`landmark_nearest_fallback`, AI-22) — перенос
-  приёма AI-18 со станций на ориентиры: пусто в `LANDMARK_DEFAULT_RADIUS_M` → отдаём
-  `LANDMARK_FALLBACK_LIMIT` ближайших + warning «в радиусе N км … ЖК нет; показаны
-  ближайшие — от X км». Явная `max_distance_m` фолбэк выключает (жёсткая отсечка —
-  симметрично инварианту 16). Общий с суперлативом хелпер — `_landmark_distances`;
-  различие только в поводе, не в математике.
-- **Дистанция до ориентира парсится** (`rules/landmark._DISTANCE_SUFFIX`): «рядом с МГУ не
-  дальше 1 км» → `max_distance_m=1000`, спан расширяется на дистанцию. Маркер здесь
-  **суженный** относительно общего `_DIST_MARKER`: без «до» и без бесмаркерной формы —
-  имя ориентира ищется нечётким окном, и голое «до 45 метров» увело бы в дистанцию чужую
-  площадь. Форма «в 500 метрах ОТ Политеха» (дистанция ДО имени) пока не поддержана —
-  у `_MARKER` нет голого «от», а вводить его рискованно («от 60 метров» = площадь).
-- **Комбинация ориентир+POI/центр**: landmark-ветка пропускается (там своя логика), но
-  радиус ориентира уже применён в `resolve_known_facts` — при пустом результате
-  выдаётся warning явно, иначе требование «рядом с X» исчезало молча и один запрос вёл
-  себя противоположно в зависимости от наличия «со школой рядом».
-- **Суперлатив работает и В КОМБИНАЦИИ с POI/центром (AI-23).** Раньше `nearest_only` читала
-  только чистая landmark-ветка, закрытая условием `not poi_requirements` — «трёшка ближайшая
-  к Политеху рядом с садами» молча деградировала в радиус 5 км. Замер: трактовки расходятся
-  у **45 ориентиров из 50**, а у МГИМО/МФТИ/ХХС радиус даёт 0 ЖК там, где суперлатив даёт 3.
-  Теперь ветка комбинации пересчитывает `matched_complex_ids` через `landmark_nearest` по
-  кандидатам, прошедшим ОСТАЛЬНЫЕ требования (`resolve_known_facts` с пустым
-  `landmark_requirements`): суперлатив заменяет **радиус**, а не весь фильтр — POI остаётся
-  обязательным. Общие хелперы `_all_superlative`/`_apply_superlative`/`_warn_mixed_superlative`
-  — чтобы текст warning'а и правило «все ориентиры суперлативные» не двоились между ветками.
-- **`build_candidate_shortlist(criteria, warnings=None)` больше не молчит при откате** на
-  общегородской список: «в Митино» (ни одного ЖК с такой привязкой) даёт явный warning
-  «локация не применена, показаны варианты по всему городу». Параметр необязателен (тесты),
-  но рантайм (`enrich`) обязан его передавать.
-- **«В центре» предупреждает вместо тишины.** `is_center=None` у **всех 51** района, а среди
-  округов ЖК ЦАО отсутствует полностью (есть ВАО/ЗАО/САО/СВАО/СЗАО/ЮАО/ЮВАО/ЮЗАО/
-  Новомосковский/Щербинка); из районов ЦАО в справочнике только Таганский, и ЖК в нём нет.
-  Это потолок портфеля застройщика, а не пробел данных — поэтому лечится warning'ом, а не
-  проставлением `is_center`.
-- **Суперлатив применяется, только если ВСЕ ориентиры суперлативные.** Смешанный запрос
-  («рядом с МГУ и ближайшую к Политеху») сохраняет радиусную семантику + warning: иначе
-  `any()` отбрасывал радиусное требование целиком.
-- Дефолт `AI_PROVIDER=antigravity` (CLI `agy`), `AI_MODEL_NAME=gemini-3.5-flash` (одно
-  поле для обоих провайдеров; для claude → `ClaudeAgentOptions.model`). ИИ **не обязателен**
-  в рантайме. `google-antigravity` в Python не импортируется — ставит бинарь `agy`.
-- Наблюдаемость: `log_ai_call` пишет строку в `ai_call_log` на каждый `enrich()`
-  (`had_poi_or_center`, `fully_resolved_deterministically` — считается всегда, `cache_hit`,
-  `ai_called`, `criteria_changed_by_ai`). Таблицы БД: `ai_structured_facts`,
-  `ai_semantic_cache`, `ai_call_log`. Эмбеддинги — `paraphrase-multilingual-MiniLM-L12-v2`
-  (dim 384, `halfvec(384)`).
+## Потолок pik.ru — что валидатор НЕ проверяет
 
-## Гео-сужение по `blocks` и доверие к id
+`api.pik.ru/v2/filter` **игнорирует** `metroStations`, `districtLocations`,
+`districtCounties`, `finish`, `settlementYearFrom/To` — реальный GUID и `deadbeef` дают
+одинаковый count. Реально проверяется только `blocks`. Поэтому `validator.py` держит
+`UNVERIFIED_LOCATION_PARAMS` (поле `location_filters_not_verified`) и
+`UNVERIFIED_NON_LOCATION_PARAMS` (отдельный warning про отделку и год);
+`UNVERIFIED_BY_BACKEND_PARAMS` — их сумма. **`result_count` при локационном фильтре
+ничего не доказывает** — не делать из него выводов.
 
-- **`app/pik/location_fallback.py`** — сущности без достоверного id не выпадают молча:
-  (1) точный тег-матч по привязке ЖК (`block_ids_by_tag`); (2) для метро с координатами —
-  сужение по расстоянию (`nearby_block_ids`, радиус `STATION_CLASS_DEFAULT_RADIUS_M`,
-  фолбэк на N ближайших); (3) иначе явный warning. Встроен И в `build_url`, И в `validate`.
-- **`app/pik/id_trust.py`** — `REMOVED_SYNTHETIC_METRO_IDS`, `is_verified_metro_id` (в URL
-  как `metroStations` подставляются только доверенные id).
-- **Гео-фолбэк ПЕРЕСЕКАЕТСЯ с уже выбранными ЖК, а не объединяется** (`build_url`, AI-23).
-  Оба списка сужают одну ось («какие ЖК»), поэтому OR не складывал требования, а СТИРАЛ
-  более узкое: «двушку внутри МКАД около Патриарших прудов» = 8 ЖК от ориентира ∪ 27 ЖК
-  внутри МКАД = **все 27**, требование «около Патриарших» исчезало молча. После правки
-  8; «за МКАД + ближайшая к Сколково» 44 → 3; «внутри МКАД + Бауманка» 27 → 1. Пустое
-  пересечение — **не** повод расширяться (это и был баг): оставляем более специфичный
-  список (из семантики запроса) + warning «гео-условия запроса не пересекаются».
-  Сигнатура `build_url(criteria, warnings=None)` — параметр необязателен (тесты/аудиты),
-  рантайм обязан передавать.
-- **Пустой матч ориентира/POI НЕ теряется молча при AND с гео-фолбэком (defect fix).**
-  До правки `criteria.complexes == []` было неотличимо от «локацию не считали вовсе» —
-  «двушку внутри МКАД рядом с Третьяковкой не дальше 1,5 км» (ближайший ЖК ПИК — 4.18 км,
-  радиус честно пуст) давало не пустую выдачу, а ВЕСЬ список МКАД, как будто ориентира не
-  было. Причина — двойная truthy-дыра: (1) `EnrichmentResult.matched_complex_ids=[]`
-  (класс-дефолт) неотличим от реального «посчитали и получили ноль»; (2)
-  `merge_enrichment`'s `if enrichment.matched_complex_ids:` не трогал `criteria.complexes`
-  при пустом списке. Фикс — явный сигнал `EnrichmentResult.complexes_matched: bool`
-  («matched_complex_ids — результат РЕАЛЬНОГО расчёта, а не дефолт») и
-  `Criteria.complexes_matched_empty: bool` (`merge_enrichment` ставит `True`, когда
-  `complexes_matched=True`, а итоговый список ЖК пуст). `combine_with_fallback`
-  (`app/pik/location_fallback.py`, общий для `build_url` и `validate`) трактует этот флаг
-  как «требование участвовало и дало пусто» — пересечение с непустым фолбэком (МКАД и
-  т.п.) тоже даёт пусто (`blocks=` без значений) + переиспользованный warning «не
-  пересекаются», вместо отката на весь фолбэк-список. Служебное поле, в
-  `to_public_dict()`/`to_query_dict()` не попадает.
-- **`validate()` использует ТОТ ЖЕ `combine_with_fallback`, что `build_url` (defect fix).**
-  Раньше `validate()` ОБЪЕДИНЯЛ гео-фолбэк с уже выбранными ЖК (конкатенация id) вместо
-  пересечения — расхождение с `build_url` подтверждено живым замером: `result_count`
-  завышался в 6.5 раза (3889 вместо реальных 598) для `Criteria(within_mkad=True,
-  complexes=[ЖК_ЗА_МКАД])`. Общая AND-логика (+ единый текст warning'а
-  `LOCATION_INTERSECTION_EMPTY_WARNING`) теперь живёт в
-  `app.pik.location_fallback.combine_with_fallback` — оба вызывающих места обязаны через
-  неё проходить, чтобы не разойтись снова.
-- **Класс станций** (`StationClassRequirement`): `RefEntry.line` в `metro.json`
-  (пересадочные — несколько линий через `" / "`), `station_class_points(criteria)` собирает
-  координаты, несколько требований = семантика ИЛИ. Словарь цветов/номеров/прозвищ линий —
-  **inline в `app/parsing/rules/station_class.py`** (не отдельный JSON); стемы официальных
-  имён строятся из данных (`_official_line_stem_map` из `RefEntry.line`; `@cache` у
-  `load_metro()`, компиляция кэшируется по содержимому). Общий фрагмент дистанции —
-  `app/parsing/rules/core.py` (`_DIST_MARKER`/`_DIST_UNIT`/`_parse_distance_meters`,
-  переиспользуется `poi.py`/`station_class.py`; метры + дробные км + **минуты**
-  `WALK_METERS_PER_MINUTE`≈80). Единый маркер близости — `_PROXIMITY_MARKER` (`core.py`),
-  из него собраны TRIGGERS `entity_match`.
-- **Guard дорог vs метро-кольцо** (`station_class._is_road_context`): «кольцо»/линия
-  рядом с `МКАД/ЦКАД/ТТК/садов/бульварн/транспортн/шоссе/трасс/(авто)дорог` — это дорога,
-  а не станция. Проверяет контекст по ОБЕ стороны матча (старый `_NOT_ROAD_TAIL` смотрел
-  только вперёд и пропускал «МКАД кольца»).
-- **Ведущая дистанция POI** (`poi._LEADING_DISTANCE`): дистанция ДО категорий
-  («до 18 минут … школы и сады») применяется к POI без собственной суффиксной дистанции;
-  сегменты с «метро/станц» пропускаются (это время до метро, не дистанция POI). Форма
-  симметрична `_TRAILING_DISTANCE` и держится на **трёх** предохранителях: маркер близости
-  НЕОБЯЗАТЕЛЕН (живое «квартира до 18 минут школы и сады» его не содержит), зато маркер
-  дистанции ОБЯЗАТЕЛЕН; зазор **без цифр и пунктуации**; выражение **прижато справа** —
-  ищется `search(norm, 0, poi_start)` первого (по позиции) POI без своей дистанции, а не
-  «где-то в тексте» (симметрично хвостовой форме, что считается от `match.end()`).
-  Прижатия мало: обратный порядок «площадью от 35 до 45 **м** рядом школа» крал «до 45 м»
-  (зазор « рядом » цифр не содержит), поэтому — четвёртый слой:
-  `extract_poi_requirements(text, consumed=None)` и вызов `(norm, consumed)` в
-  `rules/__init__.py` (приём `extract_floor(norm, consumed)`; параметр опционален для
-  прямых вызовов). Замер: полное «метров» до кражи не доходит — подстрока «метро» гасит
-  матч тем же guard'ом, единственная реальная форма кражи — сокращённое «м».
-  До правки ложные срабатывания шли от **буквы внутри слова**: `_PROXIMITY_MARKER` имел
-  голые `у|к` без `\b`, и «к» в «кухня»/«школа»/«пешком» открывала матч с нулевого индекса,
-  обходя guard «метро» (он смотрит на текст матча). Итог — «до метро пешком 7/12 минут» и
-  «метро в шаговой доступности 10 минут» **фабриковали** дистанцию 560/960/800 м у
-  парка/садика/магазина/аптеки за запятыми. Теперь `у\b|к\b` (независимые копии маркера в
-  `landmark.py`/`station_class.py` имеют свою форму `\b(?:…|у|к)\s+` и не затронуты).
-- **Время до метро** (`rules/time.py`) — реальный URL-фильтр `timeOnFoot`/`timeOnTransport`;
-  покрыты идиома «(в пешей/шаговой) доступности N минут» **и способ передвижения МЕЖДУ
-  «метро» и числом** (`_T_FOOT_MODE`/`_T_TRANS_MODE`, AI-24): «до метро пешком 7 минут»,
-  «метро пешком 7 минут», «до метро идти 12 минут», «до метро ходьбы 9 минут» →
-  `time_on_foot`; «до метро на транспорте 15 минут», «метро на машине 12 минут» →
-  `time_on_transport`. Прежние модели допускали между метро и числом только предлог
-  (`_T_FOOT_2`/`_T_TRANS_2` требуют обратный порядок — «до метро 7 минут пешком»), поэтому
-  форма не матчилась вовсе: guard `poi` минуты уже не крал, но фильтр терялся в остатке
-  warning'ом. Глаголы движения перечислены явно (`_WALK_VERB`, без открытого стема).
-  Спан покрывает идиому целиком, включая «до метро» и способ, — иначе остаётся ложный
-  warning (инвариант 1). ИИ-экстрактор свободного текста дублирует эти поля как страховку
-  (см. ниже).
-- **Числительные прописью для минут** (`time._MINUTE_WORD_TO_NUM`/`_MINUTE_NUM`, находка
-  QA-корпуса №2): «до метро пешком семь минут» и «до метро пешком минут семь» давали
-  `None` — все паттерны требовали голое `(\d+)`. Словарь 1..30 (разумный диапазон пешей/
-  транспортной доступности; по аналогии с `rooms._CARD_WORD`, но без схлопывания в «3+» —
-  у минут точная семантика, не диапазон) заменяет капture-группу `(\d+)` на
-  `(?:\d+|<словарь>)` во ВСЕХ паттернах `_T_*`; `_parse_minutes()` конвертирует обратно в
-  `int`. Инверсия «минут N» (без «до») поддержана ТОЛЬКО для формы MODE (метро явно рядом
-  со способом передвижения — `_T_FOOT_MODE_INV`/`_T_TRANS_MODE_INV`) как разговорный
-  приближённый оборот («минут семь» ≈ «около семи минут», та же конструкция, что «часов в
-  пять»); голая безметровая инверсия не введена — риск перехвата чужого числа тот же, что
-  у необоснованного голого «от» в дистанции ориентира.
-- **Guard «безметровых» форм пешего времени** (`time._POI_CUE`/`_METRO_CUE`/
-  `_is_poi_time_context`, применён к `_T_FOOT_3` и `_T_FOOT_ACCESS2`). Это были ЕДИНСТВЕННЫЕ
-  пешие формы, не требующие ни «метро», ни «станции», — и «до магазинов не больше 12 минут
-  ПЕШКОМ» выставляло ими **реальный** URL-фильтр `timeOnFoot=12` («пешком до метро»),
-  которого пользователь не просил: одно число уходило сразу в два фильтра. Живой замер
-  вреда: у ЖК «Волжский парк» (id 411) реальный `timeOnFoot=15`, при `timeOnFoot=12`
-  `api.pik.ru` отдаёт **0** однушек против 31 без фильтра — ссылка обещала 3 ЖК, pik.ru
-  показывал 2. Это **зеркало** обратного guard'а, который в `poi.py` был с самого начала
-  («метро»/«станц» в сегменте → это время до метро, а не дистанция POI); у правила времени
-  симметричной проверки не было — чистая асимметрия. Выбран лексический guard, а НЕ
-  перестановка правил (POI раньше времени с передачей спанов в `consumed`): зависимость
-  двусторонняя — `poi._LEADING_DISTANCE` сам опирается на спаны цены/площади/**времени**,
-  и перестановка потребовала бы двух проходов правила времени. Проверяются **обе стороны**
-  внутри одной клаузы (POI бывает и слева — «до магазинов … 12 минут пешком», и справа —
-  «до 20 минут пешком до школы и детского сада»), окно обрезается по `,;.!?()`: «…пешком,
-  а метро в 5 минутах» — два независимых пожелания. Присутствие «метро»/«станц» рядом
-  guard ОТМЕНЯЕТ. Голые «сад»/«парк»/«лес» в лексиконе взяты падежными формами (омонимия
-  со станциями «Ботанический сад», «Парк Победы», «Лесная»), «зелен-» не включено вовсе
-  («зелёная ветка метро»). Guard не отдаёт спан правилу времени — его забирает POI через
-  `poi._WALK_TAIL` (необязательный «пешком/ходьбы/идти» в хвосте дистанции), иначе
-  «пешком» осело бы ложным warning'ом (инвариант 1).
-- **«Внутри/за МКАД»** (`Criteria.within_mkad`, `rules/misc.extract_within_mkad`): у pik.ru
-  фильтра границы МКАД НЕТ — сужаем по `blocks` (`app/geo/mkad.point_in_mkad` над
-  `mkad_ring.json`; `complexes_in_mkad` в `candidates.py`; врезано в
-  `location_fallback.resolve_fallback_block_ids` — при наличии др. локаций ПЕРЕСЕКАЕМ,
-  AND). Полигон — приближение (см. команды/`refresh_mkad`), заметки честно помечают
-  «приближение». В `to_query_dict` не сериализуется.
+Из 183 локационных id живыми данными подтверждены 72 (все — ЖК/`blocks`). GUID станций
+и id округов докуриваются вручную. Прочие факты внешнего мира (OSM-теги, зеркала Overpass,
+квоты ИИ, POI-кэш) — `docs/external-facts.md`.
 
-## POI-кэш: схема v2 и правило «дистанция только по действующим»
+## Пороги
 
-`app/reference/poi_cache.json` — `{slug ЖК: {категория: запись}}`. Запись — модель
-`POIResult` (`app/geo/poi.py`), собирается радиусом `COLLECT_RADIUS_M`=2000 м:
+Env-настраиваемые ключи — `app/config.py`. Гео-пороги и лимиты — **модульные константы**:
+`app/geo/candidates.py` (`SHORTLIST_LIMIT`, `LANDMARK_*`, `STATION_CLASS_*`),
+`app/geo/distance.py` (`CENTER_RADIUS_M`), `app/parsing/entity_match.py`
+(`OPTION_MIN_QRATIO`), `app/parsing/parser.py` (`MAX_OPTION_CANDIDATE_WORDS`).
+**Значения смотреть в коде, не здесь** — дубль в документации устаревает молча.
 
-| Поле | Смысл |
+Калибруемые эвристики (радиусы, порог семантического кэша) — ужесточать по мере улучшений.
+Обоснования текущих значений — `docs/thresholds-rationale.md`.
+
+## QA-харнесс
+
+Два корпуса, дополняют друг друга, гоняются в каждом `pytest`:
+
+1. **Парсер** — `tests/corpus/queries.txt` (198 коротких), `scripts/parse_audit.py`
+   (офлайн, без сети и ИИ), `tests/test_parse_audit_regression.py`.
+   Пороги: crashes=0, empty≤28, no-filter-URL≤61, coverage≥0.91.
+2. **Полный детерминированный путь** — `tests/corpus/complex_queries.txt` (31 длинный;
+   **индексы 0/1 и последнюю строку не сдвигать** — на них опираются точечные тесты),
+   `scripts/complex_audit.py` (`parse`→`enrich` при `AI_ENRICHMENT_ENABLED=False`→`build_url`).
+   Пороги: crashes=0, URL-без-фильтров=0, без `blocks`≤8, coverage≥0.92, фильтров≥8.93.
+
+**Зачем второй:** первый не зовёт `enrich` и не видит участок, где живёт `blocks=` — там
+фильтр может быть распознан и не доехать до ссылки.
+
+**Чего не видят ОБА:** дефект формы, отсутствующей в корпусах, и дефект, который
+не теряет фильтр, а **добавляет лишний** — сводные метрики от такого только «улучшаются».
+Ловится лишь живым прогоном с проверкой ссылки на pik.ru, в формате
+**«запрос → ссылка → критерии → ЖК с дистанциями → warnings»**.
+
+**Пороги ослаблять только с обоснованием в `docs/history.md`.** За историю проекта
+обоснованное снижение было ровно одно (9.03→8.93, удаление трёх сфабрикованных
+`timeOnFoot`). Метрика «фильтров на запрос» не отличает честный фильтр от выдуманного.
+
+## Источники правды
+
+| Файл | Содержание |
 |---|---|
-| `count` | всего объектов OSM в радиусе (действующие + строящиеся) |
-| `closest_distance_m` | **дистанция до ближайшего ДЕЙСТВУЮЩЕГО объекта** — только она работает отсечкой пользовательского `max_distance_m` |
-| `closest_name` | имя ближайшего действующего объекта (`null` = безымянный в OSM) |
-| `closest_unnamed` | ближайший действующий объект без `name` |
-| `count_operational` / `count_under_construction` | сколько работает / отброшено как стройка |
-| `closest_under_construction_m` | дистанция до ближайшей стройки — факт сохранён, фильтром не служит |
-| `schema_version` | 2; отсутствие поля = v1 (дистанция считалась вместе со стройками) |
-
-- **Действующий = не `construction*`/`planned:*`/`proposed:*`/`landuse=construction`**
-  (`app/geo/poi.is_operational`). Граница осознанно узкая: врёт только НЕРАБОЧИЙ объект.
-  Дошкольные корпуса школ, безымянные полигоны и частные сети (`ownership=private`) —
-  **остаются** (см. «Факты внешнего мира»).
-- **Отсечка `max_distance_m` — по действующей дистанции** (`resolve_known_facts`). До
-  этого `closest_distance_m` считался по всем элементам и «садик в 200 метрах» проходил
-  по стройплощадке — живой прогон `blocks=1165,518,1372`, где садов на карте не было.
-- **Обратная совместимость — без тихой деградации.** v1-запись читается (`count` работает
-  как `count_operational`), но `build_candidate_shortlist` один раз добавляет warning
-  `POI_CACHE_STALE_HINT` («пересоберите: `uv run python -m app.geo.refresh_poi`») —
-  и только если у v1-записи вообще есть дистанция (заглушки промоушена с `null` ничего
-  не искажают). Битая запись — `ValueError` с той же инструкцией, а не «POI нет».
-- **Прозрачность в выводе** (`enrichment._warn_poi_evidence`): одна строка на категорию —
-  «детский сад: ближайший действующий — «Детский сад №2044», 300 м (ЖК «Нарвин»);
-  строящихся объектов не учтено: 1 (ближайшая стройка ближе — 186 м)». Условие ровно одно:
-  **непустой `matched_ids`** (хоть один ЖК прошёл требование); сужения выдачи НЕ требуется —
-  имя и дистанция нужны для самопроверки и когда прошли все кандидаты. Клауза про стройку
-  добавляется, только если она **ближе** действующего объекта (`closest_under_construction_m`
-  — единственный её потребитель): это ровно то число, которое объясняет живой «сад в 186 м».
-- **Формулировка честна для обеих схем.** `ComplexCandidate` несёт `poi_schema_version` и
-  `poi_under_construction_m` (заполняет `build_candidate_shortlist`). Для v1-записи вместо
-  «ближайший ДЕЙСТВУЮЩИЙ» пишем «ближайший … запись кэша v1 — стройки в ней не отделены от
-  работающих объектов»: такого факта у нас там нет (инвариант 1). Пустое имя тоже значит
-  разное — `poi_unnamed=True` = «объект без названия в OSM» (факт v2), иначе «объект (имя в
-  кэше не записано)»; ради этого различия флаг и читается, а не выводится из `poi_names`.
-- **Промоушен ИИ-факта не спорит с измерением** (`promotion._promote_poi_fact`, инвариант 3):
-  запись создаётся только когда её НЕТ (полноценная v2-заглушка, `closest_distance_m=null`);
-  существующая не правится вовсе. Согласный с измерением факт считается применённым
-  (идемпотентность), расходящийся — уходит в лог и в `ignored_count`. `schema_version=2`
-  ставится ТОЛЬКО новой записи: пометка v1-записи как v2 выдавала бы её «стройечную»
-  дистанцию за дистанцию до действующего объекта и слепила оба предохранителя
-  (stale-warning + `refresh_poi._needs_refresh`, то есть запись перестала бы пересобираться).
-- `only_new` схема по-прежнему НЕ различает: отделение стройки эту неопределённость не
-  снимает — «новизна» уже открытого сада в OSM-тегах не выражена. Решение остаётся за ИИ.
-- **Замер после пересборки (414/414 записей, живой Overpass):** отброшено **99 строящихся
-  объектов**; дистанция изменилась лишь в **4 записях** — `narvin/kindergarten` 186→300 м
-  (тот самый живой дефект), `lublinpark/school` 318→919, `mpark/school` 395→882,
-  `nluga/parking` 217→412. В **175 записях** ближайший действующий объект безымянный —
-  поэтому формулировка «объект без названия в OSM» не редкость, а норма выдачи. Состав
-  `blocks` в сложном корпусе НЕ изменился ни в одном из 31 запроса: изменившиеся 4 записи
-  либо не участвуют в POI-требованиях корпуса, либо новая дистанция всё ещё внутри
-  запрошенной (у пиннингового запроса — 1600 м).
-
-## Каталог заведомо неподдерживаемых фильтров
-
-`_UNSUPPORTED_CATALOG` (`app/parsing/rules/misc.py`) — пожелания, которых **нет в
-URL-схеме pik.ru**: вторичка/вторичный рынок; сторона света/вид на «солнечную-южную»;
-**«раздельный санузел» — ТОЛЬКО ед. ч.** (планировка одного санузла; в схеме только
-`manybathrooms`/`throughbathroom` — это про количество). Разговорное **мн. ч. «раздельные
-санузлы» = «их несколько»** и маппится на `manybathrooms` через alias в
-`option_groups.json` (поэтому мн. ч. каталогом НЕ консюмится — доходит до entity-matching).
-Материал стен (кирпичный/монолитный/панельный/блочный). Текст warning отличается: **«не поддерживается
-pik.ru — пропущен(о)»** (потолок сайта) vs generic **«не удалось распознать, не попало в
-ссылку»** (мусор). Прежде чем заносить — свериться со схемой: «панорамные окна»
-(`bigwindows`) и «окна во двор» (`vidVoDvor`) поддерживаются и в каталог НЕ входят.
-
-## Коллизии спанов правил и fuzzy-матчинг опций
-
-- **Спаны диапазонов не двоятся между правилами.** `apply_rules` копит `consumed`
-  (комнаты→цена→площадь→время) и **передаёт его в `extract_floor(norm, consumed)`**:
-  голый паттерн диапазона этажа `_FLOOR_RANGE_E` («от X до Y» **без** слова «этаж»)
-  иначе повторно матчит число, уже съеденное ценой/площадью, и подставляет
-  паразитные `floorFrom/floorTo` (для «площадью от 35 до 45 метров» это обнуляло
-  выдачу). `extract_floor` сеет внутренний skip-list внешними спанами через
-  `_iter_free`; голый «от X до Y» без цены/площади по-прежнему = этаж.
-- **`OPTION_MIN_QRATIO`=55 (`entity_match.py`).** Для `options`/`option_groups` окно
-  проверяется на `fuzz.QRatio` против алиаса, а не только WRatio: многословное окно,
-  перескочившее союз «и», цепляется за опцию `partial_ratio`'ом одного токена
-  («…окнами **и видом**» ~ «видом на парк»/«с видом на воду», WRatio 85.5), хотя это
-  ДРУГОЕ пожелание. QRatio разделяет чисто (ложные ≤39 vs истинные ≥66: «во двор»→
-  «Вид во двор»=77.8). Мягче общего `STRICT_QRATIO_THRESHOLD`=80 (тот бьёт только
-  однословные option-окна), чтобы не терять склонения/цифро-словные формы.
-- **Ложняки топонимов от обиходных слов — ТОЛЬКО лексикой (`stopwords.py`), не порогом.**
-  Однословное окно БЕЗ анкера («метро»/«район»/«у…»), морфологически близкое к станции/
-  району: «хорошей»→Хорошёво, «первое/первом»→Перово, «спортивным»→Спортивная, «внуков»→
-  Внуково. Порог тут **бесполезен**: законные склонения топонимов имеют такой же и даже
-  МЕНЬШИЙ QRatio («раменках»→Раменки=80, «химках»→Химки=73 против «первое»→Перово=83) —
-  разделяет только лексика. Поэтому — точечный список стоп-слов (продолжение линии
-  «молодая»/«хорошая»); феминные падежи, совпадающие с самой станцией (Спортивной/
-  Спортивную), в список НЕ входят. Пополнять по находкам в живых прогонах.
-- **Модальность и указательные местоимения — в `STOP_WORDS`** (AI-24): `должны/должен/
-  должна/должно` и `этих/эти/эта/это/этот/эту/этим/этими/этом`. Живое «рядом ДОЛЖНЫ БЫТЬ
-  детские сады, чтобы до ЭТИХ детских садов…» давало два warning'а «не удалось распознать»
-  на чистом шуме. Это служебные слова без фильтрующего смысла **в любом контексте** — ровно
-  определение `STOP_WORDS`, и они достраивают уже начатый там класс (`быть`/`чтобы`/`было`/
-  `рядом`). Левое расширение POI-спана отвергнуто: обе формы встречаются и вне
-  POI-контекста (перед ценой, отделкой, метро), спан их не закроет. Помнить, что
-  `STOP_WORDS` переиспользуется в `entity_match` (`_is_stop_word_window`, `clean_window`,
-  `bounds_stopwords`) — пополнять только словами без топонимической омонимии.
-- **Ведущее «этажностью» входит в спан этажа** (`floor._ETAZHNOST`, AI-24): необязательный
-  незахватывающий префикс `(?:\bэтажност\w*\s+)?` у `_FLOOR_RANGE_A`, `_FLOOR_MIN` и
-  `_FLOOR_MAX` («этажностью от 9 до 16 этажа», «этажностью от 7 этажа», «этажность до 12
-  этажа»). Группы 1/2 не меняются, спан растёт только влево. Слово несёт ровно тот факт,
-  который правило и извлекает, — сообщать про него «не удалось распознать» значит врать
-  (инвариант 1). В `_UNSUPPORTED_CATALOG` «этажность» НЕ вносится: `floorFrom`/`floorTo` в
-  URL-схеме есть. Форма «этажность от 9 до 16» (без хвостового «этаж») по-прежнему за
-  `_FLOOR_RANGE_B`.
-- **Комнатность числительными прописью** (`rooms.py`, `_CARD_WORD`/`_ROOMS_CARD`): «одна
-  или две комнаты», «одну комнату», «две-три комнаты» — количественные числительные с
-  цепочкой союзов (симметрично цифровому `_ROOMS_NUM`). Обязательный хвост «комнат…»
-  защищает от «одна остановка»/«две минуты»; `_ROOMS_NEGATION` тоже расширена этой формой.
-  `пять`→`three_plus`.
-- **`whitebox`/`вайтбокс` = предчистовая отделка** (`finish.py`, `_WBOX` в `_FINISH_PRED`).
-  ВАЖНО: `_normalize` схлопывает латинские гомоглифы в кириллицу (инвариант 11), поэтому
-  «whitebox» приходит как «wнiтевох» — матчер использует гомоглиф-толерантные классы
-  `[hн]`/`[bв]`/…; ветки «(с) отделк… whitebox» поглощают ведущее «отделк…», иначе
-  `_FINISH_TRUE` добавил бы паразитный `READY`.
-- **«отделка ПОД КЛЮЧ» поглощает и слово «отделка»** (`finish._FINISH_TRUE`, ветка
-  `\b(?:с\s+)?отделк\w*\s+под\s+ключ\b` **раньше** голого `\bпод\s+ключ\b`). Тот же приём,
-  что уже был у whitebox, — здесь его забыли: матч накрывал только «под ключ», а «отделка»
-  оседала ложным warning'ом **и лишним `option_candidate`**, а тот идёт в
-  `resolve_options()` ДО гейта 1 — сжигал вызов ИИ и пачкал `build_query_signature`.
-  «с отделкой под ключ» дефекта не имело (ловила ветка «с отделк\w+»), голое «отделка под
-  ключ» — имело; строки 19 и 35 `tests/corpus/complex_queries.txt` давали этот warning в
-  зелёном прогоне.
-- **`школ(?!ьник)(?:\w+|\b)`** (`poi.py`, SCHOOL): guard `(?!ьник)` отсекает «школьником»
-  (человек, не объект) — лексически, в духе `stopwords`. `(?:\w+|\b)` вместо `\w+`
-  допускает **голый родительный падеж** «школ» («до этих школ», «пять школ») — стем требовал
-  хотя бы одну букву после корня, и самая частая разговорная форма оседала в остатке. Здесь
-  выбран regex, а НЕ перечисление падежей по образцу `_SAD_BARE_PLURAL`: у «сад»
-  перечисление нужно по существу (омонимия со станцией «Ботанический сад»), у «школ»
-  омонимии нет. Осознанный побочный эффект: «высших школ» → school-POI (так же, как уже
-  было для «высшая школа экономики» — класс не расширяется).
-- **Вилка в дистанции** (`core._DIST_NUM`, `_DIST_RANGE_SEP`): «не дальше 15-20 минут»,
-  «1-2 км», «в 300-500 метрах» → берётся **верхняя** граница («не дальше двадцати»; нижняя
-  ничего не ограничивает). Разделитель — **только дефис/тире**: словесное «от X до Y» — это
-  диапазон площади/цены, перехватывать его здесь нельзя. Общий фрагмент → чинит сразу
-  poi/landmark/station_class.
-- **Вилка ЛЕТ заселения** (`misc._SETTLEMENT_YEAR_RANGE`): «в 2026-2027 годах», «заселение
-  2026-2028», «с 2026 ГОДА по 2029 год». Дефисная форма была ОПАСНЕЕ потери: срабатывал
-  EXACT на первом годе и выдавал `from=to=2026` — готовый URL-фильтр, ПРОТИВОРЕЧАЩИЙ запросу.
-  RANGE обязан проверяться раньше EXACT, иначе тот снова заберёт первый год.
-- **ХВОСТОВАЯ дистанция через разрыв** (`poi._TRAILING_DISTANCE`): «до этих детских садов
-  БЫЛО ИДТИ до 15-20 минут». Была асимметрия — ведущая форма зазор допускала, обратный
-  порядок дистанцию терял. Два предохранителя от кражи чужого числа: зазор **без цифр и
-  знаков препинания** (чтобы дотянуться до «до 45 метров» в «площадью от 35 до 45», зазору
-  пришлось бы проглотить «35» — цифра его обрывает; запятая отделяет соседнее пожелание) и
-  **обязательный** маркер дистанции. Применяется к POI, чей спан непосредственно
-  предшествует, — не ко всем без дистанции, как ведущая форма; **но найденная дистанция
-  раздаётся всему ПЕРЕЧИСЛЕНИЮ влево** (`poi._spread_over_enumeration`/`_ENUM_SEPARATOR`).
-  Иначе «до магазинов, аптек и поликлиники было не более 12 минут» отдавал радиус только
-  медицине, причём **молча**: спан дистанции съеден последней категорией, покрытие текста
-  полное, warning'а нет. Обход влево обрывает первое же содержательное слово между
-  категориями («рядом парк, **до** садика идти не более 10 минут» — два независимых
-  пожелания); точка/точка с запятой в разделитель не входят. Спаны POI при этом НЕ
-  расширяются — правится только `max_distance_m`.
-- **Маркер дистанции знает разговорное «не больше»** (`core._DIST_MARKER`:
-  `не\s+бол(?:ее|ьше)`). В живой речи оно частотнее книжного «не более», а в **обоих
-  корпусах встречалось 0 раз** — поэтому зелёные пороги дефект не ловили: требование
-  оседало ложным warning'ом («было не больше»), а число уходило в чужой фильтр.
-  Симметричное «не менее/не меньше» **намеренно НЕ добавлено** — это нижняя граница,
-  дистанцию она не ограничивает, зато ровно так задают площадь/цену («площадь не менее 60
-  метров»); тот же класс коллизии, что «однушка у МЦД от 60 метров». Одна строка чинит
-  сразу poi/landmark/station_class.
-- **Ведущая дистанция прижата к границе слова СЛЕВА** (`poi._LEADING_DISTANCE`:
-  `(?:\b{_PROXIMITY_MARKER}…`). Голые предлоги «у»/«к» внутри `_PROXIMITY_MARKER` имеют
-  `\b` только справа, и без левой границы маркером становилась **конечная буква
-  предыдущего слова**: в «однушкУ не более 12 минут до магазинов» спан дистанции
-  пересекался со спаном комнатности → `_overlaps` → `break` → дистанция выброшена целиком
-  + ложный warning. Различие было ровно в одном слове («студию …» работало, «однушку …» —
-  нет); мягкий симптом — «квартирУ»/«ищУ» теряли последнюю букву в остатке (««квартир»»).
-  В `entity_match` `\b` уже стоял — это был единственный потребитель без него.
-- **Дедуп POI** (`poi._dedupe`): «детские сады» + «детских садов» давали два одинаковых
-  требования. Ключ — `(категория, only_new)` («новые сады» и «сады» остаются разными),
-  дистанции сливаются по **минимуму**. На URL дубль не влиял, но пачкал
-  `build_query_signature` — ключ семантического кэша.
-- **Разговорный суперлатив** (`landmark._SUPERLATIVE_PREFIX`/`_SUPERLATIVE_CUE`):
-  «максимально близко к», «как можно ближе к» — тот же `nearest_only`, что «самую ближайшую».
-  Без них «максимально близко к МФТИ» деградировало в радиус 5 км, где у МФТИ **нет ни
-  одного ЖК** → пустая выдача вместо существующего ответа.
-- **Склонения ориентиров — алиасами, не порогом.** Замер QRatio: «бауманки»→«бауманка» 87.5,
-  «патриарших прудов»→«патриаршие пруды» 84.8, «киевскому вокзалу»→«киевский вокзал» 81.2 —
-  все ниже порога 88, а опустить порог до 81 значило бы впустить ложные срабатывания (та же
-  линия, что `stopwords` и творительный падеж Политеха). Добавлены падежные формы для
-  Бауманки, Патриарших прудов, Киевского/Белорусского/Казанского вокзалов, Воробьёвых гор,
-  Останкинской телебашни, Сокольников.
-- **Падежное покрытие ориентиров закрыто целиком (AI-24).** Точечные правки закрывали
-  только те записи, что всплыли в живых прогонах; аудит всех 50 ориентиров
-  (`scripts/landmark_alias_audit.py`) показал **28 дефицитных записей и 90 нераспознаваемых
-  форм** — «ближайшая к Финашке» вообще не давала `landmark_requirements`, и без ИИ в ссылке
-  не было `blocks=` (стало `blocks=1165,518,1372`, `nearest_only=True`). Дописано **91**
-  падежных алиаса в `landmarks.json`, дефицит 0. Гейт двойной (`WRatio >= 88` И
-  `QRatio >= 88`): одного WRatio мало — «сбером»→«сбер» W=90, но Q=80.
-  Скрипт — **инструмент, а не тест**: морфология в нём эвристична (несклоняемые топонимы
-  на «-о» и аббревиатуры пропускаются, фразовые формы генерируются только при согласуемых
-  прилагательных, фамилии из «им. X» уже стоят в род. п. — иначе отчёт тонет в
-  «офис яндексой»/«кутафиной»). Автогенерация морфологии в pytest НЕ вносится (флапает);
-  покрытие охраняет детерминированный снимок `CASE_FORMS` в
-  `tests/reference/test_landmark_aliases.py` (+ обязательность `lat`/`lon`/`category`,
-  отсутствие дублей имени/slug/id, отсутствие коллизий алиасов).
-
-## Пороги и конфиг
-
-> Только env-настраиваемые ключи живут в `app/config.py` (провайдер ИИ, ретраи,
-> circuit breaker, промоушен). Гео-пороги и лимиты — **модульные константы**:
-> `app/geo/candidates.py` (`SHORTLIST_LIMIT`, `LANDMARK_*`, `STATION_CLASS_*`),
-> `app/geo/distance.py` (`CENTER_RADIUS_M`), `app/parsing/entity_match.py`
-> (`OPTION_MIN_QRATIO`), `app/parsing/parser.py` (`MAX_OPTION_CANDIDATE_WORDS`).
-
-| Ключ | Значение | Смысл |
-|---|---|---|
-| `AI_PROMOTION_MIN_OBSERVATIONS` | 5 | защита от галлюцинации (было хардкод 3) |
-| `AI_PROMOTION_MIN_CONFIDENCE` | 0.8 | |
-| `AI_ALIAS_PROMOTION_MIN_CONSISTENCY` | 1.0 | единогласие фразы→slug |
-| `lookup_semantic` порог | 0.2 | семантический кэш (калибруется) |
-| `STATION_CLASS_DEFAULT_RADIUS_M` | 1500 | пешая доступность до станции |
-| `LANDMARK_DEFAULT_RADIUS_M` | 5000 (=`CENTER_RADIUS_M`) | «районный» масштаб |
-| `STATION_CLASS_FALLBACK_LIMIT` | 8 | ближайших ЖК при пустом радиусе |
-| `LANDMARK_NEAREST_LIMIT` | 3 | ЖК на суперлатив «самую ближайшую к X» (считается **внутри** шорт-листа: «ближайшую к Политеху в СВАО» → 3 ближайших из 5 свао-шных). Локацию без единого ЖК в справочнике брать примером нельзя — `build_candidate_shortlist` тогда откатывается к общегородскому списку (см. ниже) |
-| `LANDMARK_FALLBACK_LIMIT` | 8 | ЖК, когда «рядом с X» дало пусто в радиусе |
-| `SHORTLIST_LIMIT` / `MAX_OPTION_CANDIDATE_WORDS` | 50 / 4 | |
-| `AI_RETRY_MAX_ATTEMPTS` / cap | 3 / `AI_RETRY_MAX_DELAY_SECONDS`=10 | backoff base 0.5s×2ⁿ+джиттер, только транзиент |
-| `AI_CIRCUIT_BREAKER_THRESHOLD` / cooldown | 2 / 60s | |
-| `CLAUDE_CLI_PATH` / `CLAUDE_MAX_TURNS` | «»(авто) / 4 | транспорт claude |
-
-Прочие env: `ANTHROPIC_API_KEY`, `CLAUDE_OAUTH_TOKEN` (`sk-ant-oat01-…` от `claude
-setup-token`), `DATABASE_URL` (единый источник `get_settings().DATABASE_URL`, DSN
-`postgresql://`, не `+asyncpg`). Пороги ужесточать по мере улучшений; калибруемые
-(радиусы, кэш) — эвристики. POI-кэш покрывает все 69 ЖК × 6 категорий = 414/414 записей
-(школа, детсад, магазин, парковка, парк/лес, **медицина** — поликлиника/больница/аптека/
-роддом, OSM `amenity~clinic|hospital|doctors|pharmacy`), но **наполненность ≠ схема v2**:
-v2 вводится, и записи v1 подлежат пересборке — `uv run python -m app.geo.refresh_poi`
-**без** `--force` добирает ровно их (`_needs_refresh` = `schema_version < 2`). Пока
-запись v1, гарантии «дистанция только по действующим объектам» по ней НЕТ; предохранители
-против тихой деградации: stale-warning `POI_CACHE_STALE_HINT` из
-`build_candidate_shortlist`, мягкая формулировка в `_warn_poi_evidence` и запрет
-промоушену штамповать v2 (см. раздел «POI-кэш»). `only_new` кэш не различает ни в одной
-схеме (schema-ограничение, подкласс остаётся на ИИ).
-
-## Allowlist-ы и документированные исключения
-
-- **5 удалённых фейковых GUID метро** (записи сохранены ради координат/алиасов):
-  Коммунарка, Одинцово, Баковка (одна серия), Варшавская (`guid-varshavskaya`), Сокол
-  (`guid-sokol`) — в `REMOVED_SYNTHETIC_METRO_IDS`.
-- **7 восстановленных GUID-станций** (самостоятельные записи со своим `id`, НЕ алиасы):
-  Крюково, Кунцевская (БКЛ), Кунцевская (Филёвская), МЦД-1 Кунцевская, МЦК Бульвар
-  Рокоссовского, МЦК Шоссе Энтузиастов, Очаково I. Общий алиас «Кунцевская» — только за
-  канонической «Кунцевская (Арбатско-Покровская)». Снимок `KNOWN_METRO_GUIDS` (66 пар
-  имя-GUID) в `tests/reference/test_metro_integrity.py` не должен уменьшаться.
-- **Пара Митино/Мякинино** — в JSON, но в URL как `metroStations` не подставляется
-  (формат выпадает из UUIDv6-семейства).
-- **2 коллизии алиасов ориентиров** (`KNOWN_ALIAS_COLLISIONS` в
-  `tests/reference/test_landmark_aliases.py`) — существуют в данных ИЗНАЧАЛЬНО, не внесены
-  падежной правкой: «мисис» (НИТУ МИСИС) vs «миси» (МГСУ, историческое имя) и «мгсу» vs
-  «мгмсу» (МГМСУ им. Евдокимова). Обе дают ровно 88.9 при пороге 88; порогом не лечатся,
-  а выкидывать алиас — терять живое обиходное имя вуза. НОВЫЕ алиасы не имеют права
-  добавить ни одной пары сверх этих двух.
-- **Metro-integrity allowlist** — реальные записи без координат (не мусор): Ермакова Роща,
-  Ж/д станция Мытищи (есть id — правило 5 запрещает удаление), Лесная, Малино, Серп и
-  Молот. Инвариант: ни одной записи без координат одновременно без `slug` и без `id`
-  (кроме allowlist); нет дублей по нормализованному имени; нет повторяющихся id.
-- «Кольцо/кольцевая» не матчится у «(авто)дороги» (защита от МКАД/ЦКАД). «В пешей
-  доступности» без числа консюмится, но `max_distance_m` не задаёт (мягкое пожелание).
-  «у метро Аэропорт» (конкретная станция) правилом station-class не перехватывается.
-
-## QA-харнесс и источники правды
-
-- **Замкнутый контур проверки — ДВА корпуса, они дополняют друг друга:**
-  1. **Парсер** — `tests/corpus/queries.txt` (198 коротких запросов),
-     `scripts/parse_audit.py` (офлайн `parse`→`build_url` без сети/ИИ),
-     `tests/test_parse_audit_regression.py`: crashes=0, empty≤28, no-filter-URL≤61,
-     coverage≥0.91 (факт 27/60/0.9142).
-  2. **Полный детерминированный путь** — `tests/corpus/complex_queries.txt` (**31** ДЛИННЫЙ
-     многофильтровый запрос уровня живого; последний — живой запрос AI-24, индексы 0/1
-     сдвигать нельзя, на них опираются точечные тесты), `scripts/complex_audit.py`
-     (`parse`→`enrich` при `AI_ENRICHMENT_ENABLED=False`→`build_url`, валидатор не зовётся),
-     `tests/test_complex_queries_regression.py`: crashes=0, URL-без-фильтров=0,
-     без `blocks`≤8, coverage≥0.92, фильтров на запрос≥**8.93** (факт 0/0/7/0.9330/8.94).
-     Промежуточный замер шага 2 был 0.906 (ушёл ложный матч ведущей дистанции по букве «к»
-     внутри слова — минуты перестали фабриковать дистанцию до садика/парка и честно ушли в
-     `warnings`); AI-24 закрыл и остаток, покрыв идиому «до метро пешком N минут» в
-     `rules/time.py` — отсюда 0.9282; AI-25 поднял до 0.9330.
-     **ЕДИНСТВЕННОЕ обоснованное снижение порога за историю проекта: 9.03 → 8.93.** Метрика
-     считает `len(criteria)` и до AI-25 включала в счёт **три ВЫДУМАННЫХ** `timeOnFoot`
-     (запросы «…детские сады не дальше 15 минут пешком», «до магазина 5-10 минут пешком»,
-     «до 20 минут пешком до школы и детского сада» — слово «пешком» без всякой привязки к
-     метро давало реальный URL-фильтр «пешком до метро»). Ровно −3 фильтра на 31 запрос =
-     −0.097; ничего РАСПОЗНАННОГО до ссылки доезжать не перестало, покрытие текста в том же
-     прогоне выросло. Метрика «фильтров на запрос» в принципе не отличает честный фильтр от
-     сфабрикованного — это её известное ограничение.
-     **Зачем второй корпус:** первый меряет ПАРСЕР и не зовёт `enrich`, поэтому не видит
-     участок, где живёт `blocks=` — там фильтр может быть распознан и не доехать до ссылки.
-     Именно он вскрыл вилку лет, вилку дистанции и потерю суперлатива при POI.
-     **Чего не видят ОБА корпуса** (урок AI-25): дефект, форма которого в корпусах не
-     встречается ни разу («не больше» — 0 вхождений), и дефект, который ничего не теряет, а
-     ДОБАВЛЯЕТ лишний фильтр (`timeOnFoot` от слова «пешком») — сводные метрики от него
-     только «улучшаются». Такие ловит лишь живой QA-прогон с проверкой ссылки на pik.ru.
-     Вывод — в формате **«запрос → ссылка → критерии → ЖК с дистанциями → warnings»**:
-     сводные метрики не показывают, доехали ли фильтры до URL.
-  Оба гоняются в каждом `pytest`. **Ужесточать по мере улучшений; ослаблять только с
-  обоснованием.** Точечные ожидания в регрессии сложного корпуса закрепляют живой запрос
-  пользователя (`blocks=481,1580,1460` + дистанция до садов 1600 м + верхняя граница лет) и
-  живой запрос AI-24 (последняя строка корпуса: `three-room` + `areaKitchenFrom=20` +
-  `floorFrom=9`/`floorTo=16` + `settlementYearFrom/To=2026/2028` доехали до URL, остатка
-  «не удалось распознать» нет). Парсерный якорь того же запроса —
-  `tests/parsing/test_parser.py::test_live_query_defects_closed` (`warnings == []`, оба POI
-  по 1440 м, ориентир «Финансовый университет» с `nearest_only`).
-- **Источники правды:** `docs/pik-url-schema.md` (URL-схема);
-  `docs/ai-enrichment-architecture.md` (поток ИИ, §8 наблюдаемость, §8.4 критерии гейтов);
-  `ENABLE_ANTIGRAVITY.md` (онбординг ИИ/БД); `docs/history.md` (полная хронология милстоунов).
-
-## graphify
-
-Граф знаний в `graphify-out/`. Для вопросов о коде — сперва `graphify query "<вопрос>"`
-(меньше, чем grep/GRAPH_REPORT.md); `graphify path "<A>" "<B>"`, `graphify explain
-"<концепт>"`. Навигация — `graphify-out/wiki/index.md`. После изменений кода —
-`graphify update .`.
+| `docs/pik-url-schema.md` | URL-схема `pik.ru/search` — единственный источник правды по фильтрам |
+| `docs/ai-enrichment-architecture.md` | Поток ИИ, гейты, ведро C, наблюдаемость (§8, §8.4) |
+| `docs/parsing-rationale.md` | Коллизии спанов, guard'ы, fuzzy-матчинг опций, каталог неподдерживаемого |
+| `docs/geo-narrowing.md` | Ориентиры, суперлативы, класс станций, МКАД, `id_trust` |
+| `docs/poi-cache.md` | Схема v2, «дистанция только по действующим», совместимость с v1 |
+| `docs/external-facts.md` | OSM-теги, зеркала Overpass, потолок данных, квоты ИИ |
+| `docs/data-allowlists.md` | Удалённые/восстановленные GUID, коллизии алиасов, metro-integrity |
+| `docs/thresholds-rationale.md` | Обоснования порогов и лимитов |
+| `docs/history.md` | Полная хронология милстоунов и пост-мортемов |
+| `ENABLE_ANTIGRAVITY.md` | Онбординг ИИ/БД |
 
 ---
 
-При каждом изменении проекта — изменять и дополнять CLAUDE.md.
+## Правила обновления этого файла
+
+CLAUDE.md грузится в **каждый** запрос — его размер оплачивается всегда. Поэтому:
+
+- **По умолчанию изменения кода документируются в `docs/*.md`, не здесь.** Разбор
+  дефекта, мотивация регекса, замер, пост-мортем → соответствующий файл `docs/`
+  (+ хронология в `docs/history.md`).
+- **CLAUDE.md правится только если изменилось одно из:** команда, дерево каталогов,
+  инвариант, контракт (`Criteria`/API/`RefEntry`), поток обработки, порог QA,
+  список источников правды.
+- **Ничего не дописывать в конец «на всякий случай».** Новый абзац здесь — это налог
+  на каждую будущую задачу. Если сомневаешься — в `docs/`.
+- Ориентир объёма — **до 250 строк**. Файл перерос → выносить в `docs/`, не сокращать
+  инварианты.

@@ -2,7 +2,12 @@ import httpx
 import pytest
 
 from app.parsing.schema import Criteria, Rooms
-from app.pik.validator import validate
+from app.pik.validator import NOT_VALIDATED_WARNING, validate
+
+
+def joined(result) -> str:
+    """Склейка для проверок «этот факт где-то есть» — но не для «их два в одном»."""
+    return " | ".join(result.warnings)
 
 
 def make_mock_client(handler) -> httpx.AsyncClient:
@@ -53,7 +58,7 @@ async def test_validate_network_error():
 
     assert result.result_count is None
     assert result.ok is True  # graceful: если проверить не удалось, считаем что ок
-    assert result.warning == "выдача не проверена"
+    assert result.warnings == [NOT_VALIDATED_WARNING]
 
 
 @pytest.mark.asyncio
@@ -68,7 +73,7 @@ async def test_validate_timeout():
 
     assert result.result_count is None
     assert result.ok is True
-    assert result.warning == "выдача не проверена"
+    assert result.warnings == [NOT_VALIDATED_WARNING]
 
 
 @pytest.mark.asyncio
@@ -83,7 +88,7 @@ async def test_validate_http_error():
 
     assert result.result_count is None
     assert result.ok is True
-    assert result.warning == "выдача не проверена"
+    assert result.warnings == [NOT_VALIDATED_WARNING]
 
 
 @pytest.mark.asyncio
@@ -98,7 +103,158 @@ async def test_validate_invalid_json():
 
     assert result.result_count is None
     assert result.ok is True
-    assert result.warning == "выдача не проверена"
+    assert result.warnings == [NOT_VALIDATED_WARNING]
+
+
+# ---------------------------------------------------------------------------
+# Г6: сетевой сбой СТИРАЛ предупреждения о непроверяемых фильтрах и сбрасывал
+# ``location_filters_not_verified`` в False. Логика была перевёрнута: если
+# проверку не удалось выполнить вовсе, непроверенным является ВСЁ, и
+# предупреждение обосновано сильнее, а не слабее. Живой инцидент: в логе есть
+# «выдача не проверена», result_count=null — и НЕТ строки про непроверенные
+# локационные фильтры, хотя в URL был ``blocks=``; пользователь узнал только про
+# второй из двух слоёв непроверенности.
+# ---------------------------------------------------------------------------
+
+
+def _criteria_with_metro_and_blocks() -> Criteria:
+    """Форма из инцидента: метро (бэкенд игнорирует) + ЖК (``blocks=`` в URL)."""
+    from app.parsing.schema import MatchedEntity
+
+    return Criteria(
+        rooms=[Rooms.TWO],
+        metro=[MatchedEntity(name="Аэропорт Внуково", id="c0ffee00-0000-0000-0000-000000000001")],
+        complexes=[MatchedEntity(name="Тестовый ЖК", id="477")],
+    )
+
+
+@pytest.mark.parametrize(
+    "fail",
+    [
+        pytest.param(lambda _r: (_ for _ in ()).throw(httpx.ConnectError("unreachable")), id="net"),
+        pytest.param(lambda _r: httpx.Response(500, text="Internal Server Error"), id="http-500"),
+        pytest.param(lambda _r: httpx.Response(200, text="not a json"), id="bad-json"),
+    ],
+)
+@pytest.mark.asyncio
+async def test_validate_keeps_unverified_warnings_on_failure(fail):
+    """Сбой проверки НЕ снимает предупреждения о непроверяемых фильтрах."""
+    client = make_mock_client(fail)
+
+    result = await validate(_criteria_with_metro_and_blocks(), client)
+
+    assert result.result_count is None
+    assert result.ok is True
+    # 1) сам факт, что проверки не было — ОТДЕЛЬНЫМ элементом
+    assert NOT_VALIDATED_WARNING in result.warnings
+    # 2) отдельная строка про локационные фильтры — она НЕ должна исчезать
+    assert any("метро/округу/району" in w for w in result.warnings)
+    # 3) и это ДВА разных элемента, а не один склеенный: неделимый элемент
+    #    невозможно разметить категорией (Г6).
+    assert all(
+        not ("выдача не проверена" in w and "метро/округу/району" in w) for w in result.warnings
+    ), result.warnings
+    # 4) структурное поле не сброшено
+    assert result.location_filters_not_verified is True
+
+
+@pytest.mark.asyncio
+async def test_validate_failure_text_differs_from_success_text():
+    """Два разных состояния должны читаться по-разному.
+
+    «Проверка прошла, но бэкенд игнорирует эти параметры» и «проверки не было
+    вовсе» — не одно и то же; раньше второе съедало первое целиком.
+    """
+    criteria = _criteria_with_metro_and_blocks()
+
+    ok_client = make_mock_client(lambda _r: httpx.Response(200, json={"count": 12}))
+    ok = await validate(criteria, ok_client)
+
+    def fail(_request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("unreachable")
+
+    failed = await validate(criteria, make_mock_client(fail))
+
+    assert ok.warnings and failed.warnings
+    assert ok.warnings != failed.warnings
+    ok_text, failed_text = joined(ok), joined(failed)
+    # Успех говорит про result_count — он существует и чему-то равен.
+    assert "result_count не учитывает" in ok_text
+    assert "выдача не проверена" not in ok_text
+    # Сбой не пересказывает result_count — его нет.
+    assert "result_count не учитывает" not in failed_text
+    assert NOT_VALIDATED_WARNING in failed.warnings
+
+
+@pytest.mark.asyncio
+async def test_validate_failure_names_the_check_that_was_actually_lost():
+    """Акцент отказа — на blocks, а не на вечно непроверяемых параметрах.
+
+    Прежний текст перечислял отделку и год — то, что не подтверждается НИКОГДА,
+    даже при успешном ответе, — и молчал про ``blocks``, единственный фильтр,
+    который бэкенд по нашим замерам реально проверяет. При отказе теряется ровно
+    эта одна настоящая проверка, и назвать надо именно её.
+    """
+    from app.parsing.schema import Finish
+
+    def fail(_request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("unreachable")
+
+    criteria = Criteria(rooms=[Rooms.ONE], finish=[Finish.READY])
+    result = await validate(criteria, make_mock_client(fail))
+
+    loss = next(w for w in result.warnings if w.startswith("выдача не проверена"))
+    assert "blocks" in loss
+    # Потерянная проверка и справка о вечно непроверяемом — разные элементы.
+    assert "отделку" not in loss
+    assert any("отделку" in w for w in result.warnings)
+
+
+@pytest.mark.asyncio
+async def test_validate_failure_without_unverified_filters_stays_terse():
+    """Контроль: когда предупреждать не о чем, сбой даёт ровно одну строку."""
+
+    def fail(_request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("unreachable")
+
+    result = await validate(Criteria(rooms=[Rooms.TWO]), make_mock_client(fail))
+
+    assert result.warnings == [NOT_VALIDATED_WARNING]
+    assert result.location_filters_not_verified is False
+
+
+@pytest.mark.asyncio
+async def test_validator_does_not_publish_geo_fallback_notes():
+    """Заметки о том, КАК сузили, через валидатор не проходят вовсе.
+
+    Они описывают критерии, а не ответ бэкенда, и принадлежат ``build_url``.
+    Пока они шли отсюда, справка о сужении зависела от сетевого вызова, к
+    которому не имеет отношения, и склеивалась с ним в один неделимый элемент.
+    """
+
+    def fail(_request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("unreachable")
+
+    criteria = Criteria(within_mkad=True, complexes_matched_empty=True)
+
+    result = await validate(criteria, make_mock_client(fail))
+
+    assert result.result_count is None
+    assert NOT_VALIDATED_WARNING in result.warnings
+    assert "не пересекаются" not in joined(result)
+    assert "МКАД" not in joined(result)
+
+
+def test_build_url_publishes_geo_fallback_notes_without_network():
+    """Обратная половина: заметки доезжают, и сеть для этого не нужна."""
+    from app.pik.url_builder import build_url
+
+    warnings: list[str] = []
+    build_url(Criteria(within_mkad=True), warnings)
+
+    assert any("МКАД" in w for w in warnings), warnings
+    # Каждая заметка — самостоятельный элемент, ни одна ни с чем не склеена.
+    assert all("выдача не проверена" not in w for w in warnings)
 
 
 @pytest.mark.asyncio
@@ -127,9 +283,9 @@ async def test_validate_reports_finish_and_settlement_year_as_unverified():
     result = await validate(criteria, client)
 
     assert result.result_count == 71
-    assert result.warning is not None
-    assert "отделку" in result.warning
-    assert "год заселения" in result.warning
+    # Оба ярлыка — в ОДНОМ элементе: это один факт «бэкенд игнорирует вот эти
+    # параметры», перечисление внутри него дроблению не подлежит.
+    assert any("отделку" in w and "год заселения" in w for w in result.warnings)
     # Контракт API не меняется: поле — про ЛОКАЦИИ, а их в запросе нет.
     assert result.location_filters_not_verified is False
 
@@ -146,7 +302,7 @@ async def test_validate_stays_silent_when_all_filters_are_verifiable():
 
     result = await validate(criteria, client)
 
-    assert result.warning is None
+    assert result.warnings == []
     assert result.location_filters_not_verified is False
 
 
@@ -187,15 +343,19 @@ async def test_validate_intersects_geo_fallback_same_as_build_url():
 
     assert f"blocks={chosen}" in url
     assert f"blocks={chosen}" in captured["url"]
-    assert any("не пересекаются" in w for w in build_url_warnings)
-    assert result.warning is not None
-    assert "не пересекаются" in result.warning
+    # Предупреждает ОДИН раз и ровно тот, кто сузил. Валидатор ту же логику
+    # по-прежнему прогоняет (иначе result_count проверял бы не то сужение), но
+    # предупреждение больше не дублирует — раньше оно уходило в ответ дважды,
+    # и склейка это маскировала.
+    assert [w for w in build_url_warnings if "не пересекаются" in w] != []
+    assert "не пересекаются" not in joined(result)
 
 
 @pytest.mark.asyncio
 async def test_validate_forces_empty_blocks_when_landmark_match_empty():
     """Дефект №1 симметрично на validate(): considered-zero (``complexes_matched_empty``)
     + within_mkad=True → blocks остаётся пустым, а не откатывается на весь МКАД."""
+    from app.pik.url_builder import build_url
 
     captured: dict[str, str] = {}
 
@@ -209,5 +369,8 @@ async def test_validate_forces_empty_blocks_when_landmark_match_empty():
     result = await validate(criteria, client)
 
     assert "blocks=&" in captured["url"] or captured["url"].endswith("blocks=")
-    assert result.warning is not None
-    assert "не пересекаются" in result.warning
+    # Сужение посчитано (blocks пуст), а предупреждает о нём build_url.
+    build_url_warnings: list[str] = []
+    build_url(criteria, build_url_warnings)
+    assert any("не пересекаются" in w for w in build_url_warnings)
+    assert "не пересекаются" not in joined(result)

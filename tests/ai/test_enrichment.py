@@ -14,6 +14,7 @@ from app.ai.enrichment import (
 from app.ai.schema import (
     AIEnrichmentAnswer,
     ComplexCandidate,
+    FreeTextCriteriaAnswer,
     OptionMatch,
     OptionResolutionAnswer,
 )
@@ -212,9 +213,17 @@ async def test_enrich_gate1_blocks_when_nothing_to_enrich(
 
 @pytest.mark.asyncio
 @patch("app.ai.enrichment.log_ai_call", new_callable=AsyncMock)
-async def test_enrich_gate1_preserves_existing_warnings(mock_log, mock_settings):
+@patch("app.ai.enrichment.call_free_text_extractor")
+async def test_enrich_gate1_preserves_existing_warnings(mock_extractor, mock_log, mock_settings):
     """Гейт 1 не должен стирать уже накопленные warnings нижних слоёв (инвариант
-    «ничего не отбрасывается молча» касается и самого гейта)."""
+    «ничего не отбрасывается молча» касается и самого гейта).
+
+    Экстрактор замокан пустым ответом намеренно: без мока тест уходил в РЕАЛЬНЫЙ
+    вызов провайдера с фиктивным ключом, и зелёным его держал ровно тот дефект,
+    который чинит правка Г5 — провал free-text-ветки не оставлял следов. Теперь
+    провал добавляет строку в warnings, и тест проверял бы её, а не гейт.
+    """
+    mock_extractor.return_value = FreeTextCriteriaAnswer()
     criteria = Criteria()
     warnings = ["«тарабарщина»: не удалось распознать, не попало в ссылку"]
 
@@ -311,13 +320,14 @@ async def test_log_ai_call_writes_row_to_pool():
         cache_hit=False,
         ai_called=True,
         criteria_changed_by_ai=True,
+        ai_failed=True,
     )
 
     pool.execute.assert_awaited_once()
     args = pool.execute.await_args.args
     assert "ai_call_log" in args[0]
-    # (query, had_poi_or_center, fully_resolved, cache_hit, ai_called, changed)
-    assert args[1:] == (True, False, False, True, True)
+    # (query, had_poi_or_center, fully_resolved, cache_hit, ai_called, changed, ai_failed)
+    assert args[1:] == (True, False, False, True, True, True)
 
 
 @pytest.mark.asyncio
@@ -1312,6 +1322,139 @@ async def test_enrich_station_class_falls_back_to_nearest_when_default_radius_em
     assert result.matched_complex_ids == ["1"]
     assert any("показаны ближайшие" in w for w in warnings)
     mock_fallback.assert_called_once()
+
+
+@pytest.mark.asyncio
+@patch("app.ai.enrichment.log_ai_call", new_callable=AsyncMock)
+@patch("app.ai.enrichment.station_class_nearest_fallback")
+@patch("app.ai.enrichment.station_class_points", return_value=[(55.8000, 37.6000)])
+@patch("app.ai.enrichment.build_candidate_shortlist")
+async def test_enrich_station_class_falls_back_when_poi_present(
+    mock_build, mock_points, mock_fallback, mock_log, mock_settings
+):
+    """Правка Г1: наличие POI-требования больше не отключает станционный фолбэк.
+
+    Комбинированная ветка (station class + детсад) раньше не проходила
+    эксклюзивный гейт, поэтому давала blocks=0 вообще без диагностики — исход
+    хуже и списка, и тишины. Инвариант 16 ограничивает фолбэк РАДИУСОМ, а не
+    соседями по запросу: детсад рядом не превращает «рядом с МЦД» в жёсткую
+    отсечку.
+    """
+    mock_settings.AI_ENRICHMENT_ENABLED = False
+    far_candidate = ComplexCandidate(
+        id="1",
+        name="Далеко, но с садиком",
+        district=None,
+        county=None,
+        metro=[],
+        is_center=None,
+        known_poi={"kindergarten": True},
+        poi_distances={"kindergarten": 400.0},
+        lat=56.2000,
+        lon=37.0000,
+    )
+    mock_build.return_value = [far_candidate]
+    mock_fallback.return_value = (
+        [far_candidate],
+        "в радиусе 1.5 км от станций класса «МЦД» ЖК нет; показаны ближайшие — от 44.30 км",
+    )
+    criteria = Criteria(
+        station_class_requirements=[_MCD],
+        poi_requirements=[POIRequirement(category=POICategory.KINDERGARTEN, raw_phrase="садик")],
+    )
+    warnings: list[str] = []
+
+    result = await enrich("рядом с мцд не важно какой станции и садик", criteria, warnings)
+
+    assert result.matched_complex_ids == ["1"]
+    assert any("показаны ближайшие" in w for w in warnings)
+    mock_fallback.assert_called_once()
+
+
+@pytest.mark.asyncio
+@patch("app.ai.enrichment.log_ai_call", new_callable=AsyncMock)
+@patch("app.ai.enrichment.station_class_nearest_fallback")
+@patch("app.ai.enrichment.station_class_points", return_value=[(55.8000, 37.6000)])
+@patch("app.ai.enrichment.build_candidate_shortlist")
+async def test_enrich_station_class_fallback_respects_other_axes(
+    mock_build, mock_points, mock_fallback, mock_log, mock_settings
+):
+    """Ближайшие берутся среди ЖК, прошедших ОСТАЛЬНЫЕ оси, а не среди всех.
+
+    Иначе фолбэк по классу станции затирал бы POI-сужение: вернул бы ближайший
+    к линии ЖК, в котором нет детского сада.
+    """
+    mock_settings.AI_ENRICHMENT_ENABLED = False
+    common = {
+        "district": None,
+        "county": None,
+        "metro": [],
+        "is_center": None,
+        "lat": 56.2000,
+        "lon": 37.0000,
+    }
+    with_kindergarten = ComplexCandidate(
+        id="ok",
+        name="С садиком",
+        known_poi={"kindergarten": True},
+        poi_distances={"kindergarten": 400.0},
+        **common,
+    )
+    without_kindergarten = ComplexCandidate(
+        id="no-poi",
+        name="Без садика",
+        known_poi={"kindergarten": False},
+        **common,
+    )
+    mock_build.return_value = [without_kindergarten, with_kindergarten]
+    mock_fallback.return_value = ([with_kindergarten], "показаны ближайшие — от 44.30 км")
+    criteria = Criteria(
+        station_class_requirements=[_MCD],
+        poi_requirements=[POIRequirement(category=POICategory.KINDERGARTEN, raw_phrase="садик")],
+    )
+
+    await enrich("рядом с мцд не важно какой станции и садик", criteria, [])
+
+    eligible = mock_fallback.call_args.args[0]
+    assert [c.id for c in eligible] == ["ok"]
+
+
+@pytest.mark.asyncio
+@patch("app.ai.enrichment.log_ai_call", new_callable=AsyncMock)
+@patch("app.ai.enrichment.station_class_nearest_fallback", return_value=([], None))
+@patch("app.ai.enrichment.station_class_points", return_value=[(55.8000, 37.6000)])
+@patch("app.ai.enrichment.build_candidate_shortlist")
+async def test_enrich_station_class_warns_empty_when_poi_present(
+    mock_build, mock_points, mock_fallback, mock_log, mock_settings
+):
+    """Фолбэк отказал (явная дистанция — жёсткая отсечка) — но и тогда пустой
+    результат объясняется, а не молчит. Приём тот же, что у ориентиров: ветка
+    дублируется под комбинированный случай, а не ослабляется гейт.
+    """
+    mock_settings.AI_ENRICHMENT_ENABLED = False
+    mock_build.return_value = [
+        ComplexCandidate(
+            id="1",
+            name="Далеко",
+            district=None,
+            county=None,
+            metro=[],
+            is_center=None,
+            known_poi={"kindergarten": True},
+            poi_distances={"kindergarten": 400.0},
+            lat=56.2000,
+            lon=37.0000,
+        )
+    ]
+    criteria = Criteria(
+        station_class_requirements=[_MCD],
+        poi_requirements=[POIRequirement(category=POICategory.KINDERGARTEN, raw_phrase="садик")],
+    )
+    warnings: list[str] = []
+
+    await enrich("рядом с мцд не важно какой станции и садик", criteria, warnings)
+
+    assert any("не найдено" in w for w in warnings)
 
 
 # --- Гейт 2 (Milestone AI-20): детерминированное решение вместо ИИ -----------

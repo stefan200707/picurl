@@ -43,19 +43,102 @@ UNVERIFIED_BY_BACKEND_PARAMS: tuple[str, ...] = (
 )
 
 
+#: Строка «проверки не было вовсе». Отличается по смыслу от предупреждений о
+#: непроверяемых параметрах: те говорят «проверка прошла, но вот этих фильтров
+#: она не касалась», а эта — «не подтверждено НИЧЕГО». Раньше вторая вытесняла
+#: первые (сбой возвращал ровно её и терял всё остальное) — ровно наоборот
+#: тому, что требует инвариант 1: если проверить не удалось, непроверенным
+#: является всё, и предупреждение обосновано СИЛЬНЕЕ, а не слабее.
+#:
+#: Акцент намеренно на ПОТЕРЯННОЙ проверке, а не на непроверяемых параметрах.
+#: Прежняя формулировка перечисляла отделку и год — то, что не подтверждается
+#: НИКОГДА, даже при успешном ответе, — и молчала про то единственное, что
+#: бэкенд реально считает. При отказе теряется ровно одна настоящая проверка,
+#: и назвать надо именно её.
+NOT_VALIDATED_WARNING = (
+    "выдача не проверена: не подтверждены комнатность/цена/ЖК (blocks) — "
+    "единственные фильтры, которые api.pik.ru/v2/filter реально проверяет"
+)
+
+
 class ValidationResult(BaseModel):
     """Результат валидации выдачи pik.ru."""
 
     result_count: int | None
     ok: bool
-    warning: str | None = None
+    #: Список, а не склеенная строка: один элемент — один факт. Раньше здесь
+    #: жила строка из ``"; ".join(...)``, и вызывающий клал её в ответ ОДНИМ
+    #: элементом — три несвязанных факта оказывались неделимы, а разметить
+    #: такой элемент категорией (Г6) невозможно в принципе. Отдельно: часть
+    #: литералов сама содержит "; ", поэтому обратное разбиение готовой строки
+    #: по разделителю было бы неверным — список собирается у источника.
+    warnings: list[str] = []
     #: True, если среди отправленных параметров есть хотя бы один из
     #: UNVERIFIED_LOCATION_PARAMS — result_count в этом случае НЕ отражает
     #: соответствующий локационный фильтр (см. модульную константу выше).
-    #: Отдельное структурное поле (в дополнение к тексту в ``warning``) — на
+    #: Отдельное структурное поле (в дополнение к тексту в ``warnings``) — на
     #: случай, если владелец HTTP-слоя (app/api/schemas.py, вне зоны
     #: ответственности этой правки) захочет отдавать его явным полем ответа.
+    #: При СБОЕ проверки поле НЕ сбрасывается: непроверенным в этом случае
+    #: является в том числе и оно (Г6).
     location_filters_not_verified: bool = False
+
+
+def _unverified_notes(
+    *, location: bool, non_location_labels: list[str], validated: bool
+) -> list[str]:
+    """Строки про фильтры, не отражённые в ``result_count``.
+
+    ``validated`` различает два РАЗНЫХ состояния, которые раньше сливались в
+    одно: ответ бэкенда получен, но перечисленные параметры он игнорирует
+    (``True``) — и запрос не прошёл, так что не подтверждено вообще ничего, а
+    эти параметры не подтвердились бы и при успешном ответе (``False``).
+
+    Формулировки ветки ``False`` больше не пересказывают сам факт несостоявшейся
+    проверки — его несёт отдельным элементом NOT_VALIDATED_WARNING. Здесь
+    остаётся ровно один факт: перечисленные параметры бэкенд не проверяет
+    в принципе, независимо от исхода запроса.
+
+    Внутри строк намеренно нет "; ": этот разделитель раньше склеивал элементы
+    списка, и его наличие внутри литерала делало склейку неразбираемой обратно.
+    """
+    notes: list[str] = []
+    if location:
+        notes.append(
+            "result_count не учитывает фильтр по метро/округу/району — "
+            "api.pik.ru/v2/filter не проверяет эти параметры (подтверждено "
+            "живыми замерами), достоверна только часть по комнатности/цене/ЖК"
+            if validated
+            else "фильтр по метро/округу/району api.pik.ru/v2/filter не проверяет "
+            "и при успешном ответе (подтверждено живыми замерами)"
+        )
+    if non_location_labels:
+        # Перечисляем только то, что реально ушло в запрос: «не учитывает отделку»
+        # при отсутствии finish было бы такой же неправдой, как молчание.
+        labels = " и ".join(non_location_labels)
+        notes.append(
+            f"result_count не учитывает {labels} — api.pik.ru/v2/filter "
+            "игнорирует эти параметры (подтверждено живыми замерами)"
+            if validated
+            else f"{labels} api.pik.ru/v2/filter не проверяет и при успешном "
+            "ответе (подтверждено живыми замерами)"
+        )
+    return notes
+
+
+def _not_validated(warnings: list[str], location_filters_not_verified: bool) -> ValidationResult:
+    """Исход «проверка не выполнена» — best-effort, но не молчаливый.
+
+    ``ok=True``: сервис не падает из-за недоступного бэкенда. Предупреждения и
+    ``location_filters_not_verified`` переносятся КАК ЕСТЬ — сбой сети не
+    делает локационные фильтры проверенными (Г6).
+    """
+    return ValidationResult(
+        result_count=None,
+        ok=True,
+        warnings=warnings,
+        location_filters_not_verified=location_filters_not_verified,
+    )
 
 
 async def validate(criteria: Criteria, client: httpx.AsyncClient) -> ValidationResult:
@@ -66,7 +149,7 @@ async def validate(criteria: Criteria, client: httpx.AsyncClient) -> ValidationR
 
     Не все локационные фильтры этот бэкенд проверяет одинаково честно (см.
     UNVERIFIED_BY_BACKEND_PARAMS) — в этом случае result_count всё равно
-    возвращается (не None, сеть-то отработала), но ``warning``/
+    возвращается (не None, сеть-то отработала), но ``warnings``/
     ``location_filters_not_verified`` явно сообщают, что число не учитывает
     локационный фильтр, вместо того чтобы молча выдавать его за полноценную
     проверку. Отдельно: сущности без достоверного id (задача Б аудита) здесь
@@ -75,7 +158,6 @@ async def validate(criteria: Criteria, client: httpx.AsyncClient) -> ValidationR
     ровно то сужение, которое получит пользователь по ссылке.
     """
     params: dict[str, str] = criteria.to_query_dict()
-    warning_parts: list[str] = []
 
     # 1. Комнатность
     if criteria.rooms:
@@ -98,11 +180,20 @@ async def validate(criteria: Criteria, client: httpx.AsyncClient) -> ValidationR
     # проверял НЕ то сужение, которое получит пользователь по ссылке (живой
     # замер: 3889 вместо реальных 598 — validate() объединял фолбэк вместо
     # пересечения).
+    #
+    # Предупреждения этого шага (``fallback.notes`` и заметка о непересечении
+    # гео-условий) валидатор НЕ публикует: они описывают КРИТЕРИИ запроса, а не
+    # ответ бэкенда, и принадлежат тому, кто их породил — ``build_url``. Пока
+    # они шли отсюда, они склеивались с текстом про проверку выдачи в один
+    # неделимый элемент, а заметка о непересечении вдобавок попадала в ответ
+    # дважды (второй раз — отдельным элементом из ``build_url``). Поэтому
+    # приёмник предупреждений здесь ``None``: сужение считаем, публикацию
+    # оставляем источнику.
     fallback = resolve_fallback_block_ids(criteria)
     if fallback.block_ids:
         existing_blocks = [b for b in params.get("blocks", "").split(",") if b]
         params["blocks"] = ",".join(
-            combine_with_fallback(existing_blocks, fallback, criteria, warning_parts)
+            combine_with_fallback(existing_blocks, fallback, criteria, None)
         )
 
     # Сортировка (sortBy/orderBy) уже добавлена в params через
@@ -112,27 +203,36 @@ async def validate(criteria: Criteria, client: httpx.AsyncClient) -> ValidationR
     # Поле ответа осталось ПРО ЛОКАЦИИ (контракт API не меняется), а warning
     # честно перечисляет все непроверяемые фильтры — включая нелокационные.
     location_filters_not_verified = any(key in params for key in UNVERIFIED_LOCATION_PARAMS)
-    if location_filters_not_verified:
-        warning_parts.append(
-            "result_count не учитывает фильтр по метро/округу/району — "
-            "api.pik.ru/v2/filter не проверяет эти параметры (подтверждено "
-            "живыми замерами); достоверна только часть по комнатности/цене/ЖК"
-        )
     unverified_present = [key for key in UNVERIFIED_NON_LOCATION_PARAMS if key in params]
-    if unverified_present:
-        # Перечисляем только то, что реально ушло в запрос: «не учитывает отделку»
-        # при отсутствии finish было бы такой же неправдой, как молчание.
-        labels: list[str] = []
-        if "finish" in unverified_present:
-            labels.append("отделку")
-        if any(key.startswith("settlementYear") for key in unverified_present):
-            labels.append("год заселения")
-        warning_parts.append(
-            f"result_count не учитывает {' и '.join(labels)} — api.pik.ru/v2/filter "
-            "игнорирует эти параметры (подтверждено живыми замерами)"
-        )
-    warning_parts.extend(fallback.notes)
-    success_warning = "; ".join(warning_parts) or None
+    labels: list[str] = []
+    if "finish" in unverified_present:
+        labels.append("отделку")
+    if any(key.startswith("settlementYear") for key in unverified_present):
+        labels.append("год заселения")
+
+    def compose_warnings(*, validated: bool) -> list[str]:
+        """Собирает предупреждения ОБЕИХ веток из одних и тех же фактов.
+
+        Ключевое: обе ветки строятся ДО сетевого вызова и из одного набора
+        данных, поэтому сбой физически не может «снять» предупреждение — он
+        меняет только формулировку и добавляет отдельным элементом
+        NOT_VALIDATED_WARNING (Г6).
+
+        Возвращает СПИСОК, а не склеенную строку: один элемент — один факт.
+        Здесь остаются только факты о самой проверке выдачи; заметки о том, как
+        сузили критерии, публикует ``build_url`` (см. комментарий у фолбэка).
+        """
+        return [
+            *([] if validated else [NOT_VALIDATED_WARNING]),
+            *_unverified_notes(
+                location=location_filters_not_verified,
+                non_location_labels=labels,
+                validated=validated,
+            ),
+        ]
+
+    success_warnings = compose_warnings(validated=True)
+    failure_warnings = compose_warnings(validated=False)
 
     url = f"https://api.pik.ru/v2/filter?{urlencode(params)}"
 
@@ -144,7 +244,7 @@ async def validate(criteria: Criteria, client: httpx.AsyncClient) -> ValidationR
         return ValidationResult(
             result_count=count,
             ok=count > 0,
-            warning=success_warning,
+            warnings=success_warnings,
             location_filters_not_verified=location_filters_not_verified,
         )
     except httpx.RequestError as e:
@@ -152,12 +252,12 @@ async def validate(criteria: Criteria, client: httpx.AsyncClient) -> ValidationR
         # сервиса: одна внятная строка без traceback (шум в логах вводил в
         # заблуждение). Контракт ответа не меняется.
         logging.warning("Валидация: сетевая ошибка (%s), выдача не проверена", type(e).__name__)
-        return ValidationResult(result_count=None, ok=True, warning="выдача не проверена")
+        return _not_validated(failure_warnings, location_filters_not_verified)
     except httpx.HTTPStatusError as e:
         # 5xx/4xx приходят со стороны api.pik.ru (их сервер), ошибка уже
         # обработана — traceback здесь только шумел. Логируем код статуса.
         logging.warning("Валидация: pik.ru вернул %s, выдача не проверена", e.response.status_code)
-        return ValidationResult(result_count=None, ok=True, warning="выдача не проверена")
+        return _not_validated(failure_warnings, location_filters_not_verified)
     except (ValueError, TypeError) as e:
         logging.warning("Ошибка парсинга ответа при валидации: %s", e, exc_info=True)
-        return ValidationResult(result_count=None, ok=True, warning="выдача не проверена")
+        return _not_validated(failure_warnings, location_filters_not_verified)

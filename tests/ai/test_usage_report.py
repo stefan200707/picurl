@@ -1,13 +1,14 @@
 from app.ai.usage_report import CallLogRow, aggregate, format_report
 
 
-def _row(had, fully, cache, ai, changed) -> CallLogRow:
+def _row(had, fully, cache, ai, changed, failed=False) -> CallLogRow:
     return CallLogRow(
         had_poi_or_center=had,
         fully_resolved_deterministically=fully,
         cache_hit=cache,
         ai_called=ai,
         criteria_changed_by_ai=changed,
+        ai_failed=failed,
     )
 
 
@@ -71,3 +72,39 @@ def test_format_report_has_period_and_numbers():
     assert "за последние 30 дн." in text
     assert "60.0%" in text
     assert "50.0%" in text
+
+
+def test_aggregate_counts_failed_attempts():
+    """Правка Г5: провалы считаются от ПОПЫТОК, а не от ai_called.
+
+    Cooldown circuit breaker'а пишет ai_called=false при ai_failed=true (до
+    провайдера вызов не дошёл) — если брать знаменателем один ai_called, доля
+    провалов уедет вверх, а breaker-строки выпадут из числителя знаменателя.
+    """
+    rows = [
+        _row(False, False, False, True, True),  # успешный вызов
+        _row(False, False, False, True, False, failed=True),  # исключение вызова
+        _row(False, False, False, False, False, failed=True),  # breaker: called=false
+        _row(False, False, False, False, False),  # ИИ не звали вовсе
+    ]
+    report = aggregate(rows)
+
+    assert report.ai_called == 2
+    assert report.ai_failed == 2
+    assert report.ai_attempts == 3  # «не звали вовсе» попыткой не считается
+    assert report.pct_ai_failed == 66.7
+    assert "ai_failed" in format_report(report, days=None)
+
+
+def test_rows_without_failed_column_default_to_false():
+    """Строки, записанные до миграции 03, провалов не различали — читаем как False."""
+    legacy = CallLogRow(
+        had_poi_or_center=True,
+        fully_resolved_deterministically=False,
+        cache_hit=False,
+        ai_called=True,
+        criteria_changed_by_ai=True,
+    )  # без ai_failed — как их отдаёт БД до ALTER TABLE
+    report = aggregate([legacy])
+    assert report.ai_failed == 0
+    assert report.pct_ai_failed == 0.0

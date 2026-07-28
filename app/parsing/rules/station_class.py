@@ -191,6 +191,12 @@ _DISTANCE_BEFORE_EXPLICIT_LINE_PATTERN = re.compile(
     r"(?:станци\w*\s+|линии\s+)?(?P<line>" + _LINE_TOKEN + r")" + _QUALIFIER_TAIL
 )
 
+#: ``line_prefix`` sentinel'а «любая станция метро, линия не важна». Значение
+#: разбирает :func:`app.geo.candidates._matching_station_points` (там же оно
+#: сравнивается с нормализованным префиксом) — константа держит его в одном
+#: месте на стороне парсера.
+_ANY_LINE_PREFIX = "метро"
+
 #: «Любая станция» без указания конкретной линии, уточнение ДО слова «метро»
 #: («у любого метро», «недалеко от любой станции метро»).
 _ANY_BEFORE_PATTERN = re.compile(_MARKER + r"люб\w+\s+(?:станци\w*\s+)?метро\b" + _DISTANCE_AFTER)
@@ -405,6 +411,7 @@ def _add_matches(
     lines: list[str],
     reqs: list[StationClassRequirement],
     spans: list[Span],
+    req_spans: list[Span],
 ) -> None:
     """Добавить требования для всех непересекающихся совпадений ``pattern``.
 
@@ -413,6 +420,11 @@ def _add_matches(
     ``Span`` — фрагмент засчитывается «понятым» один раз. Дистанция (если
     паттерн её захватывает — см. ``_DISTANCE_AFTER``) одна на весь фрагмент,
     поэтому применяется к каждому из добавленных требований одинаково.
+
+    ``req_spans`` — параллельный ``reqs`` список (по спану на КАЖДОЕ требование,
+    а не на фрагмент): нужен ``_absorb_adjacent_sentinel`` ниже, чтобы понять,
+    какие требования стоят в тексте рядом. ``spans`` для этого не годится —
+    он схлопывает многолинейный фрагмент в одну запись и потому не выравнен.
     """
     for match in pattern.finditer(norm):
         span = match.span()
@@ -428,7 +440,66 @@ def _add_matches(
             reqs.append(
                 StationClassRequirement(line_prefix=line, raw=raw, max_distance_m=max_distance_m)
             )
+            req_spans.append(span)
         spans.append(span)
+
+
+def _adjacent(a: Span, b: Span, norm: str) -> bool:
+    """Примыкают ли спаны — то есть в зазоре между ними только пробелы."""
+    left, right = (a, b) if a[1] <= b[0] else (b, a)
+    return not norm[left[1] : right[0]].strip()
+
+
+def _absorb_adjacent_sentinel(
+    reqs: list[StationClassRequirement], req_spans: list[Span], norm: str
+) -> list[StationClassRequirement]:
+    """Примыкающая конкретная линия поглощает sentinel «любое метро».
+
+    «рядом с любым метро коричневой ветки» — это ОДНО требование, а не два.
+    Потребитель (``app.geo.candidates.station_class_points``) трактует список
+    как OR, а sentinel разворачивается во все станции справочника: union
+    «все ∪ станции линии» = «все», и уточнение линии молча становилось
+    мёртвым кодом. Побеждает более специфичное требование.
+
+    Инвариант 1 не нарушен: у sentinel'а отбирается ЗНАЧЕНИЕ, но не текст —
+    его спан остаётся в ``spans`` и продолжает считаться «понятым», так что
+    фраза не уезжает в warnings. Итоговый фильтр — подмножество запрошенного.
+
+    Область слияния ограничена ПРИМЫКАНИЕМ спанов намеренно. Любое слово,
+    запятая или союз в зазоре означают дизъюнкцию либо предпочтение
+    («любое метро ИЛИ Кольцевая», «любое метро, но лучше Кольцевая»), и там
+    молчаливое схлопывание спрятало бы семантическую ошибку — сузило бы
+    запрос до одной линии. Такие формы остаются двумя требованиями.
+    """
+    specific = [i for i, r in enumerate(reqs) if r.line_prefix != _ANY_LINE_PREFIX]
+    if not specific:
+        return reqs
+    absorbed = {
+        i
+        for i, r in enumerate(reqs)
+        if r.line_prefix == _ANY_LINE_PREFIX
+        and any(_adjacent(req_spans[i], req_spans[j], norm) for j in specific)
+    }
+    return [r for i, r in enumerate(reqs) if i not in absorbed]
+
+
+def _dedupe(reqs: list[StationClassRequirement]) -> list[StationClassRequirement]:
+    """Убрать точные дубли требований, сохранив порядок.
+
+    Одну линию называют дважды разными словами («коричневая ветка, оно же
+    кольцо») — два непересекающихся спана дают два одинаковых требования.
+    Смысла это не меняло (OR ``X`` с ``X`` = ``X``), но дублировало точки в
+    ``station_class_points`` и имя линии в тексте warning'а.
+    """
+    seen: set[tuple[str, int | None]] = set()
+    unique: list[StationClassRequirement] = []
+    for req in reqs:
+        key = (req.line_prefix, req.max_distance_m)
+        if key in seen:
+            continue
+        seen.add(key)
+        unique.append(req)
+    return unique
 
 
 def extract_station_class_requirements(
@@ -442,6 +513,7 @@ def extract_station_class_requirements(
     norm = _normalize(text)
     reqs: list[StationClassRequirement] = []
     spans: list[Span] = []
+    req_spans: list[Span] = []
 
     # Дистанция ДО линии («в пределах 700 метров от МЦД-3») — проверяем первой:
     # структурно она перекрывает и саму линию, и предшествующую дистанцию, так
@@ -461,6 +533,7 @@ def extract_station_class_requirements(
             )
         )
         spans.append(span)
+        req_spans.append(span)
 
     for match in _EXPLICIT_LINE_PATTERN.finditer(norm):
         span = match.span()
@@ -474,6 +547,7 @@ def extract_station_class_requirements(
             )
         )
         spans.append(span)
+        req_spans.append(span)
 
     for pattern in (_ANY_BEFORE_PATTERN, _ANY_AFTER_PATTERN):
         for match in pattern.finditer(norm):
@@ -482,34 +556,35 @@ def extract_station_class_requirements(
                 continue
             reqs.append(
                 StationClassRequirement(
-                    line_prefix="метро",
+                    line_prefix=_ANY_LINE_PREFIX,
                     raw=text[span[0] : span[1]],
                     max_distance_m=_extract_distance(match),
                 )
             )
             spans.append(span)
+            req_spans.append(span)
 
     # Разговорные названия (Milestone AI-17). Порядок важен: составные цвета
     # и специфичные прозвища «кольца» проверяются раньше общих паттернов,
     # которые их подстрокой перекрывают (см. докстринг модуля).
     for compound_stem, lines in _COMPOUND_COLOR_LINE_MAP.items():
-        _add_matches(norm, text, _carrier_pattern(compound_stem), lines, reqs, spans)
+        _add_matches(norm, text, _carrier_pattern(compound_stem), lines, reqs, spans, req_spans)
 
     # Официальные имена линий из metro.json (Milestone AI-21): «Троицкой
     # ветки», «Сокольнической линии». До простых цветов — приоритет у точного
     # имени; пересечений со стемами цветов нет, порядок здесь — на будущее.
     for pattern, line in _line_patterns_for(_official_line_stem_map()):
-        _add_matches(norm, text, pattern, [line], reqs, spans)
+        _add_matches(norm, text, pattern, [line], reqs, spans, req_spans)
 
     for stem, lines in _COLOR_LINE_MAP.items():
-        _add_matches(norm, text, _carrier_pattern(stem), lines, reqs, spans)
+        _add_matches(norm, text, _carrier_pattern(stem), lines, reqs, spans, req_spans)
 
     for stem, lines in _ORDINAL_LINE_MAP.items():
-        _add_matches(norm, text, _carrier_pattern(stem), lines, reqs, spans)
+        _add_matches(norm, text, _carrier_pattern(stem), lines, reqs, spans, req_spans)
 
     for pattern, lines in _SPECIFIC_NICKNAME_PATTERNS:
-        _add_matches(norm, text, pattern, lines, reqs, spans)
+        _add_matches(norm, text, pattern, lines, reqs, spans, req_spans)
 
-    _add_matches(norm, text, _GENERIC_RING_PATTERN, ["Кольцевая"], reqs, spans)
+    _add_matches(norm, text, _GENERIC_RING_PATTERN, ["Кольцевая"], reqs, spans, req_spans)
 
-    return reqs, spans
+    return _dedupe(_absorb_adjacent_sentinel(reqs, req_spans, norm)), spans

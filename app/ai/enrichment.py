@@ -79,6 +79,22 @@ _FREE_TEXT_SCALAR_FIELDS = (
 )
 #: Булевы пожелания (дефолт False = «не задано»): включаем только True поверх False.
 _FREE_TEXT_BOOL_FIELDS = ("not_first_floor", "last_floor", "not_last_floor", "only_available")
+#: Инвариант 1 на уровне текста ответа: сами фрагменты и так остаются в warnings,
+#: но без этой строки не видно, ПОЧЕМУ они там остались — ai_failed читает машина,
+#: warnings читает человек.
+_FREE_TEXT_FAILED_WARNING = (
+    "не удалось дообработать оставшийся текст через ИИ — перечисленные выше "
+    "фрагменты не учтены в ссылке"
+)
+#: То же рассуждение для отбитого валидацией значения: фрагменты остаются в
+#: warnings (см. `_apply_free_text_answer`), но сами по себе они говорят лишь
+#: «не распознано» — а распознано как раз было, отброшено значение. Без этой
+#: строки человек не отличит «модель промолчала» от «модель ответила, и ответ
+#: не прошёл валидацию».
+_FREE_TEXT_REJECTED_WARNING = (
+    "ИИ предложил значение, но оно не прошло валидацию — перечисленные выше "
+    "фрагменты оставлены как нераспознанные"
+)
 
 logger = logging.getLogger(__name__)
 
@@ -88,10 +104,26 @@ class FreeTextOutcome(BaseModel):
 
     ``called`` — попытка реально дошла до модели (для ai_call_log). ``changed`` —
     модель заполнила хоть одно пустое поле criteria (для ai_used/criteria_changed).
+    ``failed`` — попытка была и провалилась (для ai_failed): до этой правки
+    признака провала не было вовсе, поэтому исключение вызова и cooldown
+    circuit breaker'а возвращали исход, неотличимый от «модель не звали», и
+    ответ API с ``ai_used=false, ai_failed=false`` означал сразу три разных
+    состояния (нарушение инварианта 1 на уровне телеметрии).
+
+    Границы провала намеренно узкие — «модель НЕ ответила»:
+    ``failure_reason="exception"`` (вызов упал) и ``"breaker"`` (предохранитель
+    в cooldown, до провайдера не дошли — ``called=False``, но это отказ ИИ-слоя,
+    а не гейт). «Ответила и ничего не заполнила» и «значения отбиты
+    validate_assignment/санитайзером» — успешный вызов без пользы,
+    ``failed=False``: их различает лог, а не флаг, иначе ``ai_failed`` начал бы
+    срабатывать на исправном ИИ, ошибшемся форматом. Отсутствие кредов и
+    выключенный ИИ — ``disabled``, тоже не провал (инвариант 9).
     """
 
     called: bool = False
     changed: bool = False
+    failed: bool = False
+    failure_reason: str | None = None
     explanation: str = ""
 
 
@@ -497,6 +529,9 @@ def _apply_free_text_answer(
     (validate_assignment у Criteria) — молча не выдумываем. Возвращает, изменилось
     ли criteria."""
     changed = False
+    # Хоть одно значение отбито валидацией Criteria. Отдельно от `changed`: там,
+    # где значение не доехало, снимать warning по фрагменту нельзя (см. ниже).
+    rejected = False
 
     # rooms — только если детерминированный слой ничего не нашёл.
     if answer.rooms and not criteria.rooms:
@@ -504,6 +539,7 @@ def _apply_free_text_answer(
             criteria.rooms = list(dict.fromkeys(answer.rooms))
             changed = True
         except Exception as e:
+            rejected = True
             logger.warning(f"free-text rooms rejected: {e}")
 
     # Скаляры — заполняем, только если поле не задано (None).
@@ -514,6 +550,7 @@ def _apply_free_text_answer(
                 setattr(criteria, field, value)
                 changed = True
             except Exception as e:
+                rejected = True
                 logger.warning(f"free-text {field}={value!r} rejected: {e}")
 
     # Ориентиры — единственное неcкалярное поле, доверенное экстрактору
@@ -530,6 +567,7 @@ def _apply_free_text_answer(
                 accepted_landmark_phrases = {lm.raw_phrase for lm in resolved_landmarks}
                 changed = True
             except Exception as e:
+                rejected = True
                 logger.warning(f"free-text landmarks rejected: {e}")
 
     # Булевы флаги — включаем только True поверх дефолтного False.
@@ -539,6 +577,7 @@ def _apply_free_text_answer(
                 setattr(criteria, field, True)
                 changed = True
             except Exception as e:
+                rejected = True
                 logger.warning(f"free-text {field} rejected: {e}")
 
     # Снимаем warning'и по фрагментам, которые модель заявила разобранными —
@@ -549,12 +588,22 @@ def _apply_free_text_answer(
     rejected_landmark_phrases = {
         m.phrase for m in answer.landmarks if m.phrase not in accepted_landmark_phrases
     }
-    if changed:
+    # Отбивка валидацией снимает снятие целиком (`not rejected`). Точечно, как с
+    # ориентирами, здесь нельзя: у `LandmarkMatch` есть `phrase`, а скаляры и
+    # булевы приходят голыми значениями — какой из заявленных фрагментов породил
+    # отбитое поле, в ответе не сказано. Раз выбор «какой warning оставить»
+    # невосстановим, оставляем все: лишний warning — шум, снятый warning при
+    # непринятом значении — молчаливая потеря (инвариант 1). До этой правки
+    # хватало одного удачного поля (`changed=True`), чтобы фрагменты отбитого
+    # исчезли вместе с ним: ни значения, ни предупреждения.
+    if changed and not rejected:
         for frag in answer.consumed_fragments:
             if frag in fragments and frag not in rejected_landmark_phrases:
                 stale = f"«{frag}{_UNRECOGNIZED_SUFFIX}"
                 if stale in warnings:
                     warnings.remove(stale)
+    if rejected:
+        warnings.append(_FREE_TEXT_REJECTED_WARNING)
 
     return changed
 
@@ -593,12 +642,24 @@ async def resolve_free_text_criteria(
         answer = await call_free_text_extractor(FREE_TEXT_SYSTEM_PROMPT, context)
     except CircuitOpenError as e:
         logger.warning(f"AI free-text extraction skipped (circuit breaker open): {e}")
-        return FreeTextOutcome(called=False)
+        warnings.append(_FREE_TEXT_FAILED_WARNING)
+        return FreeTextOutcome(called=False, failed=True, failure_reason="breaker")
     except Exception as e:
         logger.error(f"AI free-text extraction failed: {e}", exc_info=True)
-        return FreeTextOutcome(called=True)
+        warnings.append(_FREE_TEXT_FAILED_WARNING)
+        return FreeTextOutcome(called=True, failed=True, failure_reason="exception")
 
     changed = _apply_free_text_answer(criteria, answer, fragments, warnings, text)
+    # Успешный вызов логируем явно: без этой строки «модель ничего не вернула» и
+    # «вернула, но всё отбито валидацией» неразличимы в логе (оба дают
+    # changed=False, failed=False) — ровно тот пробел наблюдаемости, из-за
+    # которого диагностика дефекта строилась на выводах по отсутствию строк.
+    logger.info(
+        "AI free-text extraction done: changed=%s fragments=%d answer=%s",
+        changed,
+        len(fragments),
+        answer.model_dump(exclude_defaults=True),
+    )
     return FreeTextOutcome(
         called=True,
         changed=changed,
@@ -768,6 +829,42 @@ def _warn_mixed_superlative(superlative: list[LandmarkRequirement], warnings: li
     )
 
 
+def _station_class_fallback_ids(
+    candidates: list[ComplexCandidate],
+    criteria: Criteria,
+    names: str,
+    warnings: list[str],
+) -> list[str]:
+    """Ближайшие к станциям класса, когда радиус по умолчанию дал пусто.
+
+    Осмысленная деградация (Milestone AI-18) для ОБЕИХ станционных веток —
+    и эксклюзивной, и комбинированной (правка Г1). Инвариант 16 ограничивает
+    фолбэк радиусом, а не составом запроса: ``station_class_nearest_fallback``
+    сам вернёт ``([], None)``, если пользователь задал явную ``max_distance_m``
+    (тогда это жёсткая отсечка и пустой ответ правильный).
+
+    Кандидатов сужаем теми же criteria, но БЕЗ класса станций — тем же приёмом,
+    что и суперлатив ориентира выше. Иначе фолбэк затирал бы остальные оси:
+    вернул бы ближайший к линии ЖК, в котором нет требуемого детского сада.
+
+    Возвращает ``[]``, когда фолбэк неприменим — вызывающий код обязан в этом
+    случае объяснить пустоту сам.
+    """
+    without_station_class = criteria.model_copy(update={"station_class_requirements": []})
+    eligible_ids = set(
+        resolve_known_facts(candidates, without_station_class)["matched_complex_ids"]
+    )
+    eligible = [c for c in candidates if c.id in eligible_ids]
+
+    fallback_candidates, fallback_warning = station_class_nearest_fallback(
+        eligible, criteria.station_class_requirements, names
+    )
+    if not fallback_warning:
+        return []
+    warnings.append(fallback_warning)
+    return [c.id for c in fallback_candidates]
+
+
 async def enrich(
     text: str,
     criteria: Criteria,
@@ -798,10 +895,17 @@ async def enrich(
         "fully_resolved_deterministically": False,
         "cache_hit": False,
         "ai_called": free_text.called,
+        "ai_failed": free_text.failed,
         "criteria_changed_by_ai": free_text.changed,
     }
 
     async def _log(result: EnrichmentResult) -> EnrichmentResult:
+        # Провал экстрактора свободного текста тоже случился ДО гейтов — и так же
+        # обязан пережить любой путь ниже: noop()/from_deterministic строятся с
+        # ai_failed=False, и без этой строки факт неудачной попытки терялся бы
+        # ровно на гейте 1 (самый частый путь free-text-запроса).
+        if free_text.failed:
+            result.ai_failed = True
         # Экстрактор свободного текста реально повлиял на criteria (мутировал его
         # ДО гейтов) — отражаем это в ai_used честно, даже если путь ниже вернул
         # noop()/from_deterministic (у которых ai_used=False по конструкции).
@@ -1023,6 +1127,33 @@ async def enrich(
         if not known["matched_complex_ids"]:
             warnings.append(f"рядом с {landmark_names} подходящих ЖК не найдено")
 
+    # Класс станций В КОМБИНАЦИИ с POI/центром/ориентиром (правка Г1). Ровно тот
+    # же приём, что у ориентиров выше: ветка ДУБЛИРУЕТСЯ под комбинированный
+    # случай, а не ослабляется гейт эксклюзивной ветки ниже.
+    #
+    # Живой запрос «рядом с любым метро коричневой ветки … рядом детский сад»
+    # давал blocks=0 вообще без диагностики: радиус класса применяется внутри
+    # resolve_known_facts, а вся станционная диагностика жила в эксклюзивной
+    # ветке, закрытой наличием POI. Пустой результат без объяснения — исход хуже
+    # и списка, и тишины (инвариант 1).
+    if criteria.station_class_requirements and (
+        criteria.poi_requirements or criteria.center_requested or criteria.landmark_requirements
+    ):
+        class_names = ", ".join(f"«{r.line_prefix}»" for r in criteria.station_class_requirements)
+
+        if not station_class_points(criteria):
+            warnings.append(
+                f"не удалось сузить список ЖК рядом со станциями класса {class_names}: "
+                "в справочнике метро нет координат нужных станций"
+            )
+        elif not known["matched_complex_ids"]:
+            known["matched_complex_ids"] = _station_class_fallback_ids(
+                candidates, criteria, class_names, warnings
+            )
+
+        if not known["matched_complex_ids"]:
+            warnings.append(f"рядом со станциями класса {class_names} подходящих ЖК не найдено")
+
     # Прозрачность POI: назвать объект, по которому ЖК прошли требование. Ставим
     # здесь — ниже все ветки, где poi_requirements по условию пусты (landmark-
     # only, station-class-only), поэтому лишних строк не будет, а обе ветви ниже
@@ -1063,19 +1194,13 @@ async def enrich(
 
         matched_complex_ids = known["matched_complex_ids"]
         if not matched_complex_ids:
-            # Осмысленная деградация (Milestone AI-18): пустая выдача в радиусе
-            # по умолчанию — не повод молчать, если сайт может показать
-            # ближайшие варианты. Фолбэк сам возвращает ([], None), если
-            # пользователь задал явную дистанцию (max_distance_m) — тогда это
-            # жёсткая отсечка, и прежнее поведение (пустой warning) правильное.
-            fallback_candidates, fallback_warning = station_class_nearest_fallback(
-                candidates, criteria.station_class_requirements, names
-            )
-            if fallback_warning:
-                warnings.append(fallback_warning)
-                matched_complex_ids = [c.id for c in fallback_candidates]
-            else:
-                warnings.append(f"рядом со станциями класса {names} подходящих ЖК не найдено")
+            matched_complex_ids = _station_class_fallback_ids(candidates, criteria, names, warnings)
+
+        # Проверка безусловная, а не `else` к фолбэку — по образцу ветки
+        # ориентиров выше: «фолбэк отработал, но всё равно пусто» тоже обязано
+        # объясняться, иначе пустая выдача снова уходит без единого слова.
+        if not matched_complex_ids:
+            warnings.append(f"рядом со станциями класса {names} подходящих ЖК не найдено")
 
         result = EnrichmentResult(
             ai_used=False,

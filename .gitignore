@@ -97,3 +97,6 @@ docs_untracked/
 
 # Generated code graph
 graphify-out/
+
+# Рабочие деревья git, создаваемые агентами (сами репозитории, ~ГБ)
+.claude/worktrees/

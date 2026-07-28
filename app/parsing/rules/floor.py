@@ -35,6 +35,13 @@ _FLOOR_MIN = re.compile(
     rf"{_ETAZHNOST}\b(?:не\s+ниже|от|начиная\s+с|с|выше)\s+(\d+)(?:-?го)?\s+этаж\w*"
 )
 _FLOOR_MAX = re.compile(rf"{_ETAZHNOST}\b(?:не\s+выше|до)\s+(\d+)(?:-?го)?\s+этаж\w*")
+#: Инвертированная форма — существительное «этаж» ПЕРЕД числом, без хвостового
+#: «этажа» («этаж от 7», «этаж до 12»). Симметрична _FLOOR_RANGE_B/D (та же
+#: голова `\bэтаж\w*`), но без второй границы диапазона.
+_FLOOR_MIN_LEADING = re.compile(
+    r"\bэтаж\w*\s*[—:\-]?\s*(?:не\s+ниже|от|начиная\s+с|с|выше)\s+(\d+)(?:-?го)?\b"
+)
+_FLOOR_MAX_LEADING = re.compile(r"\bэтаж\w*\s*[—:\-]?\s*(?:не\s+выше|до)\s+(\d+)(?:-?го)?\b")
 _FLOOR_NOT_FIRST = re.compile(r"\b(?:не\s+(?:на\s+)?|кроме\s+|выше\s+)перв\w+(?:\s+этаж\w*)?")
 #: Постфиксное отрицание: «первый этаж не предлагать / не надо / исключить».
 #: Отрицание стоит ПОСЛЕ «перв… этаж», поэтому _FLOOR_NOT_FIRST (префиксное) его
@@ -96,6 +103,16 @@ def extract_floor(
             spans.append(match.span())
 
     for match in _free(_FLOOR_MIN):
+        if floor_min is None:
+            floor_min = int(match.group(1))
+            spans.append(match.span())
+
+    for match in _free(_FLOOR_MAX_LEADING):
+        if floor_max is None:
+            floor_max = int(match.group(1))
+            spans.append(match.span())
+
+    for match in _free(_FLOOR_MIN_LEADING):
         if floor_min is None:
             floor_min = int(match.group(1))
             spans.append(match.span())

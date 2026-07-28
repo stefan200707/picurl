@@ -173,6 +173,7 @@ async def log_ai_call(
     cache_hit: bool,
     ai_called: bool,
     criteria_changed_by_ai: bool,
+    ai_failed: bool = False,
 ) -> None:
     """Записать строку наблюдаемости в ai_call_log (Milestone AI-11).
 
@@ -182,15 +183,19 @@ async def log_ai_call(
     закомментирован и не влияет на реальный ответ. ``pool=None`` (БД не
     настроена) — тихо пропускаем: наблюдаемость best-effort и не должна ломать
     основной ответ.
+
+    ``ai_failed`` (миграция 03) — была попытка и провалилась. Без этой колонки
+    отказ free-text-ветки был в логе неотличим от «не звали»: cooldown circuit
+    breaker'а пишет ``ai_called=False``, потому что до провайдера вызов не дошёл.
     """
     if pool is None:
         return
     query = """
         INSERT INTO ai_call_log (
             had_poi_or_center, fully_resolved_deterministically,
-            cache_hit, ai_called, criteria_changed_by_ai
+            cache_hit, ai_called, criteria_changed_by_ai, ai_failed
         )
-        VALUES ($1, $2, $3, $4, $5)
+        VALUES ($1, $2, $3, $4, $5, $6)
     """
     await pool.execute(
         query,
@@ -199,4 +204,5 @@ async def log_ai_call(
         cache_hit,
         ai_called,
         criteria_changed_by_ai,
+        ai_failed,
     )

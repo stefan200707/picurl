@@ -30,11 +30,13 @@ uv sync
 ### 2. Запуск базы данных (для ИИ-обогащения)
 ИИ-обогащение — опциональный слой; базовый пайплайн (парсинг → URL → валидация)
 работает без БД. Если он нужен, запустите PostgreSQL с расширением `pgvector`
-через Docker и накатите обе миграции (карта памяти + наблюдаемость вызовов ИИ):
+через Docker и накатите миграции по порядку (карта памяти + наблюдаемость вызовов
+ИИ + признак неудачной попытки):
 ```bash
 docker compose up -d postgres
 docker exec -i picurl-postgres psql -U postgres -d picurl_ai < app/ai/migrations/01_memory_tables.sql
 docker exec -i picurl-postgres psql -U postgres -d picurl_ai < app/ai/migrations/02_ai_call_log.sql
+docker exec -i picurl-postgres psql -U postgres -d picurl_ai < app/ai/migrations/03_ai_call_failed.sql
 ```
 
 ### 3. Настройка окружения (`.env`)

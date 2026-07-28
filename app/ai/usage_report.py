@@ -35,6 +35,9 @@ class CallLogRow(BaseModel):
     cache_hit: bool
     ai_called: bool
     criteria_changed_by_ai: bool
+    #: Попытка была и провалилась (правка Г5). Дефолт False — строки, записанные
+    #: до миграции 03, провалов не различали вовсе.
+    ai_failed: bool = False
 
 
 def _pct(part: int, whole: int) -> float:
@@ -61,6 +64,12 @@ class UsageReport(BaseModel):
     criteria_changed_within_ai_called: int
     #: had_poi_or_center=false среди criteria_changed_by_ai=true (метрика гейта 1).
     changed_without_poi_or_center: int
+    #: Неудачные попытки обращения к ИИ (правка Г5).
+    ai_failed: int = 0
+    #: Попытки = ai_called ИЛИ ai_failed. Знаменатель для доли провалов: cooldown
+    #: circuit breaker'а даёт ai_called=false при ai_failed=true (до провайдера
+    #: вызов не дошёл), поэтому одного ai_called тут недостаточно.
+    ai_attempts: int = 0
 
     @property
     def pct_had_poi_or_center(self) -> float:
@@ -91,6 +100,16 @@ class UsageReport(BaseModel):
         """
         return _pct(self.changed_without_poi_or_center, self.criteria_changed_by_ai)
 
+    @property
+    def pct_ai_failed(self) -> float:
+        """% неудачных попыток от всех попыток обратиться к ИИ.
+
+        До правки Г5 провал free-text-ветки в лог не попадал никак, поэтому
+        здоровье ИИ-слоя по отчёту не читалось: устойчивый рост этой доли —
+        сигнал, что фильтры теряются не из-за парсера, а из-за провайдера.
+        """
+        return _pct(self.ai_failed, self.ai_attempts)
+
 
 def aggregate(rows: list[CallLogRow]) -> UsageReport:
     """Свести список строк ai_call_log в :class:`UsageReport`."""
@@ -109,6 +128,8 @@ def aggregate(rows: list[CallLogRow]) -> UsageReport:
         changed_without_poi_or_center=sum(
             r.criteria_changed_by_ai and not r.had_poi_or_center for r in rows
         ),
+        ai_failed=sum(r.ai_failed for r in rows),
+        ai_attempts=sum(r.ai_called or r.ai_failed for r in rows),
     )
 
 
@@ -127,6 +148,7 @@ def format_report(report: UsageReport, days: int | None) -> str:
     cache = f"{report.cache_hit} ({report.pct_cache_hit}%)"
     changed = f"{report.criteria_changed_by_ai} ({changed_pct}% от вызовов ИИ)"
     without = f"{report.changed_without_poi_or_center} ({without_pct}%)"
+    failed = f"{report.ai_failed} ({report.pct_ai_failed}% от попыток)"
     lines = [
         f"Наблюдаемость вызовов ИИ ({period})",
         f"  всего запросов: {report.total}",
@@ -134,6 +156,7 @@ def format_report(report: UsageReport, days: int | None) -> str:
         f"    из них разрешимо детерминированно: {resolved}  ← кандидаты на гейт 2",
         f"  ответов из кэша (cache_hit): {cache}",
         f"  реально звался ИИ (ai_called): {report.ai_called}",
+        f"  попытка провалилась (ai_failed): {failed}",
         f"  ИИ изменил criteria (польза вызова): {changed}",
         f"    из них без POI/центра (метрика гейта 1): {without}",
     ]
@@ -144,7 +167,7 @@ async def fetch_rows(pool: asyncpg.Pool, days: int | None) -> list[CallLogRow]:
     """Загрузить строки ai_call_log за период (все, если days=None)."""
     query = """
         SELECT had_poi_or_center, fully_resolved_deterministically,
-               cache_hit, ai_called, criteria_changed_by_ai
+               cache_hit, ai_called, criteria_changed_by_ai, ai_failed
         FROM ai_call_log
     """
     if days is not None:

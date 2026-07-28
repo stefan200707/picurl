@@ -107,6 +107,15 @@ def build_url(criteria: Criteria, warnings: list[str] | None = None) -> str:
         query_params["blocks"] = ",".join(
             combine_with_fallback(existing_blocks, fallback, criteria, warnings)
         )
+    # Заметки о том, КАК сузили (полигон МКАД, ориентир, класс станций),
+    # публикует тот, кто их породил. Раньше они доезжали до ответа только через
+    # validate(), склеенные в один элемент с текстом про проверку выдачи, — то
+    # есть справка о критериях зависела от сетевого вызова, к которому не имеет
+    # отношения, и была неотделима от него. Добавляем БЕЗУСЛОВНО, вне ветки
+    # выше: при пустом block_ids фолбэк как раз и объясняет, почему фильтр
+    # пропущен, и терять это объяснение нельзя (инвариант 1).
+    if warnings is not None:
+        warnings.extend(fallback.notes)
 
     # Общие query-параметры добавляем в конец
     query_params.update(criteria.to_query_dict())
