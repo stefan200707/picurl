@@ -11,7 +11,12 @@ from unittest.mock import patch
 
 import pytest
 
-from app.ai.enrichment import _FREE_TEXT_REJECTED_WARNING, enrich, resolve_free_text_criteria
+from app.ai.enrichment import (
+    _FREE_TEXT_REJECTED_WARNING,
+    _residual_fragments,
+    enrich,
+    resolve_free_text_criteria,
+)
 from app.ai.prompts import build_free_text_context
 from app.ai.schema import FreeTextCriteriaAnswer, LandmarkMatch
 from app.config import get_settings
@@ -375,6 +380,26 @@ async def test_rejected_value_keeps_all_fragment_warnings(mock_extractor, mock_s
 
 @pytest.mark.asyncio
 @patch("app.ai.enrichment.call_free_text_extractor")
+async def test_greeting_only_residual_skips_call(mock_extractor, mock_settings):
+    """Приветствие — единственный остаток → вызова нет вовсе.
+
+    Живой замер: экстрактор звался с fragments=1, и этим фрагментом было
+    «Привет» — модель тратила вызов на объяснение, что приветствие не относится
+    ни к одному полю. Warning при этом остаётся (инвариант 1): задача — не
+    оплачивать вызов, а не спрятать шум.
+    """
+    criteria = Criteria()
+    warnings = [_RESIDUAL.format("Привет")]
+
+    outcome = await resolve_free_text_criteria(criteria, "Привет! Двушку до 15 млн", warnings, None)
+
+    mock_extractor.assert_not_called()
+    assert outcome.called is False
+    assert warnings == [_RESIDUAL.format("Привет")]
+
+
+@pytest.mark.asyncio
+@patch("app.ai.enrichment.call_free_text_extractor")
 async def test_two_valid_values_still_clear_both_warnings(mock_extractor, mock_settings):
     """Контроль: без отбивки снятие warning'ов по нескольким фрагментам работает
     как раньше и лишней строки не появляется."""
@@ -393,3 +418,50 @@ async def test_two_valid_values_still_clear_both_warnings(mock_extractor, mock_s
     assert outcome.changed is True
     assert criteria.floor_min == 7
     assert warnings == []
+
+
+@pytest.mark.asyncio
+@patch("app.ai.enrichment.call_free_text_extractor")
+async def test_greeting_dropped_but_other_fragments_still_call(mock_extractor, mock_settings):
+    """Есть другой остаток → вызов происходит, но приветствия в fragments нет."""
+    mock_extractor.return_value = FreeTextCriteriaAnswer(
+        sort=Sort.PRICE_ASC,
+        consumed_fragments=["по возрастанию стоимости"],
+    )
+    criteria = Criteria()
+    warnings = [
+        _RESIDUAL.format("Добрый день"),
+        _RESIDUAL.format("по возрастанию стоимости"),
+    ]
+
+    outcome = await resolve_free_text_criteria(
+        criteria, "Добрый день, квартира по возрастанию стоимости", warnings, None
+    )
+
+    assert outcome.called is True
+    context = mock_extractor.call_args.args[1]
+    assert context["unresolved_fragments"] == ["по возрастанию стоимости"]
+    # Приветствие модели не показывали — и его warning остался на месте
+    # (снят только тот фрагмент, который модель реально разобрала).
+    assert warnings == [_RESIDUAL.format("Добрый день")]
+
+
+def test_greeting_forms_recognised():
+    """Набор форм: падежей нет, но регистр/пунктуация/ё встречаются."""
+    greetings = [
+        "привет",
+        "Привет",
+        "Приветствую",
+        "здравствуйте",
+        "Здрасьте",
+        "Доброе утро",
+        "добрый день",
+        "Доброго времени суток",
+        "добрый вечер",
+        "хай",
+    ]
+    assert _residual_fragments([_RESIDUAL.format(g) for g in greetings]) == []
+    # Приветствие внутри содержательного фрагмента остатком быть не перестаёт.
+    assert _residual_fragments([_RESIDUAL.format("привет хочу вот такую")]) == [
+        "привет хочу вот такую"
+    ]
