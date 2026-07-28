@@ -2,6 +2,42 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
+from app.warnings import WarningCategory, WarningSeverity, describe
+
+
+class WarningDetail(BaseModel):
+    """Одно предупреждение с машинно-различимой категорией (задача Г6).
+
+    Плоское `warnings: list[str]` неразличимо: «„Привет“: не удалось распознать»
+    (корректно отброшенный шум) и «„этаж от 7“: не удалось распознать»
+    (потерянный фильтр) выглядят одинаково, а ссылка во втором случае неполная,
+    но рабочая на вид.
+    """
+
+    text: str = Field(description="Текст предупреждения — тот же, что в плоском warnings.")
+    category: WarningCategory = Field(
+        description=(
+            "lost — требование распознано, но в ссылку не доехало; "
+            "unknown — фрагмент не распознан, природа неизвестна; "
+            "noise — корректно отброшено, фильтром не было; "
+            "capped — такого фильтра у pik.ru нет; "
+            "unverified — фильтр применён, но result_count его не учитывает; "
+            "degraded — не применили по своей вине (ИИ/сеть/данные), повтор осмыслен; "
+            "info — справка о том, как сузили выдачу."
+        )
+    )
+    severity: WarningSeverity = Field(
+        description=(
+            "Производная от category: lost/unknown → error, degraded/capped → warning, "
+            "unverified/noise/info → info."
+        )
+    )
+
+    @classmethod
+    def from_warning(cls, item: str) -> "WarningDetail":
+        text, category, severity = describe(item)
+        return cls(text=text, category=category, severity=severity)
+
 
 class BuildUrlRequest(BaseModel):
     """Запрос: свободный текст с пожеланиями к квартире."""
@@ -44,7 +80,19 @@ class BuildUrlResponse(BaseModel):
     )
     warnings: list[str] = Field(
         default_factory=list,
-        description="Нераспознанные куски текста и ослабленные критерии.",
+        description=(
+            "Нераспознанные куски текста и ослабленные критерии. "
+            "Выводится из warnings_detailed (тот же порядок, те же тексты) — "
+            "источник правды один, каналы не разъезжаются."
+        ),
+    )
+    warnings_detailed: list[WarningDetail] = Field(
+        default_factory=list,
+        description=(
+            "Те же предупреждения с категорией и severity. Разметка внедряется "
+            "порциями: неразмеченная точка отдаёт category=unknown — это "
+            "нормальный промежуточный статус, а не дефект."
+        ),
     )
     ai_used: bool = Field(
         default=False,

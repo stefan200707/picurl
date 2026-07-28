@@ -5,7 +5,7 @@ import asyncpg
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 
-from app.api.schemas import BuildUrlRequest, BuildUrlResponse
+from app.api.schemas import BuildUrlRequest, BuildUrlResponse, WarningDetail
 from app.parsing.parser import parse
 from app.pik.url_builder import build_url as pik_build_url
 from app.pik.validator import validate
@@ -83,11 +83,17 @@ async def build_url(
         warnings.append("выдача не проверена (ошибка сервиса)")
         result_count = None
 
+    # Категории собираем ДО конструирования модели: pydantic коэрсит подкласс
+    # str к обычному str, и атрибут внутри BuildUrlResponse уже не доживёт.
+    # Плоский warnings выводим из detailed, чтобы источник правды был один.
+    warnings_detailed = [WarningDetail.from_warning(w) for w in warnings]
+
     return BuildUrlResponse(
         url=url,
         criteria=criteria.to_public_dict(),
         result_count=result_count,
-        warnings=warnings,
+        warnings=[detail.text for detail in warnings_detailed],
+        warnings_detailed=warnings_detailed,
         ai_used=ai_meta.ai_used,
         ai_failed=ai_meta.ai_failed,
         ai_cache_hit=ai_meta.cache_hit,
