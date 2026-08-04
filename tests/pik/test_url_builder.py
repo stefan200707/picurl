@@ -251,12 +251,17 @@ def test_geo_fallback_alone_still_fills_blocks():
 # (ближайший ЖК ПИК — 4.18 км). До фикса criteria.complexes оставался нетронут
 # (== [] неотличимо от «ориентир не считали»), и build_url подставлял ВЕСЬ
 # МКАД-список, будто ориентира не было вовсе.
+#
+# Д1 (2026-08-04) исход считаного нуля пересмотрел: пустой ``blocks=`` на pik.ru
+# не сужает выдачу, а СНИМАЕТ фильтр — «ноль ЖК» превращался в «весь город»,
+# исход ШИРЕ МКАД-списка. Теперь отдаётся МКАД-список, но считаный ноль
+# по-прежнему отличим от «не считали» — теперь по warning'у, а не по пустоте.
 
 
-def test_geo_fallback_empty_landmark_match_does_not_expand_to_full_mkad():
-    """complexes_matched_empty=True + within_mkad=True → blocks остаётся пустым,
-    а НЕ откатывается на полный МКАД-список; предупреждение о непересечении есть."""
+def test_geo_fallback_counted_zero_falls_back_to_mkad_with_honest_warning():
+    """complexes_matched_empty=True + within_mkad=True → МКАД-список + честный warning."""
     from app.geo.candidates import complexes_in_mkad
+    from app.pik.location_fallback import LOCATION_ZERO_MATCH_NOT_APPLIED_WARNING
 
     full_mkad = complexes_in_mkad(True)
     assert full_mkad, "нет ЖК внутри МКАД — тест потерял смысл"
@@ -264,19 +269,72 @@ def test_geo_fallback_empty_landmark_match_does_not_expand_to_full_mkad():
     warnings: list[str] = []
     url = build_url(Criteria(within_mkad=True, complexes_matched_empty=True), warnings)
 
-    assert "blocks=" in url
     got = url.split("blocks=")[1].split("&")[0]
-    assert got == "", f"blocks должен остаться пустым, получили: {got!r}"
-    assert f"blocks={full_mkad[0]}" not in url
-    assert any("не пересекаются" in w for w in warnings)
+    assert got.split(",") == full_mkad, "фильтр по ЖК обязан остаться в ссылке"
+    # Ноль ПОСЧИТАН, и требование, давшее его, не применено — об этом сказано.
+    assert LOCATION_ZERO_MATCH_NOT_APPLIED_WARNING in warnings
 
 
 def test_geo_fallback_without_landmark_flag_still_uses_full_mkad():
-    """Контраст: ориентир НЕ участвовал вовсе (флаг не выставлен) — МКАД-фолбэк
-    работает по-прежнему (весь список), регрессии нет."""
+    """Контраст: ориентир НЕ участвовал вовсе (флаг не выставлен) — тот же список,
+    но БЕЗ предупреждения: сообщать не о чем, требования не было."""
     from app.geo.candidates import complexes_in_mkad
+    from app.pik.location_fallback import LOCATION_ZERO_MATCH_NOT_APPLIED_WARNING
 
-    url = build_url(Criteria(within_mkad=True, complexes_matched_empty=False))
+    warnings: list[str] = []
+    url = build_url(Criteria(within_mkad=True, complexes_matched_empty=False), warnings)
 
     assert "blocks=" in url
     assert len(url.split("blocks=")[1].split("&")[0].split(",")) == len(complexes_in_mkad(True))
+    assert LOCATION_ZERO_MATCH_NOT_APPLIED_WARNING not in warnings
+
+
+# --- Г1: заметка о гео-фолбэке не должна утверждать то, чего в ссылке нет ----
+# Фолбэк по координатам станции честно считает ближайшие ЖК, но пересечение с
+# другим гео-условием может их отбросить. Заметку при этом печатали безусловно,
+# и выдача сообщала «показаны 8 ближайших» о ЖК, которых в blocks уже нет.
+# Удалять заметку нельзя (инвариант 1: факт расчёта не должен пропадать) —
+# поэтому она остаётся, но перестаёт врать.
+
+
+def _unverified_metro(name: str) -> "MatchedEntity":
+    from app.parsing.schema import MatchedEntity
+
+    return MatchedEntity(name=name, slug=None, id=None)
+
+
+def test_metro_fallback_note_marks_ids_that_did_not_reach_url():
+    """Отсев фолбэка более специфичным списком (правило AND) — с оговоркой в заметке.
+
+    Повод для оговорки после Д1 остался ровно один: НЕПУСТОЙ специфичный список
+    (здесь — явно названный ЖК), который с фолбэком не пересёкся. Считаный ноль
+    сюда больше не относится: он теперь отдаёт список фолбэка, и заметка о
+    «показаны N ближайших» становится правдой, а не требует оговорки.
+    """
+    from app.parsing.schema import MatchedEntity
+
+    warnings: list[str] = []
+    criteria = Criteria(
+        metro=[_unverified_metro("ВДНХ")],
+        complexes=[MatchedEntity(name="Заведомо другой ЖК", id="999999")],
+    )
+
+    url = build_url(criteria, warnings)
+
+    assert url.split("blocks=")[1].split("&")[0] == "999999"
+    notes = [w for w in warnings if "ближайших" in w]
+    assert notes, "заметка о расчёте фолбэка обязана остаться"
+    assert "в ссылку не попали" in notes[0]
+
+
+def test_metro_fallback_note_stays_plain_when_ids_reach_url():
+    """Контраст: ЖК фолбэка доехали до blocks — заметка без оговорки."""
+    warnings: list[str] = []
+    criteria = Criteria(metro=[_unverified_metro("ВДНХ")])
+
+    url = build_url(criteria, warnings)
+
+    assert url.split("blocks=")[1].split("&")[0] != ""
+    notes = [w for w in warnings if "ближайших" in w]
+    assert notes
+    assert "в ссылку не попали" not in notes[0]

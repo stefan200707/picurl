@@ -45,6 +45,8 @@ uv run python -m app.reference.refresh           # JSON-справочники (
 uv run python -m app.reference.refresh_metro_geo # координаты/линии метро из OSM
 uv run python -m app.reference.refresh_mkad      # полигон МКАД (снапшот — приближение)
 uv run python -m app.geo.refresh_poi             # POI-кэш (--force = всё; без флага — v1 и отсутствующие)
+                                                 # ТРЕБУЕТ ПРОГОНА: словарь категорий расширен 2026-08-04,
+                                                 # кэш под 8 новых не собран (docs/poi-cache.md)
 
 uv run python -m app.ai.usage_report [--days N]  # отчёт вызовов ИИ
 uv run python -m app.ai.promotion [--report]     # неоднозначные алиасы

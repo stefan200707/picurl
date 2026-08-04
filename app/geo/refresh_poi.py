@@ -20,13 +20,14 @@ import json
 import sys
 from pathlib import Path
 
-from app.geo.poi import POI_CACHE_SCHEMA_VERSION, POICategory, fetch_poi
+from app.geo.poi import POI_CACHE_RADIUS_M, POI_CACHE_SCHEMA_VERSION, POICategory, fetch_poi
 from app.reference.loader import load_complexes
 
 CACHE_FILE = Path(__file__).parent.parent / "reference" / "poi_cache.json"
 
-#: Радиус сбора: кэш должен покрывать любую пользовательскую отсечку дистанции.
-COLLECT_RADIUS_M = 2000
+#: Радиус сбора живёт в app.geo.poi — им же ограничен потолок пользовательской
+#: отсечки в рантайме, и разъехаться этим двум числам нельзя.
+COLLECT_RADIUS_M = POI_CACHE_RADIUS_M
 
 #: Сколько раз пробовать одну запись при транзиентных отказах Overpass.
 MAX_ATTEMPTS = 4

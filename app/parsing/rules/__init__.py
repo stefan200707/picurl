@@ -40,6 +40,10 @@ class RulesOutcome(NamedTuple):
     consumed: list[Span]
     unsupported: list[tuple[str, str]]
     fallback_metro: list[tuple[str, Span]]
+    #: Фрагменты, распознанные правилом, но не применённые: слот уже занят более
+    #: ранним значением. Спан списан (иначе число подберёт другое правило), поэтому
+    #: молчать о них нельзя — фасад делает из них warning категории ``lost``.
+    dropped: tuple[str, ...] = ()
 
 
 def _blank(norm: str, spans: Iterable[Span]) -> str:
@@ -190,4 +194,5 @@ def apply_rules(text: str, reserved: Iterable[Span] = ()) -> RulesOutcome:
         consumed=consumed,
         unsupported=unsupported,
         fallback_metro=fallback_metro_tuples,
+        dropped=area.dropped,
     )

@@ -42,9 +42,10 @@ from app.geo.candidates import (
     station_class_nearest_fallback,
     station_class_points,
 )
-from app.geo.poi import POI_CACHE_SCHEMA_VERSION
+from app.geo.distance import STRAIGHT_LINE_NOTE
+from app.geo.poi import POI_CACHE_RADIUS_M, POI_CACHE_SCHEMA_VERSION, POICategory
 from app.parsing.rules.landmark import has_superlative_cue
-from app.parsing.schema import Criteria, LandmarkRequirement
+from app.parsing.schema import Criteria, Finish, LandmarkRequirement, POIRequirement
 from app.reference.loader import load_landmarks, load_option_groups, load_options, normalize
 
 #: fact_type для логирования сопоставлений «фраза → slug фильтра» в
@@ -121,6 +122,21 @@ _FREE_TEXT_SCALAR_FIELDS = (
 )
 #: Булевы пожелания (дефолт False = «не задано»): включаем только True поверх False.
 _FREE_TEXT_BOOL_FIELDS = ("not_first_floor", "last_floor", "not_last_floor", "only_available")
+#: Модель ответила, но не подтвердила ни одного ЖК. Инвариант 1: пользователь
+#: должен видеть, что гео-сужение осталось за детерминированным слоем, а не
+#: думать, что подходящих ЖК действительно нет.
+AI_NO_MATCH_WARNING = (
+    "ИИ не подтвердил ни одного ЖК из предложенных — гео-сужение оставлено "
+    "детерминированному слою (ближайшие по расстоянию)"
+)
+
+#: Потолок для порога дистанции до POI, пришедшего от модели. Не «правдоподобие
+#: пешей доступности» (это было бы вкусовое число), а жёсткий факт: кэш POI
+#: собран в радиусе POI_CACHE_RADIUS_M, дальше объектов в нём нет, и отсечка
+#: больше этого числа не проверяет ничего. Значение гасится в None, требование
+#: остаётся (см. :func:`sanitize_poi_resolution`). Детерминированный путь такой
+#: страховки не требует: там число приходит из текста через разбор единиц.
+_AI_POI_MAX_DISTANCE_M = POI_CACHE_RADIUS_M
 #: Инвариант 1 на уровне текста ответа: сами фрагменты и так остаются в warnings,
 #: но без этой строки не видно, ПОЧЕМУ они там остались — ai_failed читает машина,
 #: warnings читает человек.
@@ -167,6 +183,29 @@ class FreeTextOutcome(BaseModel):
     failed: bool = False
     failure_reason: str | None = None
     explanation: str = ""
+
+
+class OptionsOutcome(BaseModel):
+    """Итог ветки резолвинга опций — полный аналог :class:`FreeTextOutcome`.
+
+    До этого ``resolve_options`` возвращала ``None`` и сообщала о своей работе
+    только мутацией ``criteria``/``warnings`` по ссылке. Ветка при этом
+    полноценная: она зовёт модель и применяет её результат. Живой прогон «с
+    видом на парк, город» — детерминированный слой берёт только ``vidNaPark``,
+    «город» остаётся огрызком, модель подбирает ``vidNaGorod`` и снимает его
+    warning, — и ответ API сообщает ``ai_used=false``. Флаг означает «ИИ реально
+    повлиял», то есть он прямо врал; о самом вызове телеметрия тоже не знала.
+
+    Границы ``failed`` те же, что у ведра C, и по той же причине: провал — это
+    «модель НЕ ответила» (исключение вызова либо cooldown предохранителя).
+    «Ответила и ничего не подобрала» и «slug отбит санитайзером» — успешный
+    вызов без пользы, ``failed=False``.
+    """
+
+    called: bool = False
+    changed: bool = False
+    failed: bool = False
+    failure_reason: str | None = None
 
 
 class AIMeta(BaseModel):
@@ -220,12 +259,25 @@ class EnrichmentResult(BaseModel):
 
     @classmethod
     def from_deterministic(cls, known: dict):
+        """Итог детерминированного разрешения (гейт 2) — без выдуманных фактов.
+
+        ``complexes_matched`` берётся из самого расчёта
+        (``resolve_known_facts``: ключ ``narrowing_applied``), а не ставится
+        константой (Д2). Флаг означает «сужение РЕАЛЬНО считалось», и
+        ``merge_enrichment`` по нему решает, переписывать ли
+        ``criteria.complexes``. Когда проверять было нечем (единственное
+        POI-требование — по категории, которой нет в кэше), цикл объявляет
+        совпавшими ВСЕХ кандидатов: «посчитали» тут означало бы «вылить
+        шорт-лист в blocks=». Отсутствующий ключ трактуется как «факт не
+        подтверждён» — по той же причине, по какой ``from_ai_unmatched``
+        (правка Г2) не приравнивает суждение модели к результату haversine.
+        """
         return cls(
             ai_used=False,
             cache_hit=False,
             success=True,
             matched_complex_ids=known.get("matched_complex_ids", []),
-            complexes_matched=True,
+            complexes_matched=bool(known.get("narrowing_applied")),
             center_district_ids=known.get("center_district_ids", []),
             poi_findings=known.get("poi_findings", {}),
         )
@@ -260,6 +312,40 @@ class EnrichmentResult(BaseModel):
             success=True,
             matched_complex_ids=answer.matched_complex_ids,
             complexes_matched=True,
+            center_district_ids=answer.center_district_ids,
+            poi_findings=answer.poi_findings,
+            explanation=answer.explanation,
+        )
+
+    @classmethod
+    def from_ai_unmatched(cls, answer: AIEnrichmentAnswer):
+        """Модель ответила, но не подтвердила ни одного ЖК.
+
+        Отличается от :meth:`from_ai` единственным, зато решающим полем:
+        ``complexes_matched=False``. Флаг означает «сужение РЕАЛЬНО считалось»,
+        и для haversine-веток пустой результат — законный ноль, с которым надо
+        пересекаться. Суждение модели «среди присланных подходящих нет» такой
+        силы не имеет: она видит только тот шорт-лист, что ей дали, и не знает,
+        по какому принципу он собран. Приравняв её ноль к нулю математики, мы
+        затирали посчитанный гео-фолбэк.
+
+        Практическая сторона: пустой ``blocks=`` не сужает выдачу, а снимает
+        фильтр — «сузили до нуля» на деле означает «показали весь город». Так
+        что уступать этому ответу нечего.
+
+        ``ai_used`` намеренно остаётся True: вызов состоялся и его ответ был
+        разобран, а «успешный вызов без пользы» на уровне API от «реально
+        повлиял» и так не отличается — это различает лог (см. §8.6). Сюда же
+        попадает вычищенная санитайзером галлюцинация: до этой ветки она давала
+        ровно тот же пустой список и тот же ``ai_used=True``, и менять
+        наблюдаемость заодно с гео-семантикой было бы подменой предмета правки.
+        """
+        return cls(
+            ai_used=True,
+            cache_hit=False,
+            success=True,
+            matched_complex_ids=[],
+            complexes_matched=False,
             center_district_ids=answer.center_district_ids,
             poi_findings=answer.poi_findings,
             explanation=answer.explanation,
@@ -416,6 +502,85 @@ def sanitize_option_resolution(
     return resolved
 
 
+def sanitize_finish_resolution(
+    answer: FreeTextCriteriaAnswer,
+    fragments: list[str],
+) -> list[Finish]:
+    """Отобрать значения отделки из ответа модели.
+
+    Рубеж тот же, что у :func:`sanitize_landmark_resolution`: значение обязано
+    быть членом энума (это уже гарантирует pydantic при разборе ответа), а
+    ``phrase`` — дословно одним из переданных модели фрагментов. Без проверки
+    фразы реальное значение энума, привязанное к произвольному шуму в остатке,
+    молча добавило бы в ссылку сегмент ``/finish`` — ровно тот класс дефекта,
+    который сводные метрики QA не ловят (фильтр не теряется, а появляется
+    лишний).
+
+    Порядок сохраняется, дубли схлопываются: ``Criteria.finish`` — список, и
+    повтор значения дал бы ``hasFinish=1,1``.
+    """
+    allowed_phrases = set(fragments)
+
+    resolved: list[Finish] = []
+    for match in answer.finish:
+        if match.finish is None or match.phrase not in allowed_phrases:
+            continue
+        if match.finish in resolved:
+            continue
+        resolved.append(match.finish)
+    return resolved
+
+
+def sanitize_poi_resolution(
+    answer: FreeTextCriteriaAnswer,
+    fragments: list[str],
+) -> list[POIRequirement]:
+    """Собрать POI-требования из ответа модели.
+
+    Категория — член энума :class:`POICategory`, ``phrase`` — дословный
+    фрагмент остатка; всё остальное отбрасывается (фраза остаётся в
+    ``warnings``). Дубли по категории схлопываются: два требования одной
+    категории сузили бы выдачу дважды по одному и тому же признаку.
+
+    ``max_distance_m`` вне правдоподобного диапазона гасится в ``None``, но
+    само требование сохраняется. POI-требование по природе про пешую
+    доступность, и число вроде 300 км — не отсечка, а её отсутствие: записать
+    его в фильтр значило бы получить условие, которое ничего не сужает, и при
+    этом выглядит применённым. Выбросить требование целиком тоже нельзя —
+    факт «нужен садик рядом» из запроса никуда не делся (инвариант 1).
+    """
+    allowed_phrases = set(fragments)
+
+    requirements: list[POIRequirement] = []
+    seen: set[POICategory] = set()
+    for match in answer.poi:
+        if match.category is None or match.phrase not in allowed_phrases:
+            continue
+        # OTHER — валидный член энума, но кэш под него не собирается вовсе
+        # (fetch_poi возвращает пустой результат). Приняв его, мы получили бы
+        # требование, которому не удовлетворяет НИ ОДИН ЖК, и шорт-лист молча
+        # схлопнулся бы в ноль. Отбрасываем — фраза остаётся в warnings.
+        if match.category is POICategory.OTHER:
+            continue
+        if match.category in seen:
+            continue
+        seen.add(match.category)
+
+        distance = match.max_distance_m
+        if distance is not None and not (0 < distance <= _AI_POI_MAX_DISTANCE_M):
+            distance = None
+
+        requirements.append(
+            POIRequirement(
+                category=match.category,
+                raw_phrase=match.phrase,
+                only_new=match.only_new,
+                max_distance_m=distance,
+            )
+        )
+    return requirements
+
+
 def sanitize_landmark_resolution(
     answer: FreeTextCriteriaAnswer,
     fragments: list[str],
@@ -473,7 +638,7 @@ async def resolve_options(
     option_candidates: list[str],
     warnings: list[str],
     pool: asyncpg.Pool | None,
-) -> None:
+) -> OptionsOutcome:
     """ИИ-резолвинг нераспознанных фраз под опции/группы опций.
 
     Новая способность (Milestone AI-10): rapidfuzz матчит фильтры по строковому
@@ -484,9 +649,13 @@ async def resolve_options(
     применяются к ``criteria`` так же, как если бы их сматчил rapidfuzz, и
     убираются из warnings. Каждое сопоставление логируется в карту памяти для
     последующего промоушена в aliases (см. app/ai/promotion.py).
+
+    Возвращает :class:`OptionsOutcome` — вызывающий ``enrich`` вливает его в
+    флаги наравне с ведром C. Мутация ``criteria``/``warnings`` по ссылке при
+    этом сохранена: на неё опираются и ``build_url``, и тесты.
     """
     if not option_candidates:
-        return
+        return OptionsOutcome()
 
     settings = get_settings()
     # .lower() — как в client.call_typed: AI_PROVIDER=Claude не должен
@@ -498,7 +667,8 @@ async def resolve_options(
     )
     if not settings.AI_ENRICHMENT_ENABLED or is_claude_missing:
         # ИИ выключен — фрагменты остаются в warnings как есть, ничего не теряем.
-        return
+        # Не провал (инвариант 9): звать было нечем, а не сорвалось.
+        return OptionsOutcome()
 
     context = build_option_context(option_candidates, load_options(), load_option_groups())
     try:
@@ -509,20 +679,23 @@ async def resolve_options(
         # warning («…: не удалось распознать, не попало в ссылку»), отдельный
         # текст здесь не нужен — сохранять как есть достаточно.
         logger.warning(f"AI option resolution skipped (circuit breaker open): {e}")
-        return
+        return OptionsOutcome(called=False, failed=True, failure_reason="breaker")
     except Exception as e:
         # Модель могла упасть (сеть/валидация) — деградируем мягко: фрагменты
         # остаются в warnings, ничего не выдумываем.
         logger.error(f"AI option resolution failed: {e}", exc_info=True)
-        return
+        return OptionsOutcome(called=True, failed=True, failure_reason="exception")
 
+    changed = False
     for phrase, slug, subject_type, confidence in sanitize_option_resolution(answer):
         if subject_type == "option_group":
             if slug not in criteria.option_groups:
                 criteria.option_groups.append(slug)
+                changed = True
         else:
             if slug not in criteria.options:
                 criteria.options.append(slug)
+                changed = True
 
         # Фраза распознана — убираем её из «не удалось распознать».
         stale = f"«{phrase}»: не удалось распознать, не попало в ссылку"
@@ -543,6 +716,8 @@ async def resolve_options(
                 )
             except Exception as e:
                 logger.warning(f"Failed to persist option alias: {e}")
+
+    return OptionsOutcome(called=True, changed=changed)
 
 
 def _is_greeting(fragment: str) -> bool:
@@ -621,6 +796,41 @@ def _apply_free_text_answer(
                 rejected = True
                 logger.warning(f"free-text landmarks rejected: {e}")
 
+    # Отделка — тот же приём, что с ориентирами: значение энума + проверка фразы.
+    # Пишем только в пустой список: детерминированное «без отделки» модель
+    # переспорить не вправе.
+    accepted_finish_phrases: set[str] = set()
+    if answer.finish and not criteria.finish:
+        resolved_finish = sanitize_finish_resolution(answer, fragments)
+        if resolved_finish:
+            try:
+                criteria.finish = resolved_finish
+                accepted_finish_phrases = {
+                    m.phrase
+                    for m in answer.finish
+                    if m.finish is not None and m.finish in resolved_finish
+                }
+                changed = True
+            except Exception as e:
+                rejected = True
+                logger.warning(f"free-text finish rejected: {e}")
+
+    # POI — аналогично. ВАЖНО: заполнение этого поля открывает гейт 1 и включает
+    # гео-сужение (шорт-лист + haversine по кэшу POI). Это и есть смысл ветки —
+    # «до сада» обязано работать так же, как «до детского сада», — но цена
+    # запроса от этого растёт, поэтому рубеж проверки фразы тут особенно важен.
+    accepted_poi_phrases: set[str] = set()
+    if answer.poi and not criteria.poi_requirements:
+        resolved_poi = sanitize_poi_resolution(answer, fragments)
+        if resolved_poi:
+            try:
+                criteria.poi_requirements = resolved_poi
+                accepted_poi_phrases = {req.raw_phrase for req in resolved_poi}
+                changed = True
+            except Exception as e:
+                rejected = True
+                logger.warning(f"free-text poi rejected: {e}")
+
     # Булевы флаги — включаем только True поверх дефолтного False.
     for field in _FREE_TEXT_BOOL_FIELDS:
         if getattr(answer, field) and not getattr(criteria, field):
@@ -636,9 +846,13 @@ def _apply_free_text_answer(
     # Фразы ориентиров, отбитых санитайзером, из снятия исключены: иначе хватало
     # модели заодно угадать любое другое поле (changed=True), чтобы выдуманный
     # ориентир исчез молча вместе со своей фразой — прямое нарушение инварианта 1.
-    rejected_landmark_phrases = {
+    # То же и для отделки/POI: у них тоже есть `phrase`, значит провенанс
+    # восстановим и точечное исключение возможно — в отличие от скаляров ниже.
+    rejected_phrases = {
         m.phrase for m in answer.landmarks if m.phrase not in accepted_landmark_phrases
     }
+    rejected_phrases |= {m.phrase for m in answer.finish if m.phrase not in accepted_finish_phrases}
+    rejected_phrases |= {m.phrase for m in answer.poi if m.phrase not in accepted_poi_phrases}
     # Отбивка валидацией снимает снятие целиком (`not rejected`). Точечно, как с
     # ориентирами, здесь нельзя: у `LandmarkMatch` есть `phrase`, а скаляры и
     # булевы приходят голыми значениями — какой из заявленных фрагментов породил
@@ -649,7 +863,7 @@ def _apply_free_text_answer(
     # исчезли вместе с ним: ни значения, ни предупреждения.
     if changed and not rejected:
         for frag in answer.consumed_fragments:
-            if frag in fragments and frag not in rejected_landmark_phrases:
+            if frag in fragments and frag not in rejected_phrases:
                 stale = f"«{frag}{_UNRECOGNIZED_SUFFIX}"
                 if stale in warnings:
                     warnings.remove(stale)
@@ -787,7 +1001,7 @@ def _apply_superlative(
     if nearest_ids:
         warnings.append(
             f"ближайшие к {names}: у pik.ru такого фильтра нет — показаны "
-            f"{len(nearest_ids)} ближайших ЖК, от {nearest_m / 1000:.2f} км"
+            f"{len(nearest_ids)} ближайших ЖК, от {nearest_m / 1000:.2f} км {STRAIGHT_LINE_NOTE}"
         )
     return nearest_ids
 
@@ -859,7 +1073,7 @@ def _warn_poi_evidence(
         is_v2 = nearest.poi_schema_version.get(cat, 1) >= POI_CACHE_SCHEMA_VERSION
         who = _poi_object_label(nearest, cat)
         kind = "ближайший действующий" if is_v2 else "ближайший"
-        note = f"{label}: {kind} — {who}, {dist:.0f} м (ЖК «{nearest.name}»)"
+        note = f"{label}: {kind} — {who}, {dist:.0f} м {STRAIGHT_LINE_NOTE} (ЖК «{nearest.name}»)"
         if not is_v2:
             note += "; запись кэша v1 — стройки в ней не отделены от работающих объектов"
         under_construction = sum(c.poi_under_construction.get(cat, 0) for c in matched)
@@ -925,8 +1139,9 @@ async def enrich(
 ) -> EnrichmentResult:
     # Ветка резолвинга опций независима от шорт-листа ЖК: фразы-синонимы
     # фильтров надо добить, даже если гео-кандидатов нет. Мутирует criteria и
-    # warnings на месте.
-    await resolve_options(criteria, option_candidates or [], warnings, pool)
+    # warnings на месте, а исход отдаёт наверх — раньше не отдавала, и её работа
+    # не доезжала ни до ai_used, ни до ai_call_log (см. OptionsOutcome).
+    options = await resolve_options(criteria, option_candidates or [], warnings, pool)
 
     # Экстрактор свободного текста (ведро C) — ДО гейта 1 и независимо от него:
     # достаёт недостающие СКАЛЯРНЫЕ фильтры из непонятого парсером текста. Это
@@ -945,9 +1160,9 @@ async def enrich(
         "had_poi_or_center": bool(criteria.poi_requirements or criteria.center_requested),
         "fully_resolved_deterministically": False,
         "cache_hit": False,
-        "ai_called": free_text.called,
-        "ai_failed": free_text.failed,
-        "criteria_changed_by_ai": free_text.changed,
+        "ai_called": free_text.called or options.called,
+        "ai_failed": free_text.failed or options.failed,
+        "criteria_changed_by_ai": free_text.changed or options.changed,
     }
 
     async def _log(result: EnrichmentResult) -> EnrichmentResult:
@@ -955,8 +1170,15 @@ async def enrich(
         # обязан пережить любой путь ниже: noop()/from_deterministic строятся с
         # ai_failed=False, и без этой строки факт неудачной попытки терялся бы
         # ровно на гейте 1 (самый частый путь free-text-запроса).
-        if free_text.failed:
+        if free_text.failed or options.failed:
             result.ai_failed = True
+        # Ветка опций отработала ДО гейтов ровно так же, как ведро C, и точно
+        # так же обязана пережить любой путь ниже. Живой случай: гейт 2 вернул
+        # from_deterministic (ai_used=False по конструкции), а «город» к тому
+        # моменту уже стал vidNaGorod силами модели.
+        if options.changed:
+            log_fields["criteria_changed_by_ai"] = True
+            result.ai_used = True
         # Экстрактор свободного текста реально повлиял на criteria (мутировал его
         # ДО гейтов) — отражаем это в ai_used честно, даже если путь ниже вернул
         # noop()/from_deterministic (у которых ai_used=False по конструкции).
@@ -1278,12 +1500,17 @@ async def enrich(
     # «полностью решено детерминированно» означало бы «вылить весь шорт-лист в
     # blocks». Гейт 1 такие запросы сюда уже не пускает, но защита обязана
     # жить и здесь — на случай будущих правок порядка ветвей выше.
-    if log_fields["fully_resolved_deterministically"] and (
-        criteria.poi_requirements or criteria.center_requested
+    settings = get_settings()
+
+    # AI_ENRICHMENT_FORCE (отладка) — прогнать через модель даже полностью
+    # детерминированный запрос, не трогая сам гейт для остального трафика.
+    if (
+        log_fields["fully_resolved_deterministically"]
+        and (criteria.poi_requirements or criteria.center_requested)
+        and not settings.AI_ENRICHMENT_FORCE
     ):
         return await _log(EnrichmentResult.from_deterministic(known))
 
-    settings = get_settings()
     # .lower() — как в client.call_typed: AI_PROVIDER=Claude не должен
     # проскакивать гейт и падать уже внутри клиента. Учётными данными
     # считается и API-ключ, и OAuth-сессия Claude Code
@@ -1301,7 +1528,10 @@ async def enrich(
     embedding = embed(signature)
 
     try:
-        if pool is not None:
+        # AI_ENRICHMENT_BYPASS_CACHE (отладка) — не читать семантический кэш,
+        # чтобы гарантированно прогнать через живую модель. persist() ниже
+        # продолжает писать в кэш как обычно (прод-трафик его не теряет).
+        if pool is not None and not settings.AI_ENRICHMENT_BYPASS_CACHE:
             cached = await lookup_semantic(pool, signature, embedding)
         else:
             cached = None
@@ -1362,6 +1592,13 @@ async def enrich(
     except Exception as e:
         logger.warning(f"Failed to persist AI results to DB: {e}")
 
-    result = EnrichmentResult.from_ai(answer)
+    # Пустой ответ модели не применяем как сужение (см. from_ai_unmatched):
+    # это суждение о присланном шорт-листе, а не расчёт, и раньше оно молча
+    # выбрасывало честно посчитанные haversine-ближайшие ЖК.
+    if answer.matched_complex_ids:
+        result = EnrichmentResult.from_ai(answer)
+    else:
+        result = EnrichmentResult.from_ai_unmatched(answer)
+        warnings.append(AI_NO_MATCH_WARNING)
     log_fields["criteria_changed_by_ai"] = _differs_from_deterministic(result, known)
     return await _log(result)

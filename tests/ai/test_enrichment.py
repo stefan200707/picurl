@@ -1,3 +1,4 @@
+from datetime import datetime
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -11,6 +12,7 @@ from app.ai.enrichment import (
     sanitize_against_shortlist,
     sanitize_option_resolution,
 )
+from app.ai.memory import CachedAnswer
 from app.ai.schema import (
     AIEnrichmentAnswer,
     ComplexCandidate,
@@ -39,13 +41,19 @@ def mock_settings():
     original_enabled = settings.AI_ENRICHMENT_ENABLED
     original_key_claude = settings.ANTHROPIC_API_KEY
     original_cli_path = settings.ANTIGRAVITY_CLI_PATH
+    original_bypass_cache = settings.AI_ENRICHMENT_BYPASS_CACHE
+    original_force = settings.AI_ENRICHMENT_FORCE
     settings.AI_ENRICHMENT_ENABLED = True
     settings.ANTHROPIC_API_KEY = "sk-test"
     settings.ANTIGRAVITY_CLI_PATH = "agy"
+    settings.AI_ENRICHMENT_BYPASS_CACHE = False
+    settings.AI_ENRICHMENT_FORCE = False
     yield settings
     settings.AI_ENRICHMENT_ENABLED = original_enabled
     settings.ANTHROPIC_API_KEY = original_key_claude
     settings.ANTIGRAVITY_CLI_PATH = original_cli_path
+    settings.AI_ENRICHMENT_BYPASS_CACHE = original_bypass_cache
+    settings.AI_ENRICHMENT_FORCE = original_force
 
 
 @pytest.mark.asyncio
@@ -1528,6 +1536,127 @@ async def test_enrich_gate2_only_new_still_goes_to_ai(mock_model, mock_log, mock
 
 @pytest.mark.asyncio
 @patch("app.ai.enrichment.log_ai_call", new_callable=AsyncMock)
+@patch("app.ai.enrichment.call_model")
+async def test_enrich_force_flag_bypasses_gate2(mock_model, mock_log, mock_settings):
+    """AI_ENRICHMENT_FORCE=true прогоняет через модель даже fully_resolved запрос (отладка)."""
+    mock_settings.AI_ENRICHMENT_FORCE = True
+    mock_model.return_value = AIEnrichmentAnswer(
+        matched_complex_ids=["c1"],
+        center_district_ids=[],
+        poi_findings={},
+        explanation="live",
+        confidence=0.9,
+    )
+    cand = ComplexCandidate(
+        id="c1",
+        name="ЖК с садиком",
+        district=None,
+        county=None,
+        metro=[],
+        is_center=None,
+        known_poi={"kindergarten": True},
+        poi_distances={"kindergarten": 400.0},
+    )
+    criteria = Criteria(
+        poi_requirements=[POIRequirement(category=POICategory.KINDERGARTEN, raw_phrase="садик")]
+    )
+    with patch("app.ai.enrichment.build_candidate_shortlist", return_value=[cand]):
+        result = await enrich("двушка с садиком", criteria, [], pool=None)
+
+    # Тот же запрос, что в test_enrich_gate2_skips_ai_when_fully_resolved — там
+    # ИИ не звался, здесь флаг форсирует живой вызов поверх гейта 2.
+    mock_model.assert_called_once()
+    assert result.ai_used is True
+    assert result.matched_complex_ids == ["c1"]
+
+
+# --- AI_ENRICHMENT_BYPASS_CACHE: чтение семантического кэша (отладка) -------
+
+
+@pytest.mark.asyncio
+@patch("app.ai.enrichment.log_ai_call", new_callable=AsyncMock)
+@patch("app.ai.enrichment.call_model")
+@patch("app.ai.enrichment.lookup_semantic")
+@patch("app.ai.enrichment.build_candidate_shortlist")
+async def test_enrich_uses_semantic_cache_when_bypass_disabled(
+    mock_build, mock_lookup, mock_model, mock_log, mock_settings
+):
+    """Контраст с тестом ниже: без флага попадание в кэш отдаёт старый ответ, ИИ не зовётся."""
+    mock_build.return_value = [
+        ComplexCandidate(
+            id="1", name="ЖК", district=None, county=None, metro=[], is_center=None, known_poi={}
+        )
+    ]
+    mock_lookup.return_value = CachedAnswer(
+        id=1,
+        query_signature="sig",
+        raw_question="хочу со школой",
+        answer={"matched_complex_ids": ["1"], "center_district_ids": [], "poi_findings": {}},
+        hit_count=2,
+        created_at=datetime.now(),
+        last_used_at=datetime.now(),
+    )
+    criteria = Criteria(
+        poi_requirements=[POIRequirement(category=POICategory.SCHOOL, raw_phrase="школа")]
+    )
+
+    result = await enrich("хочу со школой", criteria, [], pool="fake-pool")
+
+    mock_lookup.assert_awaited_once()
+    mock_model.assert_not_called()
+    assert result.cache_hit is True
+    assert result.matched_complex_ids == ["1"]
+
+
+@pytest.mark.asyncio
+@patch("app.ai.enrichment.persist", new_callable=AsyncMock)
+@patch("app.ai.enrichment.log_ai_call", new_callable=AsyncMock)
+@patch("app.ai.enrichment.call_model")
+@patch("app.ai.enrichment.lookup_semantic")
+@patch("app.ai.enrichment.build_candidate_shortlist")
+async def test_enrich_bypass_cache_flag_skips_lookup_but_still_persists(
+    mock_build, mock_lookup, mock_model, mock_log, mock_persist, mock_settings
+):
+    """AI_ENRICHMENT_BYPASS_CACHE=true не читает кэш, но продолжает его писать (persist)."""
+    mock_settings.AI_ENRICHMENT_BYPASS_CACHE = True
+    mock_build.return_value = [
+        ComplexCandidate(
+            id="1", name="ЖК", district=None, county=None, metro=[], is_center=None, known_poi={}
+        )
+    ]
+    # Тот же кэш-хит, что в тесте выше — при включённом bypass он не должен
+    # даже прочитаться, не то что повлиять на результат.
+    mock_lookup.return_value = CachedAnswer(
+        id=1,
+        query_signature="sig",
+        raw_question="хочу со школой",
+        answer={"matched_complex_ids": ["1"], "center_district_ids": [], "poi_findings": {}},
+        hit_count=2,
+        created_at=datetime.now(),
+        last_used_at=datetime.now(),
+    )
+    mock_model.return_value = AIEnrichmentAnswer(
+        matched_complex_ids=["1"],
+        center_district_ids=[],
+        poi_findings={},
+        explanation="live",
+        confidence=0.9,
+    )
+    criteria = Criteria(
+        poi_requirements=[POIRequirement(category=POICategory.SCHOOL, raw_phrase="школа")]
+    )
+
+    result = await enrich("хочу со школой", criteria, [], pool="fake-pool")
+
+    mock_lookup.assert_not_called()
+    mock_model.assert_called_once()
+    mock_persist.assert_awaited_once()
+    assert result.cache_hit is False
+    assert result.ai_used is True
+
+
+@pytest.mark.asyncio
+@patch("app.ai.enrichment.log_ai_call", new_callable=AsyncMock)
 @patch("app.ai.enrichment.build_candidate_shortlist")
 async def test_enrich_landmark_superlative_returns_nearest(mock_build, mock_log, mock_settings):
     """«Самую ближайшую к X» отдаёт ближайшие ЖК, а не пустоту (Milestone AI-22).
@@ -1744,9 +1873,16 @@ async def test_enrich_landmark_match_result_forces_empty_intersection_with_mkad(
     Repro: «двушку внутри МКАД рядом с Третьяковкой не дальше 1,5 км» — ближайший
     ЖК ПИК от ориентира лежит за пределами заданной дистанции, шорт-лист (уже
     отфильтрованный по дистанции — жёсткая отсечка ``_rank_by_landmark``) пуст.
-    До фикса build_url подставлял ВЕСЬ МКАД-список, как будто ориентира не было.
+
+    Проверяемое остаётся прежним: считаный ноль ориентира ОБЯЗАН быть виден
+    ниже по стеку и не раствориться в тишине. Изменился только его исход (Д1,
+    2026-08-04): раньше он оставлял ``blocks`` ПУСТЫМ, а пустой ``blocks=`` на
+    pik.ru снимает фильтр — «сузили до нуля» на деле означало «показали весь
+    город», исход ШИРЕ МКАД-списка. Теперь отдаётся МКАД-список (он строго уже)
+    вместе с явной строкой о неприменённом требовании.
     """
     from app.geo.candidates import complexes_in_mkad
+    from app.pik.location_fallback import LOCATION_ZERO_MATCH_NOT_APPLIED_WARNING
     from app.pik.url_builder import build_url
 
     mock_settings.AI_ENRICHMENT_ENABLED = False
@@ -1766,15 +1902,15 @@ async def test_enrich_landmark_match_result_forces_empty_intersection_with_mkad(
 
     result = await enrich("рядом с третьяковкой не дальше 1.5 км", criteria, warnings)
     criteria = merge_enrichment(criteria, result)
+    # Ключевое: ноль ДОЕХАЛ до criteria как посчитанный, а не как «не считали».
+    assert criteria.complexes_matched_empty is True
 
     build_warnings: list[str] = []
     url = build_url(criteria, build_warnings)
 
-    assert "blocks=" in url
     got = url.split("blocks=")[1].split("&")[0]
-    assert got == "", f"blocks должен остаться пустым, получили: {got!r}"
-    assert f"blocks={full_mkad[0]}" not in url
-    assert any("не пересекаются" in w for w in build_warnings)
+    assert got.split(",") == full_mkad
+    assert LOCATION_ZERO_MATCH_NOT_APPLIED_WARNING in build_warnings
 
 
 @pytest.mark.asyncio

@@ -11,8 +11,33 @@ class POICategory(StrEnum):
     PARKING = "parking"
     PARK_FOREST = "park_forest"
     MEDICAL = "medical"
+    # --- Расширение словаря -------------------------------------------------
+    # Замер по 20 живым формулировкам показал, что распознавались 2 из 20:
+    # стоматология, фитнес, ТЦ, кафе, банк, кинотеатр, вуз и любые бренды
+    # («бургер кинг») не имели ни энума, ни OSM-тега и уходили в резолвер
+    # ОПЦИЙ pik.ru, где сопоставиться не с чем в принципе.
+    #
+    # DENTIST отдельной категорией, а НЕ внутри MEDICAL: иначе «рядом
+    # стоматология» проходила бы по ближайшей аптеке — фильтр выглядит
+    # применённым, а проверяет не то, что просили.
+    UNIVERSITY = "university"
+    DENTIST = "dentist"
+    SPORT = "sport"
+    FOOD = "food"
+    MALL = "mall"
+    CINEMA = "cinema"
+    BANK = "bank"
+    POST = "post"
     OTHER = "other"
 
+
+#: Радиус сбора POI вокруг ЖК — и одновременно ПОТОЛОК любой отсечки по
+#: дистанции. За его пределами объектов в кэше нет вовсе, поэтому требование
+#: «садик не дальше 5 км» подтвердиться физически не может: оно выглядело бы
+#: применённым, ничего при этом не проверяя. Живёт здесь, а не в refresh_poi,
+#: чтобы у сборщика кэша и у рантайма был один источник правды — разъехавшись,
+#: эти два числа деградировали бы молча.
+POI_CACHE_RADIUS_M = 2000
 
 #: Версия схемы записи POI-кэша. v1 (без этого поля) считал
 #: ``closest_distance_m`` по ВСЕМ элементам ответа Overpass, включая
@@ -24,6 +49,14 @@ POI_CACHE_SCHEMA_VERSION = 2
 POI_CACHE_STALE_HINT = (
     "POI-кэш устаревшей схемы (v1): дистанция могла считаться по строящимся "
     "объектам — пересоберите: uv run python -m app.geo.refresh_poi"
+)
+
+#: Категория запрошена, но в кэше её нет ни у одного кандидата. Требование при
+#: этом не отменяется — просто перестаёт притворяться проверенным: иначе
+#: пустой шорт-лист выглядит как честное «подходящих ЖК нет».
+POI_CATEGORY_NOT_CACHED_WARNING = (
+    "требование «{category}» не проверено: этой категории нет в POI-кэше "
+    "ни у одного ЖК — выдача по ней не сужена"
 )
 
 #: Ключи-префиксы OSM, помечающие объект как ЕЩЁ НЕ работающий: сама стройка
@@ -134,6 +167,18 @@ def get_overpass_query(lat: float, lon: float, category: POICategory, radius_m: 
         POICategory.PARKING: ['"amenity"="parking"'],
         # поликлиника/клиника=clinic/doctors, больница/роддом=hospital, аптека=pharmacy
         POICategory.MEDICAL: ['"amenity"~"clinic|hospital|doctors|pharmacy"'],
+        # ВУЗ: college — это ссуз/колледж, для бытового «рядом вуз» разница
+        # несущественна, а покрытие тега university в OSM неполное.
+        POICategory.UNIVERSITY: ['"amenity"~"university|college"'],
+        POICategory.DENTIST: ['"amenity"="dentist"'],
+        POICategory.SPORT: ['"leisure"~"fitness_centre|sports_centre|swimming_pool"'],
+        # fast_food покрывает бренды («бургер кинг», «макдональдс», «кфс») —
+        # отдельных тегов под марки в OSM нет, они различаются только по name.
+        POICategory.FOOD: ['"amenity"~"cafe|restaurant|fast_food"'],
+        POICategory.MALL: ['"shop"~"mall|department_store"'],
+        POICategory.CINEMA: ['"amenity"="cinema"'],
+        POICategory.BANK: ['"amenity"="bank"'],
+        POICategory.POST: ['"amenity"="post_office"'],
     }
 
     if category == POICategory.PARK_FOREST:

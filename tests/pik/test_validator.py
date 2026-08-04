@@ -405,9 +405,24 @@ async def test_validate_intersects_geo_fallback_same_as_build_url():
 
 
 @pytest.mark.asyncio
-async def test_validate_forces_empty_blocks_when_landmark_match_empty():
-    """Дефект №1 симметрично на validate(): considered-zero (``complexes_matched_empty``)
-    + within_mkad=True → blocks остаётся пустым, а не откатывается на весь МКАД."""
+async def test_validate_matches_link_when_landmark_match_empty():
+    """Дефект №1 симметрично на validate(), в редакции Д1 (2026-08-04).
+
+    Замысел теста прежний: считаный ноль (``complexes_matched_empty``) не должен
+    превращаться в «фильтра нет». Изменилось, ЧТО этим является. Раньше тест
+    пиннил пустой ``blocks=``, считая его выражением нуля; живой замер показал
+    обратное — пустое значение на pik.ru СНИМАЕТ фильтр и отдаёт весь город, то
+    есть ровно тот исход, от которого тест защищал, только шире МКАД-списка.
+
+    Поэтому теперь проверяется суть: (1) фильтр по ЖК в проверочном запросе
+    ЕСТЬ и он непустой; (2) валидатор шлёт РОВНО то же сужение, что уехало в
+    ссылку (расхождение build_url и validate однажды завышало result_count в
+    6.5 раза); (3) о неприменённом гео-требовании сказано, и сказано ОДИН раз —
+    тем, кто сузил, то есть build_url, а не валидатором.
+    """
+    from urllib.parse import unquote
+
+    from app.pik.location_fallback import LOCATION_ZERO_MATCH_NOT_APPLIED_WARNING
     from app.pik.url_builder import build_url
 
     captured: dict[str, str] = {}
@@ -421,9 +436,12 @@ async def test_validate_forces_empty_blocks_when_landmark_match_empty():
 
     result = await validate(criteria, client)
 
-    assert "blocks=&" in captured["url"] or captured["url"].endswith("blocks=")
-    # Сужение посчитано (blocks пуст), а предупреждает о нём build_url.
+    sent = unquote(captured["url"]).split("blocks=")[1].split("&")[0]
+    assert sent, "считаный ноль превратился в «фильтра нет» — это и был дефект"
+
     build_url_warnings: list[str] = []
-    build_url(criteria, build_url_warnings)
-    assert any("не пересекаются" in w for w in build_url_warnings)
-    assert "не пересекаются" not in joined(result)
+    url = build_url(criteria, build_url_warnings)
+    assert sent.split(",") == url.split("blocks=")[1].split("&")[0].split(",")
+
+    assert LOCATION_ZERO_MATCH_NOT_APPLIED_WARNING in build_url_warnings
+    assert LOCATION_ZERO_MATCH_NOT_APPLIED_WARNING not in joined(result)

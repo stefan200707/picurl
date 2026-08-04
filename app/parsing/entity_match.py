@@ -53,6 +53,20 @@ SHORT_ENTITY_EXACT_MAX_LEN = 3
 #: Только options/option_groups — закрытый короткий словарь, где живёт этот класс.
 OPTION_MIN_QRATIO = 55.0
 
+#: Головное существительное у окна и у алиаса совпало → различает ТОЛЬКО
+#: прилагательное, и сравнивать его нужно по стему, а не нечётко. Порог общего
+#: префикса: не меньше 2 символов И не меньше этой доли от более короткого слова.
+#: Русское словоизменение сохраняет основу, поэтому падежи проходят
+#: («сквозным»/«сквозной» — 6 общих из 8; «двумя»/«два» — 2 из 3;
+#: «раздельными»/«раздельные» — 8 из 10), а разные слова не проходят вовсе
+#: («гостевой»/«сквозной», «второй»/«сквозной», «розовым»/«вторым» — 0 общих).
+HEAD_MODIFIER_STEM_MIN_CHARS = 2
+HEAD_MODIFIER_STEM_MIN_RATIO = 0.6
+
+#: Токенизация нормализованной строки: дефис — разделитель, как в справочнике
+#: («мастер-спальня» и алиас «мастер спальня» — одна и та же пара токенов).
+_WORD_RE = re.compile(r"[a-zа-я0-9]+")
+
 SCORE_BONUS_MARKER = 10.0
 SCORE_BONUS_PREP_MATCH = 5.0
 SCORE_PENALTY_PREP_MISMATCH = -5.0
@@ -152,6 +166,120 @@ def _sole_location_kw_type(triggered_types: set[str]) -> str | None:
     """
     location_types = [t for t in ("metro", "district", "county", "complex") if t in triggered_types]
     return location_types[0] if len(location_types) == 1 else None
+
+
+#: Станции, чьё имя целиком совпадает с бытовым словом того же рода объекта,
+#: который человек может хотеть «рядом». Для них голого упоминания НЕДОСТАТОЧНО:
+#: «рядом университет» — про ВУЗ, а не про станцию, и молчаливая подмена смысла
+#: хуже честной потери (инвариант 1).
+#:
+#: Список намеренно короткий и содержит только имена, у которых бытовое
+#: прочтение доминирует. «Динамо», «Полянка», «Театральная», «Академическая» и
+#: прочие сюда НЕ входят: голым бытовым словом они не бывают, а лишний элемент
+#: здесь стоит дороже недостающего — он ломает работающий фильтр.
+#: «Ботанический сад»/«Александровский сад» решены с другой стороны, в
+#: ``rules/poi.py`` (там бытовое «сад» защищают от топонима).
+_METRO_NAMES_NEEDING_MARKER = frozenset({"университет", "аэропорт", "технопарк", "деловой центр"})
+
+#: Слова, после которых упоминание считается именно станцией.
+_METRO_MARKER_WORDS = ("метро", "м", "станция", "станции", "ст")
+
+
+def _needs_metro_marker(etype: str, entry: RefEntry, window_text: str, text_before: str) -> bool:
+    """Отбросить ли этот matched-вариант как бытовое слово, а не станцию.
+
+    Проверяем ОБЕ стороны совпадения, и это не перестраховка:
+
+    - имя записи — ловит падежи и уточнения, при которых победила именно эта
+      станция («рядом университет» → «Университет»);
+    - текст окна — ловит случай, когда fuzzy подобрал ДРУГУЮ станцию, чьё имя
+      бытовым словом не является: «рядом аэропорт» уезжало в «Аэропорт
+      Внуково», и проверка по имени записи мимо него проходила.
+
+    Уточнённая фраза («Сеченовскому университету») под вторую ветку не
+    подпадает — там окно не равно бытовому слову, и это правильно: такое
+    выражение разбирают ориентиры, а не guard.
+    """
+    if etype != "metro":
+        return False
+    if (
+        normalize(entry.name) not in _METRO_NAMES_NEEDING_MARKER
+        and normalize(window_text) not in _METRO_NAMES_NEEDING_MARKER
+    ):
+        return False
+
+    tokens = re.findall(r"[A-Za-zА-Яа-яЁё0-9]+", f"{text_before} {window_text}".lower())
+    if "м." in text_before.lower():
+        return False
+    return not any(marker in tokens for marker in _METRO_MARKER_WORDS)
+
+
+def _stem_match(left: str, right: str) -> bool:
+    """Одно ли это слово с точностью до словоизменения (общая основа)."""
+    if left == right:
+        return True
+    common = 0
+    for a, b in zip(left, right, strict=False):
+        if a != b:
+            break
+        common += 1
+    shortest = min(len(left), len(right))
+    return (
+        common >= HEAD_MODIFIER_STEM_MIN_CHARS and common >= HEAD_MODIFIER_STEM_MIN_RATIO * shortest
+    )
+
+
+def _split_head(normalized: str) -> tuple[str, list[str]] | None:
+    """Разложить нормализованную строку на (головное слово, прилагательные)."""
+    words = _WORD_RE.findall(normalized)
+    if not words:
+        return None
+    return words[-1], [w for w in words[:-1] if w not in STOP_WORDS]
+
+
+def _modifier_conflict(query_norm: str, matched_str: str) -> bool:
+    """Совпало головное слово, а различитель — нет: матч ложный.
+
+    Часть словаря опций различается ТОЛЬКО прилагательным при общем головном
+    существительном: «Сквозной санузел» vs «Два и более санузла», «Большие окна»
+    vs «Угловые окна», «Окно в ванной» vs «своя ванная», «Гардеробная» vs «Окно
+    в гардеробной», «Видовая квартира» vs «Уникальная квартира». Fuzzy на таких
+    парах принципиально бессилен: общая половина строки тянет WRatio к порогу
+    независимо от смысла («гостевой санузел» ~ «сквозной санузел» = 75.00 —
+    ровно ``TRIGGERED_SCORE_THRESHOLD``; «сквозным санузлом» ~ «вторым санузлом»
+    = 81.25, ВЫШЕ верного «сквозной санузел» = 78.79). Итог — сфабрикованный
+    фильтр: пользователь просил второй санузел, а получал фильтр по планировке
+    первого, причём молча (warnings пустые).
+
+    Поэтому при совпавшем головном слове различитель сравнивается по основе, а
+    не нечётко. Набор допустимых различителей берётся из самих алиасов
+    справочника — хардкод списка прилагательных здесь не нужен и устаревал бы
+    молча при пополнении словаря.
+
+    Три ветки намеренно асимметричны:
+
+    - у алиаса различителя нет («балкон», «терраса», «гардеробная») — головное
+      слово и есть весь смысл, конфликта быть не может;
+    - у алиаса различитель есть, у окна нет («санузлом», «окнами») — выбрать
+      между конкурирующими опциями не на чем, матч отбрасываем. Это та же
+      защита, что раньше держал строгий однословный QRatio-гейт, только
+      выраженная предметно: слово «санузлом» само по себе не называет ни
+      «сквозной», ни «два и более»;
+    - различители есть у обоих и не сходятся по основе — ложный матч.
+    """
+    left = _split_head(query_norm)
+    right = _split_head(matched_str)
+    if left is None or right is None:
+        return False
+    window_head, window_mods = left
+    alias_head, alias_mods = right
+    if not _stem_match(window_head, alias_head):
+        return False
+    if not alias_mods:
+        return False
+    if not window_mods:
+        return True
+    return not any(_stem_match(w, a) for w in window_mods for a in alias_mods)
 
 
 def _adjust_score(
@@ -334,6 +462,11 @@ def _score_window(window_tokens, text_before, start_idx, end_idx, is_synthetic, 
         ):
             continue
 
+        # Совпало головное существительное — различает только прилагательное,
+        # и fuzzy его не различает в принципе (см. _modifier_conflict).
+        if etype in ("options", "option_groups") and _modifier_conflict(query_norm, matched_str):
+            continue
+
         # Однословные окна ("санузлом", "видом") под "options"/"option_groups"
         # дополнительно проверяются строго, даже если сработал подстроковый
         # kw_partial-триггер («сануз»/«вид»/«пол»/«балкон»/«лоджи» — часть
@@ -381,6 +514,10 @@ def _score_window(window_tokens, text_before, start_idx, end_idx, is_synthetic, 
     seen = set()
     unique_entities = []
     for score, etype, entry in matched_entities_info:
+        # Отбрасываем ДО ранжирования, а не штрафом по очкам: штраф лишь двигает
+        # вариант в списке, а когда он единственный — всё равно побеждает.
+        if _needs_metro_marker(etype, entry, window_text, text_before):
+            continue
         if (etype, entry.name) not in seen:
             seen.add((etype, entry.name))
             adj_score = _adjust_score(score, etype, window_text, text_before, entry)

@@ -499,7 +499,7 @@ def test_station_class_fallback_returns_nearest_when_radius_empty(station_class_
     assert "Без координат" not in names
 
     assert warning == (
-        "в радиусе 1.5 км от станций класса «МЦД» ЖК нет; показаны ближайшие — от 2.50 км"
+        "в радиусе 1.5 км от станций класса «МЦД» ЖК нет; показаны ближайшие — от 2.50 км по прямой"
     )
 
 

@@ -3,15 +3,20 @@ import json
 from pydantic import ValidationError
 
 from app.ai.schema import ComplexCandidate
-from app.geo.distance import CENTER_RADIUS_M, haversine
-from app.geo.poi import POI_CACHE_SCHEMA_VERSION, POI_CACHE_STALE_HINT, POIResult
+from app.geo.distance import CENTER_RADIUS_M, STRAIGHT_LINE_NOTE, haversine
+from app.geo.poi import (
+    POI_CACHE_SCHEMA_VERSION,
+    POI_CACHE_STALE_HINT,
+    POI_CATEGORY_NOT_CACHED_WARNING,
+    POIResult,
+)
 from app.parsing.schema import (
     Criteria,
     LandmarkRequirement,
     POIRequirement,
     StationClassRequirement,
 )
-from app.reference.loader import DATA_DIR, load_all, normalize
+from app.reference.loader import DATA_DIR, find_by_name, load_all, load_metro, normalize
 
 #: Максимум ЖК-кандидатов, уходящих в ИИ (шорт-лист держим коротким, чтобы
 #: контекст модели оставался фокусным и дешёвым, но при fallback давал выбор).
@@ -78,6 +83,47 @@ STATION_CLASS_DEFAULT_RADIUS_M = 1500.0
 #: ПИК без всякой связи с запрошенной линией. Как и другие калибруемые пороги
 #: проекта — эвристика, не точная величина.
 STATION_CLASS_FALLBACK_LIMIT = 8
+
+#: Максимальная дистанция (метры) от ЖК до ЯКОРНОЙ точки запроса, при которой
+#: тег-матч по ИМЕНИ локации (``district``/``county``/``metro``) считается
+#: географически правдоподобным (дефект Д3, 2026-08-04).
+#:
+#: Тег-матч сравнивает нормализованные строки, а имена районов не уникальны по
+#: стране: единственный ЖК с ``district="Ломоносовский"`` — питерский
+#: «Таллинский парк», и запрос про московский Ломоносовский район получал его
+#: как «совпадение». Портфель ПИК общероссийский (Казань, Екатеринбург,
+#: Владивосток, Южно-Сахалинск), поэтому таких коллизий будет больше.
+#:
+#: Порог — «тот же регион», а не «тот же квартал»: точность внутри региона
+#: обеспечивает сам тег, задача этой проверки — только отсечь чужой город.
+#: Значение выбрано по ФАКТИЧЕСКИМ данным справочника (замер 2026-08-04, 71 ЖК,
+#: 357 станций с координатами): самый дальний московский ЖК от самой дальней
+#: станции метро — 80.7 км («Зелёный парк» ↔ «Ипподром»), ближайший иногородний
+#: ЖК до любой станции — 228.4 км («Волга парк» ↔ «Лобня»). 150 км лежит
+#: посередине с запасом ~1.9x к легитимной стороне и ~1.5x к отбрасываемой.
+#: Обоснование целиком — docs/thresholds-rationale.md.
+TAG_MATCH_ANCHOR_RADIUS_M = 150_000.0
+
+#: Текст об отброшенном тег-матче. Инвариант 1: ЖК, отсеянный как омоним, — это
+#: отброшенный факт, о нём обязаны сказать, причём назвав ЖК поимённо (иначе
+#: утверждение непроверяемо).
+TAG_MATCH_HOMONYM_WARNING = (
+    "привязка ЖК {names} к названной локации — совпадение названия, а не места: "
+    "они дальше {radius_km:g} км от запрошенных станций, в шорт-лист не взяты"
+)
+
+#: Состав общегородского шорт-листа «ближайших по расстоянию»: сколько ЖК
+#: отсеяно как чужой регион и сколько — как ЖК без координат. Та же логика, что
+#: у ``_rank_by_landmark`` («кандидатов без координат добавляем только когда нет
+#: жёсткой отсечки по дистанции»): если список СОБРАН по расстоянию до названной
+#: станции, ЖК без координат «ближайшим» назвать нечем. Счётчик, а не имена:
+#: список усекается до :data:`SHORTLIST_LIMIT` и без этого отсева, поимённое
+#: перечисление двух десятков ЖК другого региона только утопило бы в шуме
+#: соседние строки.
+SHORTLIST_REGION_TRIM_WARNING = (
+    "шорт-лист «ближайших» ограничен регионом запроса: не взяты {other_region} ЖК "
+    "другого региона и {unlocatable} ЖК без координат в справочнике"
+)
 
 
 def _landmark_radius(landmarks: list[LandmarkRequirement]) -> float:
@@ -170,6 +216,38 @@ def _location_filter(criteria: Criteria) -> set[str] | None:
     return names or None
 
 
+def _split_by_geo_plausibility(
+    candidates: list[ComplexCandidate], anchors: list[tuple[float, float]]
+) -> tuple[list[ComplexCandidate], list[ComplexCandidate]]:
+    """Разделить тег-матч на географически правдоподобный и омонимичный (Д3).
+
+    ``anchors`` — точки, относительно которых судим (сейчас это координаты
+    названных пользователем станций метро, :func:`_requested_metro_points`). У
+    районов и округов координат в справочнике нет, а выдумывать центроид по
+    названию запрещает инвариант 3, поэтому **без якорей проверка не
+    применяется вовсе** и всё возвращается как есть: это сознательный
+    компромисс — омонимия лечится там, где для неё есть данные, а запрос без
+    станций работает ровно как раньше (иначе правка молча выкинула бы весь
+    неМосковский портфель ПИК).
+
+    Кандидат без координат правдоподобным считается: доказать его удалённость
+    нечем, а молча выбрасывать «на всякий случай» — то же додумывание, которого
+    избегает весь остальной гео-код (см. :func:`resolve_known_facts`).
+    """
+    if not anchors:
+        return candidates, []
+
+    plausible: list[ComplexCandidate] = []
+    homonyms: list[ComplexCandidate] = []
+    for c in candidates:
+        if c.lat is None or c.lon is None:
+            plausible.append(c)
+            continue
+        dist = min(haversine(lat, lon, c.lat, c.lon) for lat, lon in anchors)
+        (homonyms if dist > TAG_MATCH_ANCHOR_RADIUS_M else plausible).append(c)
+    return plausible, homonyms
+
+
 def _parse_poi_entry(slug: str, category: str, data: dict) -> POIResult:
     """Прочитать запись POI-кэша в типизированный :class:`POIResult`.
 
@@ -244,7 +322,13 @@ def build_candidate_shortlist(
     rank_by_station_class = bool(criteria.station_class_requirements) and not rank_by_landmark
     rank_by_distance = rank_by_landmark or rank_by_station_class
 
-    def _get_candidates(loc_names: set[str] | None) -> list[ComplexCandidate]:
+    def _get_candidates(
+        loc_names: set[str] | None, collect_all: bool = False
+    ) -> list[ComplexCandidate]:
+        # ``collect_all`` отключает раннюю отсечку по SHORTLIST_LIMIT так же, как
+        # её отключает ``rank_by_distance``: если список будет сортироваться по
+        # дистанции, усекать его до сортировки нельзя (инвариант 13) — «первые 50
+        # из файла» выбросили бы реально ближайшие ЖК.
         result = []
         for c in ref_data.complexes:
             # Если пользователь назвал конкретные ЖК — берём только их.
@@ -304,30 +388,114 @@ def build_candidate_shortlist(
                 )
             )
 
-            if not rank_by_distance and len(result) >= SHORTLIST_LIMIT:
+            if not rank_by_distance and not collect_all and len(result) >= SHORTLIST_LIMIT:
                 break
         return result
 
+    # Якоря запроса — единственные точки, по которым можно судить о регионе
+    # (координаты есть только у метро; выдумывать центроид района запрещает
+    # инвариант 3). Считаем один раз: используем и для Д3-отсечки тег-матча, и
+    # для дистанционного ранжирования ниже.
+    anchors = _requested_metro_points(criteria) if not allowed_ids else []
+    homonyms: list[ComplexCandidate] = []
+
     candidates = _get_candidates(location_names)
 
-    # Fallback: если жесткий гео-фильтр отсёк всех кандидатов (например, ложное
-    # срабатывание fuzzy-поиска метро), пробуем без него. Молчать при этом
-    # нельзя: пользователь просил «в Митино», получает варианты со всего города,
-    # и без предупреждения выдача выглядит как ответ на его запрос (инвариант 1 —
-    # ничего не отбрасывается молча). Именно так «ближайшие среди митинских»
-    # незаметно становились «ближайшими вообще».
+    # Д3: тег-матч сравнивает ИМЕНА, а имена районов не уникальны по стране.
+    # Отбрасываем совпадения из другого региона — но только когда есть чем
+    # судить, см. _split_by_geo_plausibility.
+    if location_names is not None:
+        candidates, homonyms = _split_by_geo_plausibility(candidates, anchors)
+
+    # Fallback: если тег-матч не подтвердил запрошенную геометрию, пробуем без
+    # него. Два повода, ведущих сюда, объединены намеренно: тег не совпал ни с
+    # чем (например, ложное срабатывание fuzzy-поиска метро) ИЛИ каждое
+    # совпадение оказалось омонимом из другого региона (Д4 — раньше условие
+    # звучало как «список пуст», и один мусорный кандидат блокировал ветку
+    # целиком: реальные ЖК рядом с названными станциями в шорт-лист не
+    # попадали). В обоих случаях тег непоказателен, а координаты станции —
+    # показательны. Молчать при этом нельзя: пользователь просил «в Митино»,
+    # получает варианты со всего города, и без предупреждения выдача выглядит
+    # как ответ на его запрос (инвариант 1 — ничего не отбрасывается молча).
+    # Именно так «ближайшие среди митинских» незаметно становились «ближайшими
+    # вообще».
     if not candidates and location_names is not None and not allowed_ids:
-        candidates = _get_candidates(None)
+        # Если у названной станции есть координаты, «варианты по всему городу» —
+        # не единственный выбор: то же самое расстояние, что считает
+        # app.pik.location_fallback для итогового blocks=, можно посчитать и
+        # здесь. Раньше эти два механизма не знали друг о друге: фолбэк честно
+        # находил ближайшие ЖК, а модель получала произвольные первые 50 из
+        # файла — и отвечала «подходящих нет», потому что о происхождении
+        # списка ей никто не сообщал.
+        station_points = anchors if not rank_by_distance else []
+        candidates = _get_candidates(None, collect_all=bool(station_points))
+        # Д3 действует и здесь: «весь город» — это про ГОРОД запроса. Иначе
+        # отсечённый омоним возвращался бы через общегородской список тем же
+        # кандидатом и с теми же POI-данными, просто в конце сортировки, — и
+        # resolve_known_facts (у него нет отсечки по дистанции) мог объявить
+        # его совпадением.
+        candidates, other_region = _split_by_geo_plausibility(candidates, anchors)
+        unlocatable: list[ComplexCandidate] = []
+        if station_points:
+            # Шорт-лист этой ветки СОБРАН по расстоянию, и warning ниже прямо
+            # обещает «ближайшие». ЖК без координат такому обещанию не
+            # соответствует ничем: ни тега, ни дистанции. Раньше он попадал
+            # сюда молча и вдобавок ронял fully_resolved (POI-данных у него
+            # тоже нет) — то есть требование POI переставало применяться
+            # ко ВСЕМ кандидатам из-за ЖК, о котором не известно ничего.
+            unlocatable = [c for c in candidates if c.lat is None or c.lon is None]
+            candidates = [c for c in candidates if c.lat is not None and c.lon is not None]
+            candidates = _rank_by_location_points(candidates, station_points)
+        # Здесь отсев считаем ШТУКАМИ, а не именами (в отличие от тег-матча
+        # выше): это не потеря совпадения, а состав выборки «ближайших», и
+        # она в любом случае усекается до SHORTLIST_LIMIT без перечисления
+        # выбывших. Поимённый список на два десятка ЖК другого региона только
+        # утопил бы в шуме соседние строки — включая ту, ради которой
+        # инвариант 1 и написан.
+        if warnings is not None and (other_region or unlocatable):
+            warnings.append(
+                SHORTLIST_REGION_TRIM_WARNING.format(
+                    other_region=len(other_region), unlocatable=len(unlocatable)
+                )
+            )
         if warnings is not None and candidates:
             requested = ", ".join(
                 f"«{e.name}»"
                 for field in ("districts", "counties", "metro")
                 for e in getattr(criteria, field)
             )
-            warnings.append(
-                f"ЖК с привязкой к {requested} в справочнике нет — "
-                f"локация не применена, показаны варианты по всему городу"
+            if station_points and candidates[0].distance_to_location_m is not None:
+                nearest_km = candidates[0].distance_to_location_m / 1000
+                warnings.append(
+                    f"ЖК с привязкой к {requested} в справочнике нет — "
+                    f"показаны ближайшие по расстоянию, от {nearest_km:.2f} км {STRAIGHT_LINE_NOTE}"
+                )
+            else:
+                warnings.append(
+                    f"ЖК с привязкой к {requested} в справочнике нет — "
+                    f"локация не применена, показаны варианты по всему городу"
+                )
+
+    # Инвариант 1: ЖК, отсеянный как омоним, — отброшенный факт, и о нём
+    # сообщается ОДНОЙ строкой на оба слоя выше (тег-матч и общегородской
+    # список), чтобы одна и та же потеря не читалась как две разные.
+    if warnings is not None and homonyms:
+        warnings.append(
+            TAG_MATCH_HOMONYM_WARNING.format(
+                names=", ".join(f"«{c.name}»" for c in homonyms),
+                radius_km=TAG_MATCH_ANCHOR_RADIUS_M / 1000,
             )
+        )
+
+    # Категория, которой нет в кэше ни у одного кандидата, не удовлетворяется
+    # никем: resolve_known_facts требует known_poi[cat] is True. Шорт-лист
+    # схлопнулся бы в ноль, и снаружи это неотличимо от честного «подходящих ЖК
+    # нет». Требование при этом остаётся в силе — мы лишь перестаём делать вид,
+    # что оно проверено (инвариант 1).
+    if warnings is not None and candidates:
+        for category in dict.fromkeys(r.category for r in criteria.poi_requirements):
+            if not any(category.value in c.known_poi for c in candidates):
+                warnings.append(POI_CATEGORY_NOT_CACHED_WARNING.format(category=category.value))
 
     if rank_by_landmark:
         candidates = _rank_by_landmark(candidates, criteria.landmark_requirements)
@@ -335,6 +503,51 @@ def build_candidate_shortlist(
         candidates = _rank_by_station_class(candidates, criteria.station_class_requirements)
 
     return candidates[:SHORTLIST_LIMIT]
+
+
+def _requested_metro_points(criteria: Criteria) -> list[tuple[float, float]]:
+    """Координаты названных пользователем станций метро (те, что есть в справочнике).
+
+    Только метро: у районов и округов в ``reference/*.json`` координат нет, а
+    выдумывать центроид по названию — ровно то, чего инвариант 3 не разрешает.
+    Станция без координат просто не попадает в список: она не мешает остальным.
+    """
+    points: list[tuple[float, float]] = []
+    metro_ref = load_metro()
+    for entity in criteria.metro:
+        entry = find_by_name(metro_ref, entity.name)
+        if entry is not None and entry.lat is not None and entry.lon is not None:
+            points.append((entry.lat, entry.lon))
+    return points
+
+
+def _rank_by_location_points(
+    candidates: list[ComplexCandidate], points: list[tuple[float, float]]
+) -> list[ComplexCandidate]:
+    """Отсортировать кандидатов по дистанции до ближайшей из точек локации.
+
+    Жёсткой отсечки по радиусу здесь НЕТ намеренно. Итоговый список ЖК всё
+    равно определяет :mod:`app.pik.location_fallback` (там свой радиус и лимит);
+    задача этой сортировки — чтобы модель увидела ближайших ПЕРВЫМИ и знала их
+    расстояние. Отсекать второй раз и по другому правилу значило бы завести
+    третий независимый механизм там, где проблемой была именно
+    рассогласованность двух.
+
+    Кандидаты без координат уходят в конец с ``distance_to_location_m=None``:
+    молча выбрасывать их нельзя (у них может быть всё остальное), но и
+    утверждать про них близость нечем.
+    """
+    scored: list[tuple[float, ComplexCandidate]] = []
+    unknown: list[ComplexCandidate] = []
+    for c in candidates:
+        if c.lat is None or c.lon is None:
+            unknown.append(c)
+            continue
+        c.distance_to_location_m = min(haversine(lat, lon, c.lat, c.lon) for lat, lon in points)
+        scored.append((c.distance_to_location_m, c))
+
+    scored.sort(key=lambda pair: pair[0])
+    return [c for _dist, c in scored] + unknown
 
 
 def _rank_by_landmark(
@@ -478,7 +691,7 @@ def landmark_nearest_fallback(
     nearest = scored[:LANDMARK_FALLBACK_LIMIT]
     warning = (
         f"в радиусе {LANDMARK_DEFAULT_RADIUS_M / 1000:g} км от {names} ЖК нет; "
-        f"показаны ближайшие — от {nearest[0][0] / 1000:.2f} км"
+        f"показаны ближайшие — от {nearest[0][0] / 1000:.2f} км {STRAIGHT_LINE_NOTE}"
     )
     return [c for _dist, c in nearest], warning
 
@@ -590,7 +803,7 @@ def station_class_nearest_fallback(
     nearest_km = nearest[0][0] / 1000
     warning = (
         f"в радиусе {radius_km:g} км от станций класса {class_names} ЖК нет; "
-        f"показаны ближайшие — от {nearest_km:.2f} км"
+        f"показаны ближайшие — от {nearest_km:.2f} км {STRAIGHT_LINE_NOTE}"
     )
     return [c for _dist, c in nearest], warning
 
@@ -678,6 +891,22 @@ def nearby_block_ids(
     return [cid for _dist, cid in nearest], nearest[0][0], False
 
 
+def _collected_poi_categories() -> set[str]:
+    """Категории, реально собранные в ``poi_cache.json`` хотя бы для одного ЖК.
+
+    Источник правды о том, что мы вообще умеем проверять. Новая категория
+    (добавили энум и OSM-тег, кэш ещё не пересобрали) сюда не попадает — и
+    требование по ней честно считается непроверяемым, а не «невыполненным».
+    Файл небольшой (десятки записей), кэшировать чтение незачем: так не
+    появится расхождения после пересбора кэша в том же процессе.
+    """
+    path = DATA_DIR / "poi_cache.json"
+    if not path.exists():
+        return set()
+    cache = json.loads(path.read_text("utf-8"))
+    return {cat for entry in cache.values() for cat in entry}
+
+
 def resolve_known_facts(candidates: list[ComplexCandidate], criteria: Criteria) -> dict:
     ref_data = load_all()
     center_district_ids = [d.id for d in ref_data.districts if d.is_center and d.id]
@@ -688,12 +917,27 @@ def resolve_known_facts(candidates: list[ComplexCandidate], criteria: Criteria) 
     poi_findings = {}
     matched_complex_ids = []
 
+    # Категория, которой нет в САМОМ КЭШЕ, — пробел наших данных, а не факт о
+    # ЖК: требование по ней не проверяется и потому никого не отсеивает, иначе
+    # «мы такую категорию не собирали» выдавалось бы за «подходящих ЖК нет».
+    #
+    # Считаем по файлу кэша, а НЕ по known_poi текущих кандидатов: второе не
+    # различает «категорию не собирали» и «у этих конкретных ЖК данных нет
+    # вовсе» (например, шорт-лист целиком из ЖК без координат). Пробел у
+    # ОТДЕЛЬНОГО кандидата трактуется по-прежнему — близость недоказуема,
+    # требование не пройдено. Пользователь узнаёт о пробеле из
+    # POI_CATEGORY_NOT_CACHED_WARNING (его публикует build_candidate_shortlist).
+    collected = _collected_poi_categories()
+    verifiable_requirements = [
+        req for req in criteria.poi_requirements if req.category.value in collected
+    ]
+
     for c in candidates:
         poi_findings[c.id] = dict(c.known_poi)
 
         satisfies = True
-        if criteria.poi_requirements:
-            for req in criteria.poi_requirements:
+        if verifiable_requirements:
+            for req in verifiable_requirements:
                 if (
                     req.category.value not in c.known_poi
                     or c.known_poi[req.category.value] is not True
@@ -752,10 +996,26 @@ def resolve_known_facts(candidates: list[ComplexCandidate], criteria: Criteria) 
         if satisfies:
             matched_complex_ids.append(c.id)
 
+    # Д2: «сужение реально применялось» — ФАКТ этого расчёта, а не догадка
+    # вызывающего. Требование учитывается, только если его вообще было чем
+    # проверить: непроверяемое POI-требование (категории нет в кэше) из
+    # verifiable_requirements уже исключено, и при пустом остатке цикл выше
+    # объявляет совпавшими ВСЕХ кандидатов — vacuous truth, который снаружи
+    # неотличим от честного «мы посчитали» (тот же класс, что Milestone AI-21).
+    # Ориентир/класс станций/центр перечислены явно: каждый из них — отдельная
+    # ось отсечки внутри цикла.
+    narrowing_applied = bool(
+        verifiable_requirements
+        or criteria.center_requested
+        or criteria.landmark_requirements
+        or criteria.station_class_requirements
+    )
+
     return {
         "matched_complex_ids": matched_complex_ids,
         "center_district_ids": center_district_ids,
         "poi_findings": poi_findings,
+        "narrowing_applied": narrowing_applied,
     }
 
 

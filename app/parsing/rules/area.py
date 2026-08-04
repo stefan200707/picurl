@@ -7,24 +7,44 @@ from .core import _NOT_LINE_NUMBER, _NUM, Span, _iter_free, _normalize, _to_numb
 
 
 class AreaFacts(NamedTuple):
-    """Границы площади в м² (None = не задано)."""
+    """Границы площади в м² (None = не задано).
+
+    ``dropped`` — фрагменты, которые правило РАСПОЗНАЛО, но не применило: слот
+    уже занят более ранним значением («площадью от 75 м² и от 60 м²»). Спан
+    такого фрагмента списывается в любом случае — иначе число подберёт другое
+    правило и получится сфабрикованный фильтр, — поэтому без явного списка
+    фрагмент исчезал бесследно (нарушение инварианта 1). Поле с дефолтом:
+    существующая распаковка ``area, spans = extract_area(text)`` и сравнения
+    ``AreaFacts(...) == ...`` в тестах не меняются.
+    """
 
     area_min: float | None = None
     area_max: float | None = None
     area_kitchen_min: float | None = None
     area_kitchen_max: float | None = None
+    dropped: tuple[str, ...] = ()
 
 
 _AREA_UNIT = r"(?:м²|м2|кв\.?\s*метр\w*|кв\.?\s*м\.?|квадрат\w*|метр\w*)"
 #: Связки между ключевым словом и числом: «кухня чтоб большая от 12», «кухня была от 12».
 _AREA_FILLER = r"(?:(?:была|будет|есть|чтоб\w*|больш\w*|маленьк\w*)\s+)*"
 
+#: Составная кухня: «кухня-гостиная», «кухней-гостиной», «кухня-столовая»,
+#: «кухня-ниша» и бездефисные варианты. Без этой части «кухня-гостиная от 20 м²»
+#: не матчилось правилом кухни (между ключевым словом и числом допускались только
+#: связки ``_AREA_FILLER``), число подбирало правило ОБЩЕЙ площади ``_AREA_MIN``,
+#: и получался сфабрикованный ``area_min=20`` вместо ``area_kitchen_min=20`` —
+#: см. docs/parsing-rationale.md, порция 2 «сфабрикованные фильтры».
+#: Второе слово перечислено явно (не ``\w+``): «кухня 20 метров» иначе съело бы
+#: любое соседнее слово.
+_KITCHEN_COMPOUND = r"(?:\s*[-–—]\s*|\s+)(?:гостин\w*|столов\w*|ниш\w*)"
+
 #: «кухня от 8», «с кухней от 10 метров», «кухня 8-12», «кухня 10 м²», «кухня была от 12»,
-#: «кузня от 9 до 19».
+#: «кузня от 9 до 19», «кухня-гостиная от 20 м²».
 # «ат» — терпимость к опечатке «от» в связке кухни («кухня ат 10 метров»);
 # скоуп ограничен ключевым словом «кухн/кузн», поэтому ложных срабатываний нет.
 _KITCHEN = re.compile(
-    rf"(?:с\s+)?\b(?:кухн\w*|кузн\w*)\s*{_AREA_FILLER}[—:\-]?\s*"
+    rf"(?:с\s+)?\b(?:кухн\w*|кузн\w*)(?:{_KITCHEN_COMPOUND})?\s*{_AREA_FILLER}[—:\-]?\s*"
     rf"(?:"
     rf"(?:(?:от|ат)\s+)?({_NUM})\s*(?:[-–—]|до)\s*({_NUM})"  # 1, 2: диапазон
     rf"|(?:от|ат|не\s+меньше|минимум)\s+({_NUM})"  # 3: min
@@ -79,16 +99,29 @@ def extract_area(text: str) -> tuple[AreaFacts, list[Span]]:
     area_max: float | None = None
     kitchen_min: float | None = None
     kitchen_max: float | None = None
+    dropped: list[str] = []
+
+    def _fragment(match: re.Match[str]) -> str:
+        return norm[match.start() : match.end()].strip()
 
     # Кухня — первой: «кухня от 8 м²» не должна попасть в общую площадь.
     for match in _iter_free(_KITCHEN, norm, spans):
         low, high = _area_bounds(match)
         if low is None and high is None:
             continue
-        if kitchen_min is None and low is not None:
-            kitchen_min = low
-        if kitchen_max is None and high is not None:
-            kitchen_max = high
+        lost = False
+        if low is not None:
+            if kitchen_min is None:
+                kitchen_min = low
+            elif kitchen_min != low:
+                lost = True
+        if high is not None:
+            if kitchen_max is None:
+                kitchen_max = high
+            elif kitchen_max != high:
+                lost = True
+        if lost:
+            dropped.append(_fragment(match))
         spans.append(match.span())
 
     for pattern in (_AREA_KEYWORD, _AREA_RANGE, _AREA_MIN, _AREA_MAX, _AREA_KVADRATOV):
@@ -106,10 +139,24 @@ def extract_area(text: str) -> tuple[AreaFacts, list[Span]]:
                 low, high = None, _to_number(match.group(1))
             if low is None and high is None:
                 continue
-            if area_min is None and low is not None:
-                area_min = low
-            if area_max is None and high is not None:
-                area_max = high
+            # Защита «первый выигрывает»: слот занят — значение НЕ применяем, но
+            # и молчать нельзя, фрагмент уходит в ``dropped`` (инвариант 1).
+            lost = False
+            if low is not None:
+                if area_min is None:
+                    area_min = low
+                elif area_min != low:
+                    lost = True
+            if high is not None:
+                if area_max is None:
+                    area_max = high
+                elif area_max != high:
+                    lost = True
+            if lost:
+                dropped.append(_fragment(match))
             spans.append(match.span())
 
-    return AreaFacts(area_min, area_max, kitchen_min, kitchen_max), sorted(spans)
+    return (
+        AreaFacts(area_min, area_max, kitchen_min, kitchen_max, tuple(dropped)),
+        sorted(spans),
+    )

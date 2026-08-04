@@ -90,6 +90,21 @@ class Settings(BaseSettings):
     # resolve_options() деградируют без единого сетевого вызова.
     AI_CIRCUIT_BREAKER_COOLDOWN_SECONDS: float = 60.0
 
+    # Отладочные флаги для проверки правок промпта/кода ИИ-слоя на живом запросе
+    # (не для прод-трафика). Семантический кэш (app/ai/memory.py) хранит ответ
+    # ИИ бессрочно, без версии по промпту/коду — правка правится, а старый ответ
+    # на тот же текст возвращается неизменным, пока embedding попадает в порог
+    # схожести. AI_ENRICHMENT_BYPASS_CACHE=true пропускает только ЧТЕНИЕ кэша
+    # (lookup_semantic в app/ai/enrichment.py) — запись (persist/store_semantic)
+    # продолжает идти как обычно, прод-кэш не теряется.
+    AI_ENRICHMENT_BYPASS_CACHE: bool = False
+    # Гейт 2 (fully_resolved, Milestone AI-20) возвращает детерминированный
+    # результат и ИИ не зовёт вовсе, если все POI/центр-факты уже известны из
+    # кэша — это не связано с семантическим кэшем выше и bypass его не отключит.
+    # AI_ENRICHMENT_FORCE=true пропускает именно этот гейт, чтобы прогнать через
+    # модель даже полностью детерминированный запрос (для отладки).
+    AI_ENRICHMENT_FORCE: bool = False
+
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
 

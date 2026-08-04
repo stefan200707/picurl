@@ -397,6 +397,17 @@ def parse(text: str) -> ParseResult:
     for unsupp_text, reason in rules_outcome.unsupported:
         warnings.append(f"«{unsupp_text}»: {reason}")
 
+    # Значение распознано, но не применено (слот занят более ранним): спан списан,
+    # поэтому в остаток фрагмент не попадёт и без явного warning'а исчез бы молча.
+    # Категория — ``lost`` по определению: «распознали, но в ссылку не доехало».
+    for dropped_text in rules_outcome.dropped:
+        warnings.append(
+            TaggedWarning(
+                f"«{dropped_text}»: значение уже задано ранее, в ссылку не попало",
+                WarningCategory.LOST,
+            )
+        )
+
     # Очистка текста от структурных правил (заменяем пробелами, чтобы сохранить индексы)
     # Это предотвращает попадание кусков правил в скользящее окно матчера
     text_list = list(text)

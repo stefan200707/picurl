@@ -234,12 +234,18 @@ async def validate(criteria: Criteria, client: httpx.AsyncClient) -> ValidationR
     # дважды (второй раз — отдельным элементом из ``build_url``). Поэтому
     # приёмник предупреждений здесь ``None``: сужение считаем, публикацию
     # оставляем источнику.
+    #
+    # Д1 симметрично ссылке: пустой список ЖК — это не «ноль ЖК», а СНЯТЫЙ
+    # фильтр, и отправлять `blocks=` пустым значит мерить не то, что получит
+    # пользователь. Ключ в таком случае не отправляем вовсе.
     fallback = resolve_fallback_block_ids(criteria)
     if fallback.block_ids:
         existing_blocks = [b for b in params.get("blocks", "").split(",") if b]
-        params["blocks"] = ",".join(
-            combine_with_fallback(existing_blocks, fallback, criteria, None)
-        )
+        combined = combine_with_fallback(existing_blocks, fallback, criteria, None)
+        if combined:
+            params["blocks"] = ",".join(combined)
+        else:
+            params.pop("blocks", None)
 
     # Сортировка (sortBy/orderBy) уже добавлена в params через
     # criteria.to_query_dict() выше — повторный расчёт здесь был мёртвым

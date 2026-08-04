@@ -1,6 +1,7 @@
 from pydantic import BaseModel
 
-from app.parsing.schema import HousingType, Rooms, Sort
+from app.geo.poi import POICategory
+from app.parsing.schema import Finish, HousingType, Rooms, Sort
 
 
 class ComplexCandidate(BaseModel):
@@ -46,6 +47,16 @@ class ComplexCandidate(BaseModel):
     # расстояния делает app/geo/distance.haversine, а не LLM.
     lat: float | None = None
     lon: float | None = None
+    #: Дистанция (метры) до запрошенной локации, когда шорт-лист собран именно
+    #: как «ближайшие к ней» — например, названная станция метро есть в
+    #: справочнике, но ни один ЖК к ней не привязан тегом. Считает haversine, не
+    #: модель (инвариант 3): число приходит к ней готовым фактом.
+    #:
+    #: Без этого поля список выглядел для модели произвольным: она видела 50 ЖК
+    #: и запрос «нужно ВДНХ», не находила ВДНХ ни в одном ``metro`` и честно
+    #: отвечала «подходящих нет» — хотя перед ней лежали ровно ближайшие к ВДНХ.
+    #: ``None`` — шорт-лист собран не по дистанции либо у ЖК нет координат.
+    distance_to_location_m: float | None = None
 
 
 class AIEnrichmentAnswer(BaseModel):
@@ -95,6 +106,39 @@ class LandmarkMatch(BaseModel):
     slug: str | None = None
 
 
+class FinishMatch(BaseModel):
+    """Сопоставление нераспознанной фразы со значением :class:`Finish`.
+
+    Та же схема, что у :class:`LandmarkMatch`: модель отдаёт не строку-описание,
+    а ЗНАЧЕНИЕ ЭНУМА — вариант вне энума pydantic отбивает ещё при разборе
+    ответа. Отделка живёт отдельным сегментом пути (``/finish``) и в справочник
+    опций не входит вовсе, поэтому до этой ветки незнакомая формулировка
+    («отделка под чистовую», «ремонт от застройщика») уходила в
+    ``resolve_options()`` и там не могла совпасть ни с чем в принципе.
+    """
+
+    #: Дословный фрагмент из ``unresolved_fragments`` — проверяется санитайзером.
+    phrase: str
+    finish: Finish | None = None
+
+
+class POIMatch(BaseModel):
+    """Сопоставление нераспознанной фразы с требованием к окружению.
+
+    Модель отдаёт только КАТЕГОРИЮ (энум :class:`POICategory`) и, если она
+    названа в тексте, порог дистанции. Сами расстояния до объектов модель не
+    считает и не возвращает — их считает haversine по кэшу POI (инвариант 3).
+    ``max_distance_m`` здесь — это переписанное из запроса пользователя
+    требование («не дальше 500 м»), а не результат вычисления.
+    """
+
+    #: Дословный фрагмент из ``unresolved_fragments`` — проверяется санитайзером.
+    phrase: str
+    category: POICategory | None = None
+    max_distance_m: int | None = None
+    only_new: bool = False
+
+
 class FreeTextCriteriaAnswer(BaseModel):
     """Извлечение недостающих СКАЛЯРНЫХ фильтров из свободного текста (ведро C).
 
@@ -113,7 +157,9 @@ class FreeTextCriteriaAnswer(BaseModel):
 
     Исключение из «только скаляры» — ``landmarks`` (Milestone AI-22): ориентиры
     резолвятся здесь же, но по той же схеме, что опции — модель отдаёт лишь slug
-    из переданного ей каталога, координаты подставляет справочник.
+    из переданного ей каталога, координаты подставляет справочник. Тем же
+    исключением добавлены ``finish`` и ``poi``: модель отдаёт значение энума и
+    дословную фразу, объект собирает санитайзер.
     """
 
     rooms: list[Rooms] = []
@@ -141,6 +187,9 @@ class FreeTextCriteriaAnswer(BaseModel):
     only_available: bool = False
     #: Ориентиры («рядом с Политехом»): только slug из каталога, см. LandmarkMatch.
     landmarks: list[LandmarkMatch] = []
+    #: Отделка и окружение — энум-значения с проверкой ``phrase``, см. FinishMatch/POIMatch.
+    finish: list[FinishMatch] = []
+    poi: list[POIMatch] = []
     consumed_fragments: list[str] = []
     explanation: str = ""
     confidence: float = 0.0

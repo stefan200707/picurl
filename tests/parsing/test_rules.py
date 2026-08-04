@@ -312,7 +312,17 @@ def test_extract_price_does_not_consume_line_number(text: str) -> None:
 def test_extract_area(text: str, expected: AreaFacts) -> None:
     area, spans = extract_area(text)
     assert area == expected
-    has_value = any(value is not None for value in expected)
+    # Только числовые границы: ``dropped`` — служебный кортеж, он не None даже у
+    # пустого AreaFacts и «наличием значения» не является.
+    has_value = any(
+        value is not None
+        for value in (
+            expected.area_min,
+            expected.area_max,
+            expected.area_kitchen_min,
+            expected.area_kitchen_max,
+        )
+    )
     assert bool(spans) == has_value
 
 
@@ -504,6 +514,26 @@ def test_extract_finish_multiple_positive_types_not_conflicting() -> None:
     finish, spans = extract_finish("готовая отделка и с мебелью")
     assert finish == [Finish.READY, Finish.FURNISHED]
     assert len(spans) == 2
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "отделка готовая",
+        "отделка уже готовая",
+        "квартира с ОТДЕЛКОЙ ГОТОВОЙ",
+    ],
+)
+def test_extract_finish_inverted_word_order_ready(text: str) -> None:
+    """Инверсия «отделка готовая» обязана давать READY.
+
+    У «черновой», «чистовой» и «предчистовой» инверсная ветка
+    («отделка черновая») прописана явно, у «готовой» её не было — фраза
+    уходила в warnings и мусорила ``option_candidates``.
+    """
+    finish, spans = extract_finish(text)
+    assert finish == [Finish.READY]
+    assert spans
 
 
 # ---------------------------------------------------------------------------
@@ -2284,3 +2314,57 @@ def test_finish_pod_kluch_consumes_word_otdelka() -> None:
     assert result.criteria.finish == [_Finish.READY]
     assert result.warnings == []
     assert result.option_candidates == []
+
+
+def test_finish_inverted_order_consumes_whole_phrase() -> None:
+    """«отделка готовая» целиком съедена: ни warning'а, ни option_candidate.
+
+    Тот же инвариант, что и у «отделка под ключ» — иначе остаток уходит в
+    ``resolve_options()`` со справочником опций, где отделки нет физически.
+    """
+    from app.parsing.parser import parse
+    from app.parsing.schema import Finish as _Finish
+
+    result = parse("двушка, отделка готовая")
+
+    assert result.criteria.finish == [_Finish.READY]
+    assert result.warnings == []
+    assert result.option_candidates == []
+
+
+def test_poi_bare_sad_oblique_singular_is_kindergarten() -> None:
+    """«до сада идти до 10 минут» — родительный ед. ч. «сада» обязан ловиться.
+
+    Перечисление голых форм покрывало только множественное число
+    (``сады|садов|садам|садами|садах``), поэтому «до сада» терялось целиком,
+    а «до нового сада» падало даже при наличии маркера «новый».
+    """
+    from app.parsing.parser import parse
+
+    result = parse("до сада идти до 10 минут")
+
+    categories = [r.category.value for r in result.criteria.poi_requirements]
+    assert categories == ["kindergarten"]
+    assert result.warnings == []
+    assert result.option_candidates == []
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "до Ботанического сада 10 минут",
+        "рядом с Александровским садом",
+        "у Нескучного сада",
+    ],
+)
+def test_poi_oblique_sad_does_not_fire_on_toponym(text: str) -> None:
+    """Косвенный падеж НЕ должен ловить топонимы-станции.
+
+    Различитель — прилагательное между предлогом и «садом»: «до сада» → детсад,
+    «до Ботанического сада» → станция. Страховка для ветки косвенных падежей.
+    """
+    from app.parsing.rules.poi import extract_poi_requirements
+
+    poi_reqs, _center, _spans = extract_poi_requirements(text)
+
+    assert [r.category.value for r in poi_reqs] == []

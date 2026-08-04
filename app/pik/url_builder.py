@@ -1,7 +1,12 @@
 from urllib.parse import urlencode
 
 from app.parsing.schema import Criteria, Finish
-from app.pik.location_fallback import combine_with_fallback, resolve_fallback_block_ids
+from app.pik.location_fallback import (
+    FALLBACK_NOTE_DROPPED_SUFFIX,
+    LOCATION_NARROWING_NOT_APPLIED_WARNING,
+    combine_with_fallback,
+    resolve_fallback_block_ids,
+)
 
 
 def build_url(criteria: Criteria, warnings: list[str] | None = None) -> str:
@@ -102,11 +107,23 @@ def build_url(criteria: Criteria, warnings: list[str] | None = None) -> str:
     # ноль от ориентира/POI/центра тоже участвует в пересечении, а не
     # игнорируется как «требования не было».
     fallback = resolve_fallback_block_ids(criteria)
+    # Пережил ли фолбэк пересечение. Пустой block_ids — не «не пережил»: считать
+    # было нечего, и заметка тогда объясняет именно это (см. ниже).
+    fallback_reached_url = True
     if fallback.block_ids:
         existing_blocks = [b for b in query_params.get("blocks", "").split(",") if b]
-        query_params["blocks"] = ",".join(
-            combine_with_fallback(existing_blocks, fallback, criteria, warnings)
-        )
+        combined = combine_with_fallback(existing_blocks, fallback, criteria, warnings)
+        if combined:
+            query_params["blocks"] = ",".join(combined)
+            fallback_reached_url = bool(set(combined) & set(fallback.block_ids))
+        else:
+            # Д1: пустое значение — не «ноль ЖК», а СНЯТЫЙ фильтр (pik.ru
+            # покажет весь город). Ключ не пишем вовсе и говорим об этом:
+            # молчание пользователь прочтёт как «локацию учли».
+            query_params.pop("blocks", None)
+            fallback_reached_url = False
+            if warnings is not None:
+                warnings.append(LOCATION_NARROWING_NOT_APPLIED_WARNING)
     # Заметки о том, КАК сузили (полигон МКАД, ориентир, класс станций),
     # публикует тот, кто их породил. Раньше они доезжали до ответа только через
     # validate(), склеенные в один элемент с текстом про проверку выдачи, — то
@@ -114,8 +131,15 @@ def build_url(criteria: Criteria, warnings: list[str] | None = None) -> str:
     # отношения, и была неотделима от него. Добавляем БЕЗУСЛОВНО, вне ветки
     # выше: при пустом block_ids фолбэк как раз и объясняет, почему фильтр
     # пропущен, и терять это объяснение нельзя (инвариант 1).
+    # Заметка описывает и РАСЧЁТ («посчитали ближайшие»), и ВЫДАЧУ («показаны»).
+    # Второе верно, только если посчитанное доехало до blocks — иначе выдача
+    # утверждала бы то, чего в ссылке нет. Оговорку дописываем, а не убираем
+    # заметку: сам факт расчёта терять нельзя (инвариант 1).
     if warnings is not None:
-        warnings.extend(fallback.notes)
+        if fallback_reached_url:
+            warnings.extend(fallback.notes)
+        else:
+            warnings.extend(f"{note}{FALLBACK_NOTE_DROPPED_SUFFIX}" for note in fallback.notes)
 
     # Общие query-параметры добавляем в конец
     query_params.update(criteria.to_query_dict())

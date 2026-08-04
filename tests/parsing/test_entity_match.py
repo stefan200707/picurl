@@ -116,15 +116,19 @@ class TestOptionEntityMatching:
         slugs = {m.entity.slug for m in matches}
         assert "bigwindows" in slugs
 
-    def test_otdelnyj_sanuzel_does_not_match_manybathrooms(self):
-        # Главный регресс-кейс бага: одиночное «отдельным санузлом» не должно
-        # давать manybathrooms. Фраза не теряется молча — она либо остаётся
-        # непокрытой матчером (уйдёт в option_candidates/warnings в фасаде
-        # parser.py, не в этом модуле), либо не попадает в criteria вовсе.
+    def test_otdelnyj_sanuzel_matches_manybathrooms_by_alias(self):
+        # Исторический регресс-кейс бага изменил знак: «отдельный санузел» —
+        # это ИМЕННО просьба о втором санузле, и с 2026-08-04 фраза есть в
+        # алиасах manybathrooms (порция 2 «сфабрикованные фильтры»).
+        # Прежняя формулировка теста («matcher не должен давать manybathrooms»)
+        # фиксировала следствие механики, а не смысл: fuzzy не различал
+        # «отдельный»/«два и более», и единственной защитой был строгий
+        # QRatio-гейт. Теперь различитель предметный — _modifier_conflict.
         text = "квартира с отдельным санузлом и большими окнами"
         matches, _warnings = match_entities(text)
         slugs = {m.entity.slug for m in matches}
-        assert "manybathrooms" not in slugs
+        assert "manybathrooms" in slugs
+        assert "throughbathroom" not in slugs
         assert "bigwindows" in slugs
 
     def test_vid_vo_dvor_does_not_also_match_vid_na_vodu(self):
@@ -140,8 +144,13 @@ class TestOptionEntityMatching:
         assert "bigwindows" in slugs
         assert "vidNaVodu" not in slugs
 
-    def test_otdelnyj_sanuzel_alone_matches_nothing(self):
-        text = "квартира с отдельным санузлом"
+    def test_bare_sanuzel_alone_matches_nothing(self):
+        # Суть исходной защиты, выраженная предметно: слово «санузлом» БЕЗ
+        # прилагательного не называет ни «сквозной», ни «два и более», выбирать
+        # не на чем — матча быть не должно. Ровно это и держит _modifier_conflict
+        # (ветка «у алиаса различитель есть, у окна нет»), а не только строгий
+        # однословный QRatio-гейт.
+        text = "квартира с санузлом"
         matches, _warnings = match_entities(text)
         assert matches == []
 
