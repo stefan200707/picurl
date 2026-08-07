@@ -1,3 +1,3 @@
-def probe( ):
-    value = 'grace probe'
-    return  value
+def probe():
+    value = "grace probe"
+    return value
