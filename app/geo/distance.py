@@ -39,3 +39,11 @@ def is_center(lat: float, lon: float, radius_m: float = CENTER_RADIUS_M) -> bool
     """
     dist = haversine(MOSCOW_CENTER_LAT, MOSCOW_CENTER_LON, lat, lon)
     return dist <= radius_m
+
+
+def is_within(lat1: float, lon1: float, lat2: float, lon2: float, radius_m: float) -> bool:
+    """Проверить, находятся ли две точки в пределах ``radius_m`` метров друг от друга.
+
+    Граница включительная: расстояние ровно ``radius_m`` считается попаданием.
+    """
+    return haversine(lat1, lon1, lat2, lon2) <= radius_m
