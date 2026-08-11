@@ -151,11 +151,17 @@ async def test_success_is_not_failure(mock_extractor, mock_settings):
 @patch("app.ai.enrichment.claude_credentials_available", return_value=False)
 @patch("app.ai.enrichment.call_free_text_extractor")
 async def test_missing_credentials_is_not_failure(mock_extractor, _mock_creds, mock_settings):
-    """Инвариант 9: нет кредов = ИИ выключен, это НЕ ошибка. Модель не зовём."""
+    """Инвариант 9: нет кредов = ИИ выключен, это НЕ ошибка. Модель не зовём.
+
+    Провайдер пинуется явно: гейт отсутствующих кредов Claude по построению
+    работает только при ``AI_PROVIDER=claude``, а дефолт в ``app/config.py`` —
+    ``antigravity``, у которого свои креды (CLI `agy`) и свой признак.
+    """
     criteria = Criteria()
     warnings = [_RESIDUAL.format("этаж от 7")]
 
-    outcome = await resolve_free_text_criteria(criteria, "двушка этаж от 7", warnings, None)
+    with patch.object(mock_settings, "AI_PROVIDER", "claude"):
+        outcome = await resolve_free_text_criteria(criteria, "двушка этаж от 7", warnings, None)
 
     assert outcome.called is False
     assert outcome.failed is False
