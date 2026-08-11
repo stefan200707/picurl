@@ -1,4 +1,4 @@
-from app.geo.distance import haversine, is_center
+from app.geo.distance import haversine, is_center, is_within
 
 
 def test_haversine():
@@ -18,3 +18,12 @@ def test_is_center():
     # Рядом с ТТК, внутри 5 км
     # Павелецкая ~ 55.730, 37.636
     assert is_center(55.730, 37.636, 5000) is True
+
+
+def test_is_within():
+    # Одинаковые точки: расстояние 0, попадает в любой неотрицательный радиус
+    assert is_within(55.7558, 37.6173, 55.7558, 37.6173, 0) is True
+    # Москва - Питер (~630 км) не помещается в 100 км
+    assert is_within(55.7558, 37.6173, 59.9343, 30.3351, 100_000) is False
+    # ...но помещается в 700 км
+    assert is_within(55.7558, 37.6173, 59.9343, 30.3351, 700_000) is True
