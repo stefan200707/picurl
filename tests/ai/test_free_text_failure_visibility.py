@@ -37,11 +37,19 @@ def mock_settings():
     settings = get_settings()
     original_enabled = settings.AI_ENRICHMENT_ENABLED
     original_key = settings.ANTHROPIC_API_KEY
+    original_provider = settings.AI_PROVIDER
     settings.AI_ENRICHMENT_ENABLED = True
     settings.ANTHROPIC_API_KEY = "sk-test"
+    # Провайдера фиксируем явно: гейт кредов в resolve_free_text_criteria
+    # смотрит claude_credentials_available ТОЛЬКО при AI_PROVIDER == "claude",
+    # а дефолт конфига — "antigravity". Без этой строки патч кредов в
+    # test_missing_credentials_is_not_failure не имеет эффекта, гейт пропускает
+    # вызов, и незаконфигуренный AsyncMock доезжает до FreeTextOutcome.
+    settings.AI_PROVIDER = "claude"
     yield settings
     settings.AI_ENRICHMENT_ENABLED = original_enabled
     settings.ANTHROPIC_API_KEY = original_key
+    settings.AI_PROVIDER = original_provider
 
 
 # --- Уровень FreeTextOutcome: провал получает признак и причину ---
