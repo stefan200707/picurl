@@ -68,7 +68,9 @@ app/
                      #   entity_match.py — rapidfuzz-матчинг; stopwords.py
   reference/         # *.json справочники; loader.py — загрузка/кэш; refresh*.py
   pik/               # url_builder.py; validator.py; id_trust.py; location_fallback.py
-  geo/               # distance.py (haversine); candidates.py (шорт-лист); poi.py; mkad.py; refresh_poi.py
+  geo/               # distance.py (haversine); candidates.py (шорт-лист); poi.py; mkad.py; refresh_poi.py;
+                     #   yandex_maps.py (Яндекс.Карты, точки А/Б, маршрутизация и время в пути)
+  templates/         # index.html (веб-интерфейс поиска с автоподгрузкой Яндекс.Карт)
   ai/                # client.py; enrichment.py (enrich/resolve_options, гейты); embeddings.py;
                      #   memory.py (pgvector); promotion.py; usage_report.py; prompts.py; schema.py
   knowledge_base/    # локальное векторное хранилище/кэш ИИ
@@ -95,9 +97,11 @@ scripts/             # parse_audit.py; complex_audit.py; landmark_alias_audit.py
 3. `build_url(criteria, warnings=None)` → URL. Рантайм обязан передавать `warnings`.
 4. `validate(criteria)` → проверочный запрос к `api.pik.ru/v2/filter` (единственный
    сетевой вызов рантайма, best-effort). 0 результатов → warning.
+5. `build_map_context(criteria, text)` → `YandexMapConfig` (Точка А [ЖК], Точка Б [назначение],
+   построенный маршрут и расчёт времени в пути от каждого подходящего ЖК).
 
 Ответ: `{url, criteria, result_count, warnings, warnings_detailed, ai_used, ai_failed,
-ai_cache_hit, ai_explanation}`. `ai_used=True` = ИИ **реально повлиял**; `ai_failed=True` = попытка
+ai_cache_hit, ai_explanation, map_config}`. `ai_used=True` = ИИ **реально повлиял**; `ai_failed=True` = попытка
 была и упала (**любая** ветка ИИ, включая free-text до гейтов); оба `False` = ИИ не
 звали вовсе (гейт / выключен / нечего обогащать). Провал = модель **не ответила**:
 исключение вызова или cooldown circuit breaker'а. «Ответила и ничего не заполнила»

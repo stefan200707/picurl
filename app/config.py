@@ -105,6 +105,11 @@ class Settings(BaseSettings):
     # модель даже полностью детерминированный запрос (для отладки).
     AI_ENRICHMENT_FORCE: bool = False
 
+    # Яндекс.Карты и маршрутизация: API-ключи и настройки автозагрузки
+    YANDEX_MAPS_API_KEY: str | None = None
+    YANDEX_MAPS_ROUTING_API_KEY: str | None = None
+    YANDEX_MAPS_AUTO_LOAD: bool = True
+
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
 

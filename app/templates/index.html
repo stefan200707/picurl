@@ -1,0 +1,744 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>picurl — Поиск новостроек ПИК и Яндекс.Карты</title>
+  <meta name="description" content="Интеллектуальный поиск квартир ПИК с автоматическим построением маршрутов на Яндекс.Картах и расчётом времени в пути.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script src="{{ script_url }}" type="text/javascript"></script>
+  <style>
+    :root {
+      --bg-primary: #0b0f19;
+      --bg-surface: #131b2e;
+      --bg-card: rgba(26, 36, 61, 0.7);
+      --bg-glass: rgba(19, 27, 46, 0.85);
+      --accent: #ff5429;
+      --accent-hover: #ff6e4a;
+      --accent-cyan: #00d2ff;
+      --accent-green: #10b981;
+      --text-main: #f3f4f6;
+      --text-muted: #9ca3af;
+      --border: rgba(255, 255, 255, 0.08);
+      --border-focus: rgba(255, 84, 41, 0.5);
+      --shadow-glow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: radial-gradient(circle at 10% 20%, #151d33 0%, var(--bg-primary) 90%);
+      color: var(--text-main);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    header {
+      background: var(--bg-glass);
+      backdrop-filter: blur(16px);
+      border-bottom: 1px solid var(--border);
+      padding: 1rem 2rem;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .logo-container {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    .logo-badge {
+      background: linear-gradient(135deg, var(--accent) 0%, #ff8b3d 100%);
+      color: white;
+      font-weight: 700;
+      font-size: 1.1rem;
+      padding: 0.3rem 0.75rem;
+      border-radius: 8px;
+      letter-spacing: -0.5px;
+    }
+
+    .logo-title {
+      font-family: 'Outfit', sans-serif;
+      font-weight: 600;
+      font-size: 1.25rem;
+      letter-spacing: -0.5px;
+      color: var(--text-main);
+    }
+
+    .header-links a {
+      color: var(--text-muted);
+      text-decoration: none;
+      font-size: 0.9rem;
+      transition: color 0.2s ease;
+      margin-left: 1.5rem;
+    }
+
+    .header-links a:hover {
+      color: var(--text-main);
+    }
+
+    main {
+      flex: 1;
+      display: grid;
+      grid-template-columns: 460px 1fr;
+      height: calc(100vh - 69px);
+      overflow: hidden;
+    }
+
+    @media (max-width: 960px) {
+      main {
+        grid-template-columns: 1fr;
+        height: auto;
+        overflow: visible;
+      }
+    }
+
+    .sidebar {
+      background: var(--bg-surface);
+      border-right: 1px solid var(--border);
+      padding: 1.5rem;
+      display: flex;
+      flex-direction: column;
+      gap: 1.25rem;
+      overflow-y: auto;
+      z-index: 10;
+    }
+
+    .search-section {
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+    }
+
+    .search-title {
+      font-family: 'Outfit', sans-serif;
+      font-size: 1.15rem;
+      font-weight: 600;
+      color: var(--text-main);
+    }
+
+    .search-input-box {
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+
+    .search-textarea {
+      width: 100%;
+      height: 90px;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 0.85rem 1rem;
+      color: var(--text-main);
+      font-family: inherit;
+      font-size: 0.95rem;
+      resize: none;
+      outline: none;
+      transition: all 0.2s ease;
+    }
+
+    .search-textarea:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(255, 84, 41, 0.2);
+    }
+
+    .search-button {
+      background: linear-gradient(135deg, var(--accent) 0%, #ff733b 100%);
+      color: white;
+      border: none;
+      border-radius: 10px;
+      padding: 0.75rem 1.25rem;
+      font-weight: 600;
+      font-size: 0.95rem;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+      transition: all 0.2s ease;
+      box-shadow: 0 4px 14px 0 rgba(255, 84, 41, 0.39);
+    }
+
+    .search-button:hover {
+      background: linear-gradient(135deg, var(--accent-hover) 0%, #ff8554 100%);
+      transform: translateY(-1px);
+    }
+
+    .search-button:active {
+      transform: translateY(0);
+    }
+
+    .examples-box {
+      display: flex;
+      flex-direction: column;
+      gap: 0.4rem;
+    }
+
+    .examples-label {
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .example-chip {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 0.45rem 0.75rem;
+      font-size: 0.82rem;
+      color: #cbd5e1;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      text-align: left;
+    }
+
+    .example-chip:hover {
+      background: rgba(255, 255, 255, 0.08);
+      border-color: rgba(255, 255, 255, 0.2);
+      color: white;
+    }
+
+    .status-panel {
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+    }
+
+    .route-card {
+      background: linear-gradient(145deg, rgba(26, 36, 61, 0.9) 0%, rgba(19, 27, 46, 0.95) 100%);
+      border: 1px solid rgba(0, 210, 255, 0.25);
+      border-radius: 14px;
+      padding: 1.2rem;
+      box-shadow: var(--shadow-glow);
+    }
+
+    .route-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 0.75rem;
+    }
+
+    .route-badge {
+      background: rgba(0, 210, 255, 0.15);
+      color: var(--accent-cyan);
+      font-size: 0.75rem;
+      font-weight: 600;
+      padding: 0.25rem 0.6rem;
+      border-radius: 6px;
+      text-transform: uppercase;
+    }
+
+    .route-time-highlight {
+      font-family: 'Outfit', sans-serif;
+      font-size: 1.6rem;
+      font-weight: 700;
+      color: #ffffff;
+      display: flex;
+      align-items: baseline;
+      gap: 0.4rem;
+      margin-bottom: 0.4rem;
+    }
+
+    .route-time-highlight span {
+      font-size: 0.9rem;
+      color: var(--accent-cyan);
+      font-weight: 500;
+    }
+
+    .route-details {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+      font-size: 0.85rem;
+      color: var(--text-muted);
+      border-top: 1px solid var(--border);
+      padding-top: 0.75rem;
+      margin-top: 0.5rem;
+    }
+
+    .route-point-row {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .point-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+
+    .point-dot.a {
+      background: var(--accent);
+      box-shadow: 0 0 8px var(--accent);
+    }
+
+    .point-dot.b {
+      background: var(--accent-cyan);
+      box-shadow: 0 0 8px var(--accent-cyan);
+    }
+
+    .modes-selector {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 0.4rem;
+      margin-top: 0.75rem;
+    }
+
+    .mode-btn {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 0.5rem 0.2rem;
+      color: var(--text-muted);
+      font-size: 0.75rem;
+      font-weight: 500;
+      cursor: pointer;
+      text-align: center;
+      transition: all 0.2s ease;
+    }
+
+    .mode-btn.active {
+      background: rgba(255, 84, 41, 0.2);
+      border-color: var(--accent);
+      color: white;
+    }
+
+    .complexes-list {
+      display: flex;
+      flex-direction: column;
+      gap: 0.6rem;
+    }
+
+    .complexes-list-title {
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .complex-item {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 0.75rem 1rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+
+    .complex-item:hover, .complex-item.selected {
+      border-color: var(--accent);
+      background: rgba(255, 84, 41, 0.1);
+    }
+
+    .complex-name {
+      font-weight: 600;
+      font-size: 0.9rem;
+      color: var(--text-main);
+    }
+
+    .complex-time {
+      font-size: 0.85rem;
+      color: var(--accent-cyan);
+      font-weight: 600;
+    }
+
+    .pik-link-btn {
+      display: block;
+      background: #2563eb;
+      color: white;
+      text-align: center;
+      padding: 0.75rem;
+      border-radius: 10px;
+      text-decoration: none;
+      font-weight: 600;
+      font-size: 0.9rem;
+      transition: background 0.2s ease;
+      margin-top: 0.5rem;
+    }
+
+    .pik-link-btn:hover {
+      background: #1d4ed8;
+    }
+
+    #map-container {
+      width: 100%;
+      height: 100%;
+      position: relative;
+      background: #0d1322;
+    }
+
+    #map {
+      width: 100%;
+      height: 100%;
+    }
+
+    .loading-overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(11, 15, 25, 0.75);
+      backdrop-filter: blur(4px);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 50;
+      flex-direction: column;
+      gap: 1rem;
+    }
+
+    .spinner {
+      width: 44px;
+      height: 44px;
+      border: 4px solid rgba(255, 255, 255, 0.1);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="logo-container">
+      <div class="logo-badge">ПИК</div>
+      <div class="logo-title">picurl + Яндекс.Карты</div>
+    </div>
+    <div class="header-links">
+      <a href="/docs" target="_blank">Swagger API</a>
+      <a href="https://pik.ru" target="_blank">pik.ru</a>
+    </div>
+  </header>
+
+  <main>
+    <div class="sidebar">
+      <div class="search-section">
+        <div class="search-title">Поиск квартир и маршруты</div>
+        <div class="search-input-box">
+          <textarea id="search-input" class="search-textarea" placeholder="Например: двушка до 15 млн до 20 минут пешком от МГУ...">двушка до 15 млн до 20 минут пешком от МГУ</textarea>
+          <button id="search-btn" class="search-button" onclick="performSearch()">
+            <span>Найти и построить маршрут</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="examples-box">
+        <div class="examples-label">Примеры запросов:</div>
+        <div class="example-chip" onclick="setQuery('квартира с отделкой до 15 минут пешком от м. Черкизовская')">
+          м. Черкизовская до 15 мин пешком
+        </div>
+        <div class="example-chip" onclick="setQuery('студия до 10 млн до 25 минут на машине до Кремля')">
+          Кремль до 25 мин на машине
+        </div>
+        <div class="example-chip" onclick="setQuery('двушка рядом с МГУ до 20 минут')">
+          МГУ до 20 мин от ЖК
+        </div>
+      </div>
+
+      <div id="status-container" class="status-panel">
+        <div id="route-widget" class="route-card" style="display: none;">
+          <div class="route-header">
+            <div class="route-badge" id="route-mode-badge">Маршрут</div>
+            <span id="route-dist-badge" style="font-size: 0.8rem; color: var(--text-muted);"></span>
+          </div>
+          <div class="route-time-highlight" id="route-time-display">
+            -- мин <span>в пути</span>
+          </div>
+
+          <div class="modes-selector">
+            <button class="mode-btn active" id="mode-pedestrian" onclick="changeMode('pedestrian')">Пешком</button>
+            <button class="mode-btn" id="mode-driving" onclick="changeMode('driving')">На авто</button>
+            <button class="mode-btn" id="mode-transit" onclick="changeMode('transit')">Транспорт</button>
+            <button class="mode-btn" id="mode-bicycle" onclick="changeMode('bicycle')">Вело</button>
+          </div>
+
+          <div class="route-details">
+            <div class="route-point-row">
+              <div class="point-dot a"></div>
+              <span id="point-a-name">Точка А: ЖК</span>
+            </div>
+            <div class="route-point-row">
+              <div class="point-dot b"></div>
+              <span id="point-b-name">Точка Б: Назначение</span>
+            </div>
+          </div>
+
+          <a id="yandex-external-link" href="#" target="_blank" style="display: inline-block; font-size: 0.8rem; color: var(--accent-cyan); margin-top: 0.6rem; text-decoration: none;">
+            Открыть маршрут на Яндекс.Картах ↗
+          </a>
+        </div>
+
+        <div id="complexes-section" class="complexes-list" style="display: none;">
+          <div class="complexes-list-title">ЖК по времени в пути:</div>
+          <div id="complexes-container"></div>
+        </div>
+
+        <a id="pik-link" class="pik-link-btn" href="#" target="_blank" style="display: none;">
+          Смотреть квартиры на pik.ru ↗
+        </a>
+      </div>
+    </div>
+
+    <div id="map-container">
+      <div id="loading-overlay" class="loading-overlay">
+        <div class="spinner"></div>
+        <div style="font-size: 0.9rem; color: #94a3b8;">Построение маршрута на карте...</div>
+      </div>
+      <div id="map"></div>
+    </div>
+  </main>
+
+  <script>
+    let myMap = null;
+    let currentMapConfig = null;
+    let currentPolyline = null;
+    let currentPlacemarkA = null;
+    let currentPlacemarkB = null;
+
+    // Автоматическая инициализация Яндекс.Карт
+    function initYandexMap() {
+      if (typeof ymaps === 'undefined') {
+        console.warn('Yandex Maps API script not loaded.');
+        return;
+      }
+
+      ymaps.ready(function() {
+        myMap = new ymaps.Map('map', {
+          center: [55.75222, 37.61556],
+          zoom: 11,
+          controls: ['zoomControl', 'fullscreenControl', 'typeSelector']
+        }, {
+          searchControlProvider: 'yandex#search'
+        });
+
+        // Автопоиск при первой загрузке страницы
+        performSearch();
+      });
+    }
+
+    function setQuery(text) {
+      document.getElementById('search-input').value = text;
+      performSearch();
+    }
+
+    async function performSearch() {
+      const text = document.getElementById('search-input').value.trim();
+      if (!text) return;
+
+      const overlay = document.getElementById('loading-overlay');
+      overlay.style.display = 'flex';
+
+      try {
+        const resp = await fetch('/build-url', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text: text })
+        });
+
+        if (!resp.ok) {
+          throw new Error('Ошибка сервера: ' + resp.status);
+        }
+
+        const data = await resp.json();
+        renderResults(data);
+      } catch (err) {
+        console.error('Ошибка поиска:', err);
+        alert('Не удалось выполнить поиск: ' + err.message);
+      } finally {
+        overlay.style.display = 'none';
+      }
+    }
+
+    function renderResults(data) {
+      const mapConfig = data.map_config;
+      currentMapConfig = mapConfig;
+
+      // Отображаем кнопку на pik.ru
+      const pikLink = document.getElementById('pik-link');
+      if (data.url) {
+        pikLink.href = data.url;
+        pikLink.style.display = 'block';
+      } else {
+        pikLink.style.display = 'none';
+      }
+
+      if (!mapConfig || !myMap) return;
+
+      // Обновляем виджет маршрута
+      const routeWidget = document.getElementById('route-widget');
+      if (mapConfig.route) {
+        routeWidget.style.display = 'block';
+        document.getElementById('route-time-display').innerHTML =
+          `${mapConfig.route.duration_min} мин <span>${mapConfig.route.travel_mode === 'driving' ? 'на авто' : 'пешком'}</span>`;
+        document.getElementById('route-dist-badge').textContent = mapConfig.route.formatted_distance;
+        document.getElementById('point-a-name').textContent = 'Точка А (ЖК): ' + (mapConfig.point_a ? mapConfig.point_a.name : 'ЖК');
+        document.getElementById('point-b-name').textContent = 'Точка Б: ' + (mapConfig.point_b ? mapConfig.point_b.name : 'Назначение');
+        document.getElementById('yandex-external-link').href = mapConfig.route.yandex_maps_url;
+
+        // Переключаем активную кнопку режима
+        document.querySelectorAll('.mode-btn').forEach(btn => btn.classList.remove('active'));
+        const activeBtn = document.getElementById('mode-' + mapConfig.travel_mode);
+        if (activeBtn) activeBtn.classList.add('active');
+      } else {
+        routeWidget.style.display = 'none';
+      }
+
+      // Обновляем список ЖК по времени
+      const complexesSection = document.getElementById('complexes-section');
+      const complexesContainer = document.getElementById('complexes-container');
+      complexesContainer.innerHTML = '';
+
+      if (mapConfig.all_complex_routes && mapConfig.all_complex_routes.length > 0) {
+        complexesSection.style.display = 'flex';
+        mapConfig.all_complex_routes.forEach((r, idx) => {
+          const item = document.createElement('div');
+          item.className = 'complex-item' + (idx === 0 ? ' selected' : '');
+          item.innerHTML = `
+            <div class="complex-name">${r.origin.name || 'ЖК'}</div>
+            <div class="complex-time">${r.formatted_duration}</div>
+          `;
+          item.onclick = () => selectComplexRoute(r, item);
+          complexesContainer.appendChild(item);
+        });
+      } else {
+        complexesSection.style.display = 'none';
+      }
+
+      // Обновляем карту: маркеры и маршрут
+      drawMapRoute(mapConfig.point_a, mapConfig.point_b, mapConfig.route);
+    }
+
+    function selectComplexRoute(route, element) {
+      document.querySelectorAll('.complex-item').forEach(el => el.classList.remove('selected'));
+      element.classList.add('selected');
+
+      document.getElementById('route-time-display').innerHTML =
+        `${route.duration_min} мин <span>${route.travel_mode === 'driving' ? 'на авто' : 'пешком'}</span>`;
+      document.getElementById('route-dist-badge').textContent = route.formatted_distance;
+      document.getElementById('point-a-name').textContent = 'Точка А (ЖК): ' + route.origin.name;
+      document.getElementById('yandex-external-link').href = route.yandex_maps_url;
+
+      drawMapRoute(route.origin, currentMapConfig.point_b, route);
+    }
+
+    async function changeMode(newMode) {
+      if (!currentMapConfig || !currentMapConfig.point_a || !currentMapConfig.point_b) return;
+
+      document.querySelectorAll('.mode-btn').forEach(btn => btn.classList.remove('active'));
+      const activeBtn = document.getElementById('mode-' + newMode);
+      if (activeBtn) activeBtn.classList.add('active');
+
+      try {
+        const resp = await fetch('/api/geo/route', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            origin: currentMapConfig.point_a,
+            destination: currentMapConfig.point_b,
+            travel_mode: newMode
+          })
+        });
+        if (resp.ok) {
+          const res = await resp.json();
+          const route = res.route;
+          document.getElementById('route-time-display').innerHTML =
+            `${route.duration_min} мин <span>${route.travel_mode === 'driving' ? 'на авто' : 'пешком'}</span>`;
+          document.getElementById('route-dist-badge').textContent = route.formatted_distance;
+          document.getElementById('yandex-external-link').href = route.yandex_maps_url;
+          drawMapRoute(route.origin, route.destination, route);
+        }
+      } catch (e) {
+        console.error('Ошибка изменения режима:', e);
+      }
+    }
+
+    function drawMapRoute(pointA, pointB, route) {
+      if (!myMap) return;
+
+      // Очищаем предыдущие слои
+      if (currentPlacemarkA) myMap.geoObjects.remove(currentPlacemarkA);
+      if (currentPlacemarkB) myMap.geoObjects.remove(currentPlacemarkB);
+      if (currentPolyline) myMap.geoObjects.remove(currentPolyline);
+
+      const bounds = [];
+
+      // Добавляем Точку А (ЖК)
+      if (pointA && pointA.lat && pointA.lon) {
+        currentPlacemarkA = new ymaps.Placemark([pointA.lat, pointA.lon], {
+          balloonContentHeader: `<strong>${pointA.name || 'ЖК ПИК'}</strong>`,
+          balloonContentBody: `${pointA.address || 'Жилой комплекс'}<br><span style="color:#ff5429;font-weight:600;">Точка А (Старт)</span>`,
+          hintContent: pointA.name || 'ЖК'
+        }, {
+          preset: 'islands#orangeHomeIcon'
+        });
+        myMap.geoObjects.add(currentPlacemarkA);
+        bounds.push([pointA.lat, pointA.lon]);
+      }
+
+      // Добавляем Точку Б (Назначение)
+      if (pointB && pointB.lat && pointB.lon) {
+        currentPlacemarkB = new ymaps.Placemark([pointB.lat, pointB.lon], {
+          balloonContentHeader: `<strong>${pointB.name || 'Назначение'}</strong>`,
+          balloonContentBody: `${pointB.address || 'Ориентир / Метро'}<br><span style="color:#00d2ff;font-weight:600;">Точка Б (Финиш)</span>`,
+          hintContent: pointB.name || 'Место назначения'
+        }, {
+          preset: 'islands#nightDotIcon'
+        });
+        myMap.geoObjects.add(currentPlacemarkB);
+        bounds.push([pointB.lat, pointB.lon]);
+      }
+
+      // Отрисовываем маршрут
+      if (route && route.waypoints && route.waypoints.length > 0) {
+        currentPolyline = new ymaps.Polyline(route.waypoints, {
+          hintContent: route.formatted_duration + ' (' + route.formatted_distance + ')'
+        }, {
+          strokeColor: '#ff5429',
+          strokeWidth: 5,
+          strokeOpacity: 0.85
+        });
+        myMap.geoObjects.add(currentPolyline);
+      }
+
+      // Центрируем карту по границам точек
+      if (bounds.length === 2) {
+        myMap.setBounds(bounds, {
+          checkZoomRange: true,
+          zoomMargin: [60, 60, 60, 60]
+        });
+      } else if (bounds.length === 1) {
+        myMap.setCenter(bounds[0], 14);
+      }
+    }
+
+    window.onload = initYandexMap;
+  </script>
+</body>
+</html>
