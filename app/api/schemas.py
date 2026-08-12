@@ -2,6 +2,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
+from app.geo.yandex_maps import GeoPoint, RouteLeg, TravelMode, YandexMapConfig
 from app.warnings import WarningCategory, WarningSeverity, describe
 
 
@@ -117,4 +118,32 @@ class BuildUrlResponse(BaseModel):
     )
     ai_explanation: str | None = Field(
         default=None, description="Объяснение решения ИИ (почему выбраны именно эти ЖК)."
+    )
+    map_config: YandexMapConfig | None = Field(
+        default=None,
+        description=(
+            "Конфигурация и данные для автоматической подгрузки Яндекс.Карт с двумя точками, "
+            "построенным маршрутом и расчётом времени в пути от ЖК до целевого места."
+        ),
+    )
+
+
+class RouteRequest(BaseModel):
+    """Запрос на построение маршрута между двумя точками."""
+
+    origin: GeoPoint = Field(description="Точка А (старт / ЖК)")
+    destination: GeoPoint = Field(description="Точка Б (финиш / назначение)")
+    travel_mode: TravelMode = Field(
+        default=TravelMode.PEDESTRIAN,
+        description="Способ перемещения: pedestrian, driving, transit, bicycle",
+    )
+
+
+class RouteResponse(BaseModel):
+    """Ответ с построенным маршрутом и временем в пути."""
+
+    route: RouteLeg = Field(description="Основной построенный маршрут")
+    all_modes: list[RouteLeg] = Field(
+        default_factory=list,
+        description="Маршруты и время в пути для всех основных способов перемещения",
     )
