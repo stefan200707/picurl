@@ -90,11 +90,12 @@ uv run fastapi dev
 uv run pytest
 ```
 
-### Проверка и форматирование кода
+### Проверка и форматирование кода (перед коммитом)
 ```bash
-uv run ruff check
-uv run ruff format          # автоформатирование
-uv run ruff format --check  # только проверка (как в CI)
+uv run ruff check           # проверка стиля
+uv run ruff format --check  # проверка форматирования (как в CI)
+uv run ruff format          # автоматическое форматирование
+uv run pytest               # запуск автотестов
 ```
 
 ### Обновление справочников
