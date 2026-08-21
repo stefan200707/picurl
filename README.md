@@ -81,6 +81,15 @@ uv run fastapi dev
 }
 ```
 
+### 6. Консольный клиент на C++ (прототип)
+
+Тот же `POST /build-url` из командной строки, без Swagger: однофайловый клиент
+на libcurl + nlohmann/json — `cpp_client/build_url_client.cpp`. Зависимости
+системные (в репозиторий не тащатся), сборка одной командой `g++` и пример
+запуска — в **[cpp_client/README.md](cpp_client/README.md)**. Прототип
+показывает, что контракт `BuildUrlResponse` собирается на C++ вручную;
+на Python-пайплайн он не влияет и в `uv run pytest` не участвует.
+
 ---
 
 ## 🛠 Разработка и обслуживание
