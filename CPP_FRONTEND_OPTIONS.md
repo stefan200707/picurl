@@ -83,6 +83,30 @@ SDK, но **нет desktop-C++ SDK**. Любой «настоящий» нати
 
 Пункты 1-6 и 8 на C++ делаются тривиально. **Вся сложность сосредоточена в пункте 7.**
 
+### 3.1. Модели, которые придётся описать в C++
+
+Полный состав контракта — чтобы объём работы оценивался по фактическому JSON, а не
+по памяти. `RouteLeg` выписан отдельно в §4, `GeoPoint` — `lat: float`, `lon: float`,
+`name: str?`, `address: str?`, `point_type: str` (`origin` | `destination`).
+
+| Модель | Где | Поля |
+|---|---|---|
+| `BuildUrlRequest` | `schemas.py:43` | `text` (min_length=1) |
+| `BuildUrlResponse` | `schemas.py:56` | `url`, `criteria: dict[str, Any]`, `result_count: int?`, `warnings: list[str]`, `warnings_detailed: list[WarningDetail]`, `ai_used`, `ai_failed`, `ai_cache_hit`, `ai_explanation: str?`, `map_config: YandexMapConfig?` |
+| `WarningDetail` | `schemas.py:9` | `text`, `category`, `severity` |
+| `YandexMapConfig` | `yandex_maps.py:116` | `api_key: str?`, `script_url`, `auto_load: bool`, `center: [lat, lon]`, `zoom: int`, `point_a: GeoPoint?`, `point_b: GeoPoint?`, `route: RouteLeg?`, `all_complex_routes: list[RouteLeg]`, `selected_travel_time_min: int?`, `travel_mode` |
+| `RouteRequest` | `schemas.py:131` | `origin: GeoPoint`, `destination: GeoPoint`, `travel_mode` (по умолчанию `pedestrian`) — **`GeoPoint` обязателен целиком, `lat`/`lon` не опциональны** |
+| `RouteResponse` | `schemas.py:142` | `route: RouteLeg`, `all_modes: list[RouteLeg]` |
+
+Два следствия для клиента:
+
+- Почти всё **необязательно** (`result_count`, `map_config`, `point_a`/`point_b`, `route`).
+  Пустой `map_config` или `route: null` — штатный ответ (запрос без гео-контекста), а не
+  сбой: рисовать карту по nullable-полям, не падать и не показывать «ошибка сервера».
+- Гео-модели объявлены с `model_config = ConfigDict(extra="ignore")`: сервер добавляет
+  поля не ломая старых клиентов, и обратная сторона того же — C++-парсер обязан
+  **игнорировать незнакомые ключи**, а не считать их ошибкой схемы.
+
 Что фронту делать **не** нужно (и нельзя): считать дистанции, ранжировать ЖК,
 резолвить справочники, собирать URL pik.ru. Всё это — инварианты 3 и 13 из `CLAUDE.md`,
 живут на сервере; клиент любого языка остаётся тонким по построению. Именно поэтому
