@@ -78,6 +78,8 @@ tests/               # integration/ — E2E; parsing/ reference/ geo/ ai/;
                      #   corpus/queries.txt (198 коротких) + corpus/complex_queries.txt (36 длинных);
                      #   test_parse_audit_regression.py; test_complex_queries_regression.py;
                      #   test_warning_categories.py (категории warnings)
+cpp_client/          # прототип C++-клиента /build-url (libcurl + nlohmann/json); зависимости
+                     #   системные, в репо не тащатся, сборка/запуск — cpp_client/README.md
 docs/                # см. «Источники правды»
 prompts/             # декомпозиция задачи (00→10, README, _conventions, _open-questions)
 scripts/             # parse_audit.py; complex_audit.py; landmark_alias_audit.py; cleanup_metro_duplicates.py
