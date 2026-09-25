@@ -250,7 +250,11 @@ def client():
 
 
 @patch("app.ai.enrichment.call_free_text_extractor")
-def test_api_response_shows_failed_attempt(mock_extractor, client, mock_settings):
+@patch("app.ai.enrichment.call_model", side_effect=RuntimeError("провайдер лёг"))
+@patch("app.ai.enrichment.call_option_resolver", side_effect=RuntimeError("провайдер лёг"))
+def test_api_response_shows_failed_attempt(
+    mock_options, mock_model, mock_extractor, client, mock_settings
+):
     """Искусственно уронив free-text-вызов, по ответу API видно: попытка была и
     не удалась. До правки здесь было ai_used=false, ai_failed=false — ответ,
     неотличимый от «ИИ не звали»."""
