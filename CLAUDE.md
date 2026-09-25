@@ -18,15 +18,23 @@
 («хочу двушку у метро до 15 млн») в рабочую ссылку `pik.ru/search` с применёнными
 фильтрами. Логика **детерминированная**: regex + rapidfuzz по локальным JSON-справочникам.
 ИИ — опциональный ограниченный fallback, в рантайме не обязателен. Интерфейс — Swagger UI
-(`http://127.0.0.1:8000/docs`), своего фронтенда нет. pik.ru продаёт только новостройки.
+(`http://127.0.0.1:8000/docs`), своего фронтенда нет (есть вспомогательный
+`app/templates/index.html` с автоподгрузкой Яндекс.Карт, но основной UI — Swagger).
+pik.ru продаёт только новостройки.
 
 ## Стек и конвенции
 
-- Python 3.12+, FastAPI + Uvicorn, менеджер пакетов `uv`.
-- `pydantic` v2, `rapidfuzz`, `httpx`. Тесты `pytest` + `pytest-asyncio` (`asyncio_mode=auto`).
-- ИИ-стек: `claude-agent-sdk`, `google-antigravity` (CLI `agy`), PostgreSQL 15+ с pgvector,
-  `sentence-transformers`, `asyncpg`, `pydantic-settings`.
-- Строгая типизация и валидация через Pydantic. Длина строки — 100.
+- Python 3.12+ (`requires-python = ">=3.12"`), FastAPI ≥0.115 + Uvicorn ≥0.30
+  (entrypoint `app.main:app`), менеджер пакетов `uv`.
+- `pydantic` ≥2, `pydantic-settings` ≥2.14.2, `httpx` ≥0.27, `rapidfuzz` ≥3.
+  Тесты `pytest` ≥8 + `pytest-asyncio` ≥0.24 (`asyncio_mode=auto`, `testpaths=["tests"]`,
+  `pythonpath=["."]`).
+- ИИ-стек: `claude-agent-sdk` ≥0.2.100, `google-antigravity` ≥0.1.7 (CLI `agy`),
+  PostgreSQL 15+ с pgvector (`docker-compose.yml`: `pgvector/pgvector:pg15`),
+  `sentence-transformers` ≥5.6.0, `torch` ≥2.12.1 (CPU-индекс `pytorch-cpu`),
+  `asyncpg` ≥0.31.0, `psycopg[binary]` ≥3.3.4, `pgvector` ≥0.5.0 (Python-пакет).
+- Строгая типизация и валидация через Pydantic. Длина строки — 100
+  (`line-length = 100`, `target-version = "py312"`).
 - Ruff select: `E`, `W`, `F`, `I`, `UP`, `B`, `SIM`, `C4`, `RUF`. Кириллица в строках
   намеренная — `RUF001/002/003` отключены.
 
@@ -61,7 +69,8 @@ uv run python scripts/reference_audit.py         # аудит справочны
 
 ```text
 app/
-  main.py            # FastAPI-app, health, POST /build-url
+  main.py            # FastAPI-app, lifespan (httpx-клиент, пул asyncpg), health, POST /build-url
+  config.py          # pydantic-settings Settings/get_settings() — читает .env
   warnings.py        # TaggedWarning/WarningCategory/WarningSeverity — категории warnings (Г6)
   api/               # endpoints.py + pydantic-модели API (schemas.py)
   parsing/           # schema.py — Criteria; rules/ — regex-правила; parser.py — фасад parse;
@@ -72,15 +81,19 @@ app/
                      #   yandex_maps.py (Яндекс.Карты, точки А/Б, маршрутизация и время в пути)
   templates/         # index.html (веб-интерфейс поиска с автоподгрузкой Яндекс.Карт)
   ai/                # client.py; enrichment.py (enrich/resolve_options, гейты); embeddings.py;
-                     #   memory.py (pgvector); promotion.py; usage_report.py; prompts.py; schema.py
+                     #   memory.py (pgvector); promotion.py; usage_report.py; prompts.py; schema.py;
+                     #   migrations/ (01_memory_tables.sql и др.)
   knowledge_base/    # локальное векторное хранилище/кэш ИИ
-tests/               # integration/ — E2E; parsing/ reference/ geo/ ai/;
+tests/               # integration/ — E2E; parsing/ reference/ geo/ ai/ pik/ api/;
                      #   corpus/queries.txt (198 коротких) + corpus/complex_queries.txt (36 длинных);
                      #   test_parse_audit_regression.py; test_complex_queries_regression.py;
                      #   test_warning_categories.py (категории warnings)
 docs/                # см. «Источники правды»
 prompts/             # декомпозиция задачи (00→10, README, _conventions, _open-questions)
-scripts/             # parse_audit.py; complex_audit.py; landmark_alias_audit.py; cleanup_metro_duplicates.py
+scripts/             # parse_audit.py; complex_audit.py; landmark_alias_audit.py; cleanup_metro_duplicates.py;
+                     #   outcome_audit.py; reference_audit.py
+docker-compose.yml   # postgres (pgvector/pgvector:pg15, БД picurl_ai) для памяти ИИ
+pyproject.toml       # зависимости, ruff, pytest config, entrypoint app.main:app
 ```
 
 Порядок сборки (`prompts/`): 00 каркас → 01 URL-схема → 02 Criteria → 03 справочники →
@@ -156,6 +169,16 @@ ai_cache_hit, ai_explanation, map_config}`. `ai_used=True` = ИИ **реальн
 - `refresh` перезаписывает только `complexes/counties/metro/districts` (мёрж сохраняет
   кураторские поля). Эндпоинт `/internal/refresh-dicts` защищён `X-Internal-Token`
   (env `INTERNAL_REFRESH_TOKEN`).
+- **`app/config.py::Settings`** (pydantic-settings, `env_file=".env"`) — единый источник
+  конфигурации: флаги/провайдер ИИ (`AI_ENRICHMENT_ENABLED`, `AI_PROVIDER`,
+  `ANTHROPIC_API_KEY`/`CLAUDE_OAUTH_TOKEN`/`CLAUDE_CLI_PATH`, `ANTIGRAVITY_CLI_PATH`,
+  `AI_MODEL_NAME`), `DATABASE_URL` (единственный источник строки подключения к БД ИИ),
+  пороги промоушена (`AI_PROMOTION_MIN_OBSERVATIONS/CONFIDENCE`,
+  `AI_ALIAS_PROMOTION_MIN_CONSISTENCY`), ретраи и circuit breaker ИИ-вызовов
+  (`AI_RETRY_*`, `AI_CIRCUIT_BREAKER_*`), отладочные флаги
+  (`AI_ENRICHMENT_BYPASS_CACHE`, `AI_ENRICHMENT_FORCE`), ключи Яндекс.Карт
+  (`YANDEX_MAPS_API_KEY`, `YANDEX_MAPS_ROUTING_API_KEY`, `YANDEX_MAPS_AUTO_LOAD`),
+  `INTERNAL_REFRESH_TOKEN`.
 
 ## Инварианты (нарушать нельзя)
 
