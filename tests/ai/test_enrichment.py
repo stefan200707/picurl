@@ -1600,7 +1600,8 @@ async def test_enrich_uses_semantic_cache_when_bypass_disabled(
         poi_requirements=[POIRequirement(category=POICategory.SCHOOL, raw_phrase="школа")]
     )
 
-    result = await enrich("хочу со школой", criteria, [], pool="fake-pool")
+    with patch("app.ai.enrichment.embed", return_value=[0.0] * 384):
+        result = await enrich("хочу со школой", criteria, [], pool="fake-pool")
 
     mock_lookup.assert_awaited_once()
     mock_model.assert_not_called()

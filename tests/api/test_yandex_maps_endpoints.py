@@ -5,6 +5,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.api.endpoints import get_http_client
+from app.config import get_settings
 from app.main import app
 
 
@@ -22,7 +23,8 @@ def mock_validator_client():
 
 
 @pytest.fixture
-def client(mock_validator_client):
+def client(mock_validator_client, monkeypatch):
+    monkeypatch.setattr(get_settings(), "AI_ENRICHMENT_ENABLED", False)
     app.dependency_overrides[get_http_client] = lambda: mock_validator_client
     with TestClient(app) as c:
         yield c
