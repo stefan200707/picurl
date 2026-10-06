@@ -1525,13 +1525,17 @@ async def enrich(
         return await _log(EnrichmentResult.disabled())
 
     signature = build_query_signature(text, criteria)
-    embedding = embed(signature)
 
     try:
         # AI_ENRICHMENT_BYPASS_CACHE (отладка) — не читать семантический кэш,
         # чтобы гарантированно прогнать через живую модель. persist() ниже
         # продолжает писать в кэш как обычно (прод-трафик его не теряет).
         if pool is not None and not settings.AI_ENRICHMENT_BYPASS_CACHE:
+            # Эмбеддинг нужен только для чтения из БД. Без пула его построение
+            # зря загружало тяжёлую модель (и могло инициировать её скачивание),
+            # хотя lookup всё равно пропускался; запись сама строит эмбеддинг в
+            # persist(), также только при наличии пула.
+            embedding = embed(signature)
             cached = await lookup_semantic(pool, signature, embedding)
         else:
             cached = None
