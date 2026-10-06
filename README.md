@@ -15,6 +15,8 @@
 Подробное пошаговое руководство по настройке вы найдете в **[SETUP.md](SETUP.md)**, а
 пошаговый онбординг именно по ИИ-обогащению через Antigravity (Gemini) — в
 **[ENABLE_ANTIGRAVITY.md](ENABLE_ANTIGRAVITY.md)**.
+Общее руководство по назначению, запуску и диагностике ИИ-слоя — в
+**[docs/ai-usage.md](docs/ai-usage.md)**.
 
 ---
 
@@ -151,4 +153,3 @@ uv run python -m app.ai.usage_report --days 7    # за последние N д�
 ├── SETUP.md              # Подробная инструкция по развертыванию
 └── ENABLE_ANTIGRAVITY.md # Инструкция по настройке провайдера Antigravity
 ```
-
