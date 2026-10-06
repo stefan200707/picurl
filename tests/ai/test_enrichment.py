@@ -1577,9 +1577,10 @@ async def test_enrich_force_flag_bypasses_gate2(mock_model, mock_log, mock_setti
 @patch("app.ai.enrichment.log_ai_call", new_callable=AsyncMock)
 @patch("app.ai.enrichment.call_model")
 @patch("app.ai.enrichment.lookup_semantic")
+@patch("app.ai.enrichment.embed", return_value=[0.0] * 384)
 @patch("app.ai.enrichment.build_candidate_shortlist")
 async def test_enrich_uses_semantic_cache_when_bypass_disabled(
-    mock_build, mock_lookup, mock_model, mock_log, mock_settings
+    mock_build, mock_embed, mock_lookup, mock_model, mock_log, mock_settings
 ):
     """Контраст с тестом ниже: без флага попадание в кэш отдаёт старый ответ, ИИ не зовётся."""
     mock_build.return_value = [
@@ -1602,6 +1603,7 @@ async def test_enrich_uses_semantic_cache_when_bypass_disabled(
 
     result = await enrich("хочу со школой", criteria, [], pool="fake-pool")
 
+    mock_embed.assert_called_once()
     mock_lookup.assert_awaited_once()
     mock_model.assert_not_called()
     assert result.cache_hit is True

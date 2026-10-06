@@ -23,7 +23,7 @@ from fastapi.testclient import TestClient
 
 from app.ai.client import CircuitOpenError
 from app.ai.enrichment import enrich, resolve_free_text_criteria
-from app.ai.schema import FreeTextCriteriaAnswer
+from app.ai.schema import FreeTextCriteriaAnswer, OptionResolutionAnswer
 from app.api.endpoints import get_http_client
 from app.config import get_settings
 from app.main import app
@@ -244,17 +244,30 @@ def client():
 
     http_client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
     app.dependency_overrides[get_http_client] = lambda: http_client
-    with TestClient(app) as c:
-        yield c
-    app.dependency_overrides.clear()
+    settings = get_settings()
+    original_enabled = settings.AI_ENRICHMENT_ENABLED
+    # Lifespan не должен открывать реальную БД в unit-тесте. После старта
+    # значение возвращаем: mock_settings включает ИИ для самого запроса.
+    settings.AI_ENRICHMENT_ENABLED = False
+    try:
+        with TestClient(app) as c:
+            settings.AI_ENRICHMENT_ENABLED = original_enabled
+            yield c
+    finally:
+        settings.AI_ENRICHMENT_ENABLED = original_enabled
+        app.dependency_overrides.clear()
 
 
+@patch("app.ai.enrichment.call_option_resolver")
 @patch("app.ai.enrichment.call_free_text_extractor")
-def test_api_response_shows_failed_attempt(mock_extractor, client, mock_settings):
+def test_api_response_shows_failed_attempt(
+    mock_extractor, mock_option_resolver, client, mock_settings
+):
     """Искусственно уронив free-text-вызов, по ответу API видно: попытка была и
     не удалась. До правки здесь было ai_used=false, ai_failed=false — ответ,
     неотличимый от «ИИ не звали»."""
     mock_extractor.side_effect = RuntimeError("провайдер лёг")
+    mock_option_resolver.return_value = OptionResolutionAnswer(matches=[])
 
     response = client.post(
         "/build-url", json={"text": "Двушку, этаж от 7, чтобы окна выходили на закат"}
