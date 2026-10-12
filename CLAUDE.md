@@ -298,6 +298,7 @@ Env-настраиваемые ключи — `app/config.py`. Гео-порог
 | `docs/pik-url-schema.md` | URL-схема `pik.ru/search` — единственный источник правды по фильтрам |
 | `docs/ai-enrichment-architecture.md` | Поток ИИ, гейты, ведро C, наблюдаемость (§8, §8.4) |
 | `docs/parsing-rationale.md` | Коллизии спанов, guard'ы, fuzzy-матчинг опций, каталог неподдерживаемого |
+| `docs/entity-matching-scoring.md` | Токенизация, скользящие окна и расчёт весов fuzzy-матчинга сущностей |
 | `docs/geo-narrowing.md` | Ориентиры, суперлативы, класс станций, МКАД, `id_trust` |
 | `docs/poi-cache.md` | Схема v2, «дистанция только по действующим», совместимость с v1 |
 | `docs/external-facts.md` | OSM-теги, зеркала Overpass, потолок данных, квоты ИИ |
