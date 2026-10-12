@@ -299,6 +299,7 @@ Env-настраиваемые ключи — `app/config.py`. Гео-порог
 | `docs/ai-enrichment-architecture.md` | Поток ИИ, гейты, ведро C, наблюдаемость (§8, §8.4) |
 | `docs/parsing-rationale.md` | Коллизии спанов, guard'ы, fuzzy-матчинг опций, каталог неподдерживаемого |
 | `docs/geo-narrowing.md` | Ориентиры, суперлативы, класс станций, МКАД, `id_trust` |
+| `docs/maps-and-place-detection.md` | Поток распознавания мест, выбор точек и маршрутов для карты |
 | `docs/poi-cache.md` | Схема v2, «дистанция только по действующим», совместимость с v1 |
 | `docs/external-facts.md` | OSM-теги, зеркала Overpass, потолок данных, квоты ИИ |
 | `docs/data-allowlists.md` | Удалённые/восстановленные GUID, коллизии алиасов, metro-integrity |
